@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
@@ -34,7 +35,7 @@ namespace NzbDrone.Host
     {
         private static readonly Logger Logger = NzbDroneLogger.GetLogger(typeof(Bootstrap));
 
-        public static readonly List<string> ASSEMBLIES = new List<string>
+        public static readonly List<string> ASSEMBLIES = new()
         {
             "Whisparr.Host",
             "Whisparr.Core",
@@ -53,72 +54,20 @@ namespace NzbDrone.Host
                             Assembly.GetExecutingAssembly().GetName().Version);
 
                 var startupContext = new StartupContext(args);
-
                 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
                 var appMode = GetApplicationMode(startupContext);
                 var config = GetConfiguration(startupContext);
 
-                switch (appMode)
+                if (appMode is not (ApplicationModes.Interactive or ApplicationModes.Service))
                 {
-                    case ApplicationModes.Service:
-                        {
-                            Logger.Debug("Service selected");
-
-                            CreateConsoleHostBuilder(args, startupContext).UseWindowsService().Build().Run();
-                            break;
-                        }
-
-                    case ApplicationModes.Interactive:
-                        {
-                            Logger.Debug(trayCallback != null ? "Tray selected" : "Console selected");
-                            var builder = CreateConsoleHostBuilder(args, startupContext);
-
-                            if (trayCallback != null)
-                            {
-                                trayCallback(builder);
-                            }
-
-                            builder.Build().Run();
-                            break;
-                        }
-
-                    // Utility mode
-                    default:
-                        {
-                            new HostBuilder()
-                                .UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container(rules => rules.WithNzbDroneRules())))
-                                .ConfigureContainer<IContainer>(c =>
-                                {
-                                    c.AutoAddServices(Bootstrap.ASSEMBLIES)
-                                        .AddNzbDroneLogger()
-                                        .AddDatabase()
-                                        .AddStartupContext(startupContext)
-                                        .Resolve<UtilityModeRouter>()
-                                        .Route(appMode);
-
-                                    if (config.GetValue(nameof(ConfigFileProvider.LogDbEnabled), true))
-                                    {
-                                        c.AddLogDatabase();
-                                    }
-                                    else
-                                    {
-                                        c.AddDummyLogDatabase();
-                                    }
-                                })
-                                .ConfigureServices(services =>
-                                {
-                                    services.Configure<PostgresOptions>(config.GetSection("Whisparr:Postgres"));
-                                    services.Configure<AppOptions>(config.GetSection("Whisparr:App"));
-                                    services.Configure<AuthOptions>(config.GetSection("Whisparr:Auth"));
-                                    services.Configure<ServerOptions>(config.GetSection("Whisparr:Server"));
-                                    services.Configure<LogOptions>(config.GetSection("Whisparr:Log"));
-                                    services.Configure<UpdateOptions>(config.GetSection("Whisparr:Update"));
-                                }).Build();
-
-                            break;
-                        }
+                    RunUtilityMode(appMode, startupContext, config);
+                    return;
                 }
+
+                RunHostUntilShutdown(args, startupContext, appMode, trayCallback);
+
+                Logger.Info("Whisparr has shut down completely");
             }
             catch (InvalidConfigFileException ex)
             {
@@ -131,10 +80,76 @@ namespace NzbDrone.Host
             }
 
             // Make sure there are no lingering database connections
+            ClearDatabasePools();
+        }
+
+        private static void ClearDatabasePools()
+        {
             GC.Collect();
             GC.WaitForPendingFinalizers();
             SQLiteConnection.ClearAllPools();
             NpgsqlConnection.ClearAllPools();
+        }
+
+        private static void RunUtilityMode(ApplicationModes appMode, StartupContext startupContext, IConfiguration config)
+        {
+            Logger.Debug("Utility mode: {0}", appMode);
+
+            new HostBuilder()
+                .UseServiceProviderFactory(new DryIocServiceProviderFactory(new Container(rules => rules.WithNzbDroneRules())))
+                .ConfigureContainer<IContainer>(c =>
+                {
+                    c.AutoAddServices(ASSEMBLIES)
+                        .AddNzbDroneLogger()
+                        .AddDatabase()
+                        .AddStartupContext(startupContext)
+                        .Resolve<UtilityModeRouter>()
+                        .Route(appMode);
+
+                    if (config.GetValue(nameof(ConfigFileProvider.LogDbEnabled), true))
+                    {
+                        c.AddLogDatabase();
+                    }
+                    else
+                    {
+                        c.AddDummyLogDatabase();
+                    }
+                })
+                .ConfigureServices(services =>
+                {
+                    services.Configure<PostgresOptions>(config.GetSection("Whisparr:Postgres"));
+                    services.Configure<AppOptions>(config.GetSection("Whisparr:App"));
+                    services.Configure<AuthOptions>(config.GetSection("Whisparr:Auth"));
+                    services.Configure<ServerOptions>(config.GetSection("Whisparr:Server"));
+                    services.Configure<LogOptions>(config.GetSection("Whisparr:Log"));
+                    services.Configure<UpdateOptions>(config.GetSection("Whisparr:Update"));
+                })
+                .Build();
+        }
+
+        private static void RunHostUntilShutdown(string[] args, StartupContext startupContext, ApplicationModes appMode, Action<IHostBuilder> trayCallback)
+        {
+            Logger.Debug("Starting in {0} mode", trayCallback != null ? "Tray" : appMode.ToString());
+
+            bool shouldRestart;
+            do
+            {
+                var builder = CreateConsoleHostBuilder(args, startupContext);
+                trayCallback?.Invoke(builder);
+
+                shouldRestart = RunWithRestartCheck(builder.Build());
+
+                if (shouldRestart)
+                {
+                    Logger.Info("Application restart requested, reinitializing host");
+                    NzbDroneLogger.ResetAllTargets(startupContext, false, true);
+
+                    // Release the old host's pooled connections; setup mode may have swapped the database underneath them.
+                    ClearDatabasePools();
+                    Thread.Sleep(1000);
+                }
+            }
+            while (shouldRestart);
         }
 
         public static IHostBuilder CreateConsoleHostBuilder(string[] args, StartupContext context)
@@ -372,6 +387,21 @@ namespace NzbDrone.Host
             }
 
             return certificate;
+        }
+
+        private static bool RunWithRestartCheck(IHost host)
+        {
+            var shouldRestart = false;
+
+            var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+            lifetime.ApplicationStopped.Register(() =>
+            {
+                var runtimeInfo = host.Services.GetRequiredService<IRuntimeInfo>();
+                shouldRestart = runtimeInfo.RestartPending;
+            });
+
+            host.Run();
+            return shouldRestart;
         }
     }
 }
