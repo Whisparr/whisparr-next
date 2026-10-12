@@ -64,7 +64,7 @@ namespace NzbDrone.Core.ThingiProvider
             }
         }
 
-        public IEnumerable<TProviderDefinition> GetPresetDefinitions(TProviderDefinition providerDefinition)
+        public virtual IEnumerable<TProviderDefinition> GetPresetDefinitions(TProviderDefinition providerDefinition)
         {
             var provider = _providers.First(v => v.GetType().Name == providerDefinition.Implementation);
 
