@@ -115,6 +115,10 @@ namespace NzbDrone.Core.Datastore
                 _restoreDatabaseService.Restore();
                 _migrationController.Migrate(connectionString, migrationContext, databaseType);
             }
+            catch (LegacyDatabaseException)
+            {
+                throw;
+            }
             catch (SQLiteException e)
             {
                 var fileName = _connectionStringFactory.GetDatabasePath(connectionString);
@@ -143,6 +147,10 @@ namespace NzbDrone.Core.Datastore
                             _migrationController.Migrate(connectionString, migrationContext, databaseType);
                             return;
                         }
+                        catch (LegacyDatabaseException)
+                        {
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             if (--retryCount > 0)
@@ -170,6 +178,10 @@ namespace NzbDrone.Core.Datastore
             try
             {
                 _migrationController.Migrate(connectionString, migrationContext, databaseType);
+            }
+            catch (LegacyDatabaseException)
+            {
+                throw;
             }
             catch (SQLiteException e)
             {

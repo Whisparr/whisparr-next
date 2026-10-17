@@ -1,5 +1,7 @@
 using System;
+using System.Data.SQLite;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using FluentMigrator;
 using FluentMigrator.Runner;
@@ -9,6 +11,7 @@ using FluentMigrator.Runner.Processors;
 using Microsoft.Extensions.DependencyInjection;
 using NLog;
 using NLog.Extensions.Logging;
+using Npgsql;
 
 namespace NzbDrone.Core.Datastore.Migration.Framework
 {
@@ -38,6 +41,11 @@ namespace NzbDrone.Core.Datastore.Migration.Framework
                 DatabaseType.PostgreSQL => ProcessorIdConstants.PostgreSQL,
                 _ => throw new NotImplementedException($"Unknown database type: {databaseType}")
             };
+
+            if (migrationContext.DesiredVersion == null)
+            {
+                RefuseLegacyDatabase(connectionString, migrationContext.MigrationType, databaseType);
+            }
 
             var serviceProvider = new ServiceCollection()
                 .AddLogging(b => b.AddNLog())
@@ -85,6 +93,39 @@ namespace NzbDrone.Core.Datastore.Migration.Framework
             sw.Stop();
 
             _logger.Debug("Took: {0}", sw.Elapsed);
+        }
+
+        private static void RefuseLegacyDatabase(string connectionString, MigrationType migrationType, DatabaseType databaseType)
+        {
+            string databaseName;
+            bool isLegacy;
+
+            // The connection is disposed before FluentMigrator runs, so no file lock or session outlives the check.
+            if (databaseType == DatabaseType.SQLite)
+            {
+                var builder = new SQLiteConnectionStringBuilder(connectionString) { Pooling = false };
+
+                databaseName = Path.GetFileName(builder.DataSource);
+
+                using var connection = new SQLiteConnection(builder.ConnectionString);
+                connection.Open();
+                isLegacy = LegacyDatabaseGuard.IsLegacy(connection, databaseType);
+            }
+            else
+            {
+                var builder = new NpgsqlConnectionStringBuilder(connectionString);
+
+                databaseName = builder.Database;
+
+                using var connection = new NpgsqlConnection(connectionString);
+                connection.Open();
+                isLegacy = LegacyDatabaseGuard.IsLegacy(connection, databaseType);
+            }
+
+            if (isLegacy)
+            {
+                throw new LegacyDatabaseException(databaseName, migrationType);
+            }
         }
     }
 }
