@@ -16,8 +16,7 @@ ASP.NET Core with SignalR for live updates and SQLite/PostgreSQL (via Dapper)
 for storage.
 
 - Repo: `Whisparr/whisparr-next`. Default / PR-target branch: **`develop`**.
-- Issues for both `Whisparr/Whisparr` and `Whisparr/Whisparr-Eros` are tracked
-  on `Whisparr/Whisparr` — link fixes as `Fixes whisparr/whisparr#NNNN`.
+- v5 issues are tracked on this repo — link fixes with a bare `Fixes #NNNN`.
 
 ## The naming quirk (read this first)
 
@@ -63,9 +62,11 @@ Each item names a representative path — follow the existing neighbors.
 - **DB migration** → a `[Migration(N)]` class deriving `NzbDroneMigrationBase`,
   overriding `MainDbUpgrade()`, in `src/NzbDrone.Core/Datastore/Migration/`
   (FluentMigrator). File naming: `NNN_snake_case_description.cs`. Numbers are
-  **non-contiguous** — high 200s are inherited Radarr history, Whisparr-specific
-  ones sit in the 000–025 range; use the next free number. Migrations are
-  auto-discovered and run in order.
+  **non-contiguous**. 247 and below are inherited (Radarr history in the 200s,
+  Whisparr-specific ones in the 000–026 range). 248–299 are reserved for Eros
+  cherry-picks, which keep their Eros numbers. v5-only migrations start at 300
+  (the v5 marker) and take the next number above the highest one ≥ 300.
+  Migrations are auto-discovered and run in order.
 - **Command / event** → `src/NzbDrone.Core/Messaging/`. Commands derive
   `Command`, executed by an `IExecute<TCommand>` handler; events implement
   `IEvent`, handled by `IHandle<TEvent>` / `IHandleAsync<TEvent>` via
@@ -138,13 +139,13 @@ Each item names a representative path — follow the existing neighbors.
 This map covers *structure*. The rules are already documented — don't duplicate,
 consult:
 
-- **`CONTRIBUTING.md`** — dev setup, branch/PR rules (PR only to `eros-develop`,
+- **`CONTRIBUTING.md`** — dev setup, branch/PR rules (PR only to `develop`,
   rebase not merge, meaningful feature-branch names, one fix per PR), commit
   prefixes (`New:` / `Fix:` / `Chore:`, conventional `feat:`/`fix:`/… also
   tolerated), testing, and the translation workflow.
 - **`.github/PULL_REQUEST_TEMPLATE.md`** — required DB-migration note
   (`YES - NNNN` | `NO`), Tests & Translation-Keys checkboxes, SFW screenshots,
-  `Fixes whisparr/whisparr#NNNN`.
+  `Fixes #NNNN`.
 - **`.editorconfig`** + **`src/stylecop.json`** — C# style (4-space indent,
   `var` preferred, `_camelCase` private fields, `System.*` usings first, final
   newline). **`eslint.config.js`** + **`frontend/.prettierrc.json`** — frontend.
