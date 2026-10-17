@@ -84,6 +84,13 @@ namespace NzbDrone.Common.Test
         }
 
         [Test]
+        public void should_default_postgres_databases_to_v5_names()
+        {
+            Subject.PostgresMainDb.Should().Be("whisparr5-main");
+            Subject.PostgresLogDb.Should().Be("whisparr5-log");
+        }
+
+        [Test]
         public void GetValue_Success()
         {
             const string key = "Port";

@@ -11,10 +11,10 @@ namespace NzbDrone.Common.Extensions
 {
     public static class PathExtensions
     {
-        private const string APP_CONFIG_FILE = "config.xml";
-        private const string DB = "whisparr3.db";
-        private const string DB_RESTORE = "whisparr3.restore";
-        private const string LOG_DB = "logs.db";
+        private const string APP_CONFIG_FILE = "config5.xml";
+        private const string DB = "whisparr5.db";
+        private const string DB_RESTORE = "whisparr5.restore";
+        private const string LOG_DB = "logs5.db";
         private const string NLOG_CONFIG_FILE = "nlog.config";
         private const string UPDATE_CLIENT_EXE_NAME = "Whisparr.Update";
 

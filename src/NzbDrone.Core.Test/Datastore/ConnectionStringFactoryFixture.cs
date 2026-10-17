@@ -26,8 +26,8 @@ namespace NzbDrone.Core.Test.Datastore
             _config.Setup(v => v.PostgresUser).Returns("user");
             _config.Setup(v => v.PostgresPassword).Returns("password");
             _config.Setup(v => v.PostgresPort).Returns(5432);
-            _config.Setup(v => v.PostgresMainDb).Returns("whisparr-main");
-            _config.Setup(v => v.PostgresLogDb).Returns("whisparr-log");
+            _config.Setup(v => v.PostgresMainDb).Returns("whisparr5-main");
+            _config.Setup(v => v.PostgresLogDb).Returns("whisparr5-log");
             _config.Setup(v => v.PostgresMainDbConnectionString).Returns(string.Empty);
             _config.Setup(v => v.PostgresLogDbConnectionString).Returns(string.Empty);
             _config.Setup(v => v.LogDbEnabled).Returns(true);
@@ -43,8 +43,8 @@ namespace NzbDrone.Core.Test.Datastore
         {
             var factory = NewFactory();
 
-            factory.MainDbConnection.ConnectionString.Should().Contain("whisparr3.db");
-            factory.LogDbConnection.ConnectionString.Should().Contain("logs.db");
+            factory.MainDbConnection.ConnectionString.Should().Contain("whisparr5.db");
+            factory.LogDbConnection.ConnectionString.Should().Contain("logs5.db");
         }
 
         [Test]
@@ -56,7 +56,7 @@ namespace NzbDrone.Core.Test.Datastore
 
             factory.MainDbConnection.DatabaseType.Should().Be(DatabaseType.PostgreSQL);
             factory.LogDbConnection.DatabaseType.Should().Be(DatabaseType.PostgreSQL);
-            factory.MainDbConnection.ConnectionString.Should().Contain("Database=whisparr-main").And.Contain("Host=localhost").And.Contain("Username=user");
+            factory.MainDbConnection.ConnectionString.Should().Contain("Database=whisparr5-main").And.Contain("Host=localhost").And.Contain("Username=user");
         }
 
         [Test]

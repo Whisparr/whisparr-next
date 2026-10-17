@@ -184,7 +184,7 @@ namespace NzbDrone.Test.Common
 
         private void GenerateConfigFile(bool enableAuth)
         {
-            var configFile = Path.Combine(AppData, "config.xml");
+            var configFile = Path.Combine(AppData, "config5.xml");
 
             // Generate and set the api key so we don't have to poll the config file
             var apiKey = Guid.NewGuid().ToString().Replace("-", "");

@@ -299,7 +299,17 @@ namespace NzbDrone.Common.Test
         [Test]
         public void Config_path_test()
         {
-            GetIAppDirectoryInfo().GetConfigPath().Should().BeEquivalentTo(@"C:\Whisparr\Config.xml".AsOsAgnostic());
+            GetIAppDirectoryInfo().GetConfigPath().Should().BeEquivalentTo(@"C:\Whisparr\config5.xml".AsOsAgnostic());
+        }
+
+        [Test]
+        public void should_use_v5_storage_names()
+        {
+            var info = GetIAppDirectoryInfo();
+            info.GetConfigPath().Should().BeEquivalentTo(@"C:\Whisparr\config5.xml".AsOsAgnostic());
+            info.GetDatabase().Should().BeEquivalentTo(@"C:\Whisparr\whisparr5.db".AsOsAgnostic());
+            info.GetDatabaseRestore().Should().BeEquivalentTo(@"C:\Whisparr\whisparr5.restore".AsOsAgnostic());
+            info.GetLogDatabase().Should().BeEquivalentTo(@"C:\Whisparr\logs5.db".AsOsAgnostic());
         }
 
         [Test]

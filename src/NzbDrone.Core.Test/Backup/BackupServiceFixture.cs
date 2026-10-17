@@ -38,7 +38,7 @@ namespace NzbDrone.Core.Test.Backup
             Subject.Restore("backup.zip");
 
             Mocker.GetMock<IDiskProvider>()
-                  .Verify(s => s.MoveFile(extracted, Path.Combine(_appData, "whisparr3.restore"), true), Times.Once());
+                  .Verify(s => s.MoveFile(extracted, Path.Combine(_appData, "whisparr5.restore"), true), Times.Once());
         }
 
         [Test]
@@ -51,7 +51,7 @@ namespace NzbDrone.Core.Test.Backup
             Subject.Backup(BackupType.Manual);
 
             Mocker.GetMock<IDiskProvider>()
-                  .Verify(s => s.DeleteFile(Path.Combine(_temp, "whisparr_backup", "whisparr3.db-journal")), Times.Once());
+                  .Verify(s => s.DeleteFile(Path.Combine(_temp, "whisparr_backup", "whisparr5.db-journal")), Times.Once());
         }
     }
 }

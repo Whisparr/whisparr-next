@@ -19,20 +19,14 @@ namespace NzbDrone.Common.EnvironmentInfo
     public class AppFolderFactory : IAppFolderFactory
     {
         private readonly IAppFolderInfo _appFolderInfo;
-        private readonly IStartupContext _startupContext;
         private readonly IDiskProvider _diskProvider;
-        private readonly IDiskTransferService _diskTransferService;
         private readonly Logger _logger;
 
         public AppFolderFactory(IAppFolderInfo appFolderInfo,
-                                IStartupContext startupContext,
-                                IDiskProvider diskProvider,
-                                IDiskTransferService diskTransferService)
+                                IDiskProvider diskProvider)
         {
             _appFolderInfo = appFolderInfo;
-            _startupContext = startupContext;
             _diskProvider = diskProvider;
-            _diskTransferService = diskTransferService;
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
@@ -40,7 +34,6 @@ namespace NzbDrone.Common.EnvironmentInfo
         {
             try
             {
-                MigrateAppDataFolder();
                 _diskProvider.EnsureFolder(_appFolderInfo.AppDataFolder);
             }
             catch (UnauthorizedAccessException)
@@ -100,61 +93,6 @@ namespace NzbDrone.Common.EnvironmentInfo
             }
         }
 
-        private void MigrateAppDataFolder()
-        {
-            try
-            {
-                if (OsInfo.IsOsx)
-                {
-                    var userAppDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile, Environment.SpecialFolderOption.DoNotVerify), ".config", "Whisparr");
-
-                    if (_diskProvider.FolderExists(userAppDataFolder) && !_diskProvider.FileExists(_appFolderInfo.GetConfigPath()))
-                    {
-                        _diskTransferService.MirrorFolder(userAppDataFolder, _appFolderInfo.AppDataFolder);
-                        _diskProvider.DeleteFolder(userAppDataFolder, true);
-                    }
-                }
-
-                var oldDbFile = Path.Combine(_appFolderInfo.AppDataFolder, "nzbdrone.db");
-
-                if (_startupContext.Args.ContainsKey(StartupContext.APPDATA))
-                {
-                    if (_diskProvider.FileExists(_appFolderInfo.GetDatabase()))
-                    {
-                        return;
-                    }
-
-                    if (!_diskProvider.FileExists(oldDbFile))
-                    {
-                        return;
-                    }
-
-                    MoveSqliteDatabase(oldDbFile, _appFolderInfo.GetDatabase());
-                    RemovePidFile();
-                }
-
-                // Exit if a whisparr.db already exists
-                if (_diskProvider.FileExists(_appFolderInfo.GetDatabase()))
-                {
-                    return;
-                }
-
-                // Rename the DB file
-                if (_diskProvider.FileExists(oldDbFile))
-                {
-                    MoveSqliteDatabase(oldDbFile, _appFolderInfo.GetDatabase());
-                }
-
-                // Remove Old PID file
-                RemovePidFile();
-            }
-            catch (Exception ex)
-            {
-                _logger.Debug(ex, ex.Message);
-                throw new WhisparrStartupException(ex, "Unable to migrate DB from nzbdrone.db to {0}. Migrate manually", _appFolderInfo.GetDatabase());
-            }
-        }
-
         private void InitializeMonoApplicationData()
         {
             if (OsInfo.IsWindows)
@@ -190,47 +128,6 @@ namespace NzbDrone.Common.EnvironmentInfo
             catch (Exception ex)
             {
                 _logger.Warn(ex, "Failed to initialize the mono config directory.");
-            }
-        }
-
-        private void MoveSqliteDatabase(string source, string destination)
-        {
-            _logger.Info("Moving {0}* to {1}*", source, destination);
-
-            var dbSuffixes = new[] { "", "-shm", "-wal", "-journal" };
-
-            foreach (var suffix in dbSuffixes)
-            {
-                var sourceFile = source + suffix;
-                var destFile = destination + suffix;
-
-                if (_diskProvider.FileExists(destFile))
-                {
-                    _diskProvider.DeleteFile(destFile);
-                }
-
-                if (_diskProvider.FileExists(sourceFile))
-                {
-                    _diskProvider.CopyFile(sourceFile, destFile);
-                }
-            }
-
-            foreach (var suffix in dbSuffixes)
-            {
-                var sourceFile = source + suffix;
-
-                if (_diskProvider.FileExists(sourceFile))
-                {
-                    _diskProvider.DeleteFile(sourceFile);
-                }
-            }
-        }
-
-        private void RemovePidFile()
-        {
-            if (OsInfo.IsNotWindows && _diskProvider.FolderExists(_appFolderInfo.AppDataFolder))
-            {
-                _diskProvider.DeleteFile(Path.Combine(_appFolderInfo.AppDataFolder, "whisparr.pid"));
             }
         }
     }
