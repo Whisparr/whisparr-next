@@ -39,7 +39,16 @@ namespace NzbDrone.Core.Backup
 
         private string _backupTempFolder;
 
-        public static readonly Regex BackupFileRegex = new Regex(@"(nzbdrone|whisparr)_backup_v?[._0-9]+\.zip", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+        public static readonly Regex BackupFileRegex = new Regex(@"whisparr_backup_v5\.[._0-9]+\.zip", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
+        private static readonly HashSet<string> LegacyBackupFileNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "whisparr3.db",
+            "whisparr2.db",
+            "whisparr.db",
+            "nzbdrone.db",
+            "config.xml"
+        };
 
         public BackupService(IMainDatabase maindDb,
                              IMakeDatabaseBackup makeDatabaseBackup,
@@ -135,19 +144,27 @@ namespace NzbDrone.Core.Backup
 
                 _archiveService.Extract(backupFileName, temporaryPath);
 
-                foreach (var file in _diskProvider.GetFiles(temporaryPath, false))
+                var files = _diskProvider.GetFiles(temporaryPath, false).ToList();
+
+                if (files.Any(f => IsLegacyBackupFile(Path.GetFileName(f))))
+                {
+                    throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, "This backup is from Whisparr v2 or v3. v5 only restores v5 backups; legacy installs are migrated by the v5 setup wizard.");
+                }
+
+                var databaseName = Path.GetFileName(_appFolderInfo.GetDatabase());
+                var configName = Path.GetFileName(_appFolderInfo.GetConfigPath());
+
+                foreach (var file in files)
                 {
                     var fileName = Path.GetFileName(file);
 
-                    if (fileName.Equals("Config.xml", StringComparison.InvariantCultureIgnoreCase))
+                    if (fileName.Equals(configName, StringComparison.InvariantCultureIgnoreCase))
                     {
                         _diskProvider.MoveFile(file, _appFolderInfo.GetConfigPath(), true);
                         restoredFile = true;
                     }
 
-                    if (fileName.Equals("nzbdrone.db", StringComparison.InvariantCultureIgnoreCase) ||
-                        fileName.Equals("whisparr.db", StringComparison.InvariantCultureIgnoreCase) ||
-                        fileName.Equals(Path.GetFileName(_appFolderInfo.GetDatabase()), StringComparison.InvariantCultureIgnoreCase))
+                    if (fileName.Equals(databaseName, StringComparison.InvariantCultureIgnoreCase))
                     {
                         _diskProvider.MoveFile(file, _appFolderInfo.GetDatabaseRestore(), true);
                         restoredFile = true;
@@ -165,6 +182,11 @@ namespace NzbDrone.Core.Backup
             }
 
             _diskProvider.MoveFile(backupFileName, _appFolderInfo.GetDatabaseRestore(), true);
+        }
+
+        private static bool IsLegacyBackupFile(string fileName)
+        {
+            return LegacyBackupFileNames.Contains(fileName);
         }
 
         public string GetBackupFolder()
@@ -204,9 +226,10 @@ namespace NzbDrone.Core.Backup
 
         private void BackupConfigFile()
         {
-            _logger.ProgressDebug("Backing up config.xml");
-
             var configFile = _appFolderInfo.GetConfigPath();
+
+            _logger.ProgressDebug("Backing up {0}", Path.GetFileName(configFile));
+
             var tempConfigFile = Path.Combine(_backupTempFolder, Path.GetFileName(configFile));
 
             _diskTransferService.TransferFile(configFile, tempConfigFile, TransferMode.Copy);
