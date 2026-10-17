@@ -97,7 +97,8 @@ namespace NzbDrone.Core.Test.Backup
 
             Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("legacy.zip"));
 
-            Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFolder(restoreFolder, true), Times.AtLeastOnce());
+            // Only the post-throw cleanup can empty the folder here: the pre-clear ran before extraction.
+            extracted.Should().BeEmpty();
 
             Subject.Restore("v5.zip");
 
