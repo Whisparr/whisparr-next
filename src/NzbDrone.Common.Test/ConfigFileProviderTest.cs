@@ -72,6 +72,18 @@ namespace NzbDrone.Common.Test
         }
 
         [Test]
+        public void should_default_github_owner_repo_to_whisparr_next()
+        {
+            Subject.GithubOwnerRepo.Should().Be("whisparr/whisparr-next");
+        }
+
+        [Test]
+        public void should_default_branch_to_develop()
+        {
+            Subject.Branch.Should().Be("develop");
+        }
+
+        [Test]
         public void GetValue_Success()
         {
             const string key = "Port";

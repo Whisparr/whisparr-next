@@ -206,7 +206,7 @@ namespace NzbDrone.Core.Configuration
         {
             get
             {
-                const string defaultValue = "whisparr/whisparr-eros";
+                const string defaultValue = "whisparr/whisparr-next";
                 var githubOwnerRepo = GetValue("GithubOwnerRepo", defaultValue);
                 if (string.IsNullOrWhiteSpace(githubOwnerRepo))
                 {
@@ -285,7 +285,7 @@ namespace NzbDrone.Core.Configuration
 
         public bool AnalyticsEnabled => _logOptions.AnalyticsEnabled ?? GetValueBoolean("AnalyticsEnabled", true, persist: false);
 
-        public string Branch => GetValue("Branch", "eros").ToLowerInvariant();
+        public string Branch => GetValue("Branch", "develop").ToLowerInvariant();
 
         public string LogLevel => _logOptions.Level ?? GetValue("LogLevel", "debug").ToLowerInvariant();
         public string ConsoleLogLevel => _logOptions.ConsoleLevel ?? GetValue("ConsoleLogLevel", string.Empty, persist: false);

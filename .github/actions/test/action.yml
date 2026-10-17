@@ -28,7 +28,7 @@ inputs:
     description: >-
       Collect OpenCover coverage and publish it as the `coverage-<results name>`
       artifact, for sonarqube.yml to consume. Enabled on exactly one leg - see
-      build_v3.yml - because Sonar needs one consistent report, not a matrix of
+      build_v5.yml - because Sonar needs one consistent report, not a matrix of
       them. Coverage is produced HERE, in the untrusted `pull_request` context
       with no secrets in scope, precisely so that sonarqube.yml never has to run
       fork test code while holding SONAR_TOKEN.

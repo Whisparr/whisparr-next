@@ -9,7 +9,7 @@ name: CodeQL
 #
 # So every outside-contributor PR merged so far has had zero CodeQL coverage -
 # no run, no check, silently. Advanced setup is a normal workflow, so it runs on
-# fork PRs the same way build_v3.yml already does, subject to the repository's
+# fork PRs the same way build_v5.yml already does, subject to the repository's
 # first-time-contributor approval gate.
 #
 # Default setup must be DISABLED (Settings > Advanced Security > Code scanning)

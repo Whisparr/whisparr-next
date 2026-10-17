@@ -111,7 +111,7 @@ gh pr checks <n> --repo Whisparr/Whisparr-Eros
 gh pr view <n> --repo Whisparr/Whisparr-Eros --json statusCheckRollup,mergeStateStatus,mergeable
 ```
 
-Report the real state of the key gates from `build_v3.yml` and `sonarqube.yml`:
+Report the real state of the key gates from `build_v5.yml` and `sonarqube.yml`:
 backend matrix, `frontend`, `unit_test`, `unit_test_postgres`, `integration_test`,
 and SonarQube "Build and Analyze". A failing/red check is a **blocking** finding;
 name the failed job. `deploy / release` and `CodeQL` showing `skipping`/`neutral`
@@ -139,7 +139,7 @@ Always use this fixed structure:
 - **Nits** — style, naming.
 - **Checklist** — one pass/fail line each: base branch, commit prefixes,
   migration note, tests present, `en.json` keys, ~80% coverage, and **actual CI
-  status** (from step 5b — real result of build_v3 + SonarQube, or "awaiting
+  status** (from step 5b — real result of build_v5 + SonarQube, or "awaiting
   maintainer approval" for a new contributor).
 
 ## 7. Offer to post (never auto-post)

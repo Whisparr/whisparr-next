@@ -4,12 +4,10 @@ description: Build Whisparr for multiple platforms, run tests, create release
 on:
   push:
     branches:
-      - eros-develop
-      - eros
+      - develop
   pull_request:
     branches:
-      - eros-develop
-      - eros
+      - develop
     paths-ignore:
       - "src/NzbDrone.Core/Localization/Core/**"
 
@@ -25,11 +23,11 @@ concurrency:
 env:
   FRAMEWORK: net10.0
   RAW_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-  WHISPARR_MAJOR_VERSION: 3
+  WHISPARR_MAJOR_VERSION: 5
   # Base version now comes from the newest base tag (vX.Y.Z) reachable from the
   # building branch; this is only the fallback for the seed window before any
   # base tag exists. See prepare job below.
-  VERSION_FALLBACK: 3.3.4
+  VERSION_FALLBACK: 5.0.0
 
 jobs:
   prepare:
@@ -91,7 +89,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "${{ github.ref_name }}" == "eros-develop" ]]; then
+          if [[ "${{ github.ref_name }}" == "develop" ]]; then
             SEMVER_LABEL="develop"
           else
             SEMVER_LABEL="release"
