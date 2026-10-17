@@ -297,12 +297,6 @@ namespace NzbDrone.Common.Test
         }
 
         [Test]
-        public void Config_path_test()
-        {
-            GetIAppDirectoryInfo().GetConfigPath().Should().BeEquivalentTo(@"C:\Whisparr\config5.xml".AsOsAgnostic());
-        }
-
-        [Test]
         public void should_use_v5_storage_names()
         {
             var info = GetIAppDirectoryInfo();

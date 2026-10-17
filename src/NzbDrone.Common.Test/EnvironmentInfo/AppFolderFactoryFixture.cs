@@ -1,5 +1,6 @@
 using System.IO;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
@@ -20,7 +21,17 @@ namespace NzbDrone.Common.Test.EnvironmentInfo
 
             Mocker.GetMock<IAppFolderInfo>().SetupGet(c => c.AppDataFolder).Returns(_appData);
 
-            Mocker.GetMock<IDiskProvider>().Setup(c => c.FolderWritable(_appData)).Returns(true);
+            // Back the mock with the real file system so a legacy rename would actually move the files.
+            var disk = Mocker.GetMock<IDiskProvider>();
+            disk.Setup(c => c.FolderExists(It.IsAny<string>())).Returns<string>(Directory.Exists);
+            disk.Setup(c => c.FileExists(It.IsAny<string>())).Returns<string>(File.Exists);
+            disk.Setup(c => c.EnsureFolder(It.IsAny<string>())).Callback<string>(p => Directory.CreateDirectory(p));
+            disk.Setup(c => c.FolderWritable(It.IsAny<string>())).Returns(true);
+            disk.Setup(c => c.CopyFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                .Callback<string, string, bool>((s, d, o) => File.Copy(s, d, o));
+            disk.Setup(c => c.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                .Callback<string, string, bool>((s, d, o) => File.Move(s, d, o));
+            disk.Setup(c => c.DeleteFile(It.IsAny<string>())).Callback<string>(File.Delete);
         }
 
         [TestCase("nzbdrone.db")]
