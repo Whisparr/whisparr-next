@@ -48,8 +48,13 @@ Expected: `cache-control: public,s-maxage=86400,max-age=0`.
 
 ## 6. Unblock the app
 
-Once steps 4 and 5 pass, the held Task 9 (the app's Skyhook base URL moving to
-`/v5`) can start.
+Once steps 4 and 5 pass, the app change can start: switch the app's Skyhook
+base URL to `https://api.whisparr.com/v5/{route}`.
+
+## Cloudflare purge quota
+
+A second purge site doubles Cloudflare purge calls (one request per 30 ids per
+site), so check the zone's purge quota.
 
 ## What clients see: 202 while hydrating
 
