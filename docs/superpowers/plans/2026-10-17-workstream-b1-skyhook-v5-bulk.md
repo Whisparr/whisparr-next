@@ -14,8 +14,13 @@ These are the endpoints that Workstream C's bulk onboarding and A's held Task 9 
 - **`ScenePageService`:** a new service in `Backend/SkyHook/`. It:
   - caches a site's or performer's sorted key list in memory for an hour;
   - slices that list after an opaque keyset cursor;
-  - hydrates the slice through the existing `ISkyHook.GetScenes`, which already fills cache gaps from upstream.
-- **Controllers:** two new GET actions return the page with a TTL per page. A POST action wraps `ISkyHook.GetPerformers` for bulk performer hydration.
+  - reads the slice from the scene cache only.
+- **`HydrationQueue`:** a new background service. Anything not yet cached goes on this queue, so no client request waits on StashDB.
+  - It deduplicates IDs and fills the cache through the existing `ISkyHook.GetScenes`/`GetPerformers`, under the existing rate limiters.
+  - IDs that upstream reports as gone are remembered for an hour, so clients stop waiting on them.
+- **Controllers:** two new GET actions serve the pages, and a POST action serves bulk performers.
+  - When everything requested is cached: **200**, cacheable.
+  - When something is still being fetched: **202 Accepted** with `Retry-After` and `no-store`. The body carries the cached items plus a `pending` ID list, and the client repeats the same request.
 - **`/v5` routing:** it's a proxy rule outside this repo. In here it's only a second `Cloudflare.Sites` entry, so purges also cover `/v5`.
 
 **Tech Stack:** ASP.NET Core (.NET), StashDB GraphQL, `Microsoft.Extensions.Caching.Memory`, NUnit 3 + Moq.
@@ -43,22 +48,27 @@ The roadmap's other two B parts each get their own plan:
   - the last page (no next cursor): 1 hour.
   - Use the existing `public,s-maxage=N,max-age=0` format.
 - **Performer bulk:** at most 100 IDs per request.
+- **Partial responses (202):**
+  - Status `202`, with header `Retry-After: 5` and header `Cache-Control: no-store`, so Cloudflare never caches a partial result.
+  - Body: the same resource as the 200, with `pending` holding the IDs still being fetched.
+  - A 200 always has `pending: []`.
+- **Gone upstream:** an ID that upstream reports as not found is kept in a "gone" set for 1 hour. It is in neither the items nor `pending`, so clients can't poll forever on it.
 - **Tests:** NUnit fixtures in `src/Backend.Test`, following `src/Backend.Test/API/SceneControllerFixture.cs` (Moq, a `DefaultHttpContext` on the controller).
   - Run with: `dotnet test src/Backend.Test/Backend.Test.csproj --filter "FullyQualifiedName~<Fixture>"`
   - Run the full project before each commit: `dotnet test src/Backend.Test/Backend.Test.csproj`
 
 ## Review Focus
 
-1. **A cursor whose scene has since left the list** (deleted upstream, or moved to another studio). The next page must carry on from the cursor's key position, without skipping or repeating scenes. Pinned in Task 2.
-2. **A scene ID in the slice that upstream no longer has** (`GetScenes` drops it). The page returns the scenes it can, with fewer than `limit` items. `nextCursor` still advances past the missing ID, so the client can't loop. Pinned in Task 2.
-3. **A huge studio (16K scenes).** The upstream key list is fetched once per hour per site, not on every page request. Pinned in Task 2, which checks the proxy was called once across two page calls.
+1. **A cursor whose scene has since left the list** (deleted upstream, or moved to another studio). The next page carries on from the cursor's key position, without skipping or repeating scenes. Pinned in Task 3.
+2. **A slice ID that upstream no longer has.** Once the queue marks it gone, the page drops it from both the items and `pending`, and returns 200 when nothing else is pending. A client can't poll forever. Pinned in Tasks 2 and 3.
+3. **Many clients onboarding the same big studio at once** (16K scenes). The key list is fetched once per hour per site. Uncached scenes are queued once, not once per request. Pinned in Tasks 2 and 3.
 4. **Garbage input:**
-  - a non-GUID id → 404;
-  - a malformed or tampered cursor → 400, not 500;
-  - `limit` of 0, a negative number, or above 1000 → clamped to 1..1000.
+   - a non-GUID id → 404;
+   - a malformed or tampered cursor → 400, not 500;
+   - `limit` of 0, a negative number, or above 1000 → clamped to 1..1000.
 
-  Pinned in Task 3.
-5. **Performer bulk with duplicate, invalid or more than 100 IDs.** Duplicates are collapsed and non-GUIDs dropped. More than 100 IDs after cleaning → 400. Pinned in Task 4.
+   Pinned in Task 4.
+5. **A partial page leaking into Cloudflare's cache.** Every 202 carries `no-store`, and only a page with nothing pending gets the 24h or 1h TTL. Pinned in Tasks 4 and 5.
 
 ---
 
@@ -109,18 +119,73 @@ Task<List<SceneKey>> GetPerformerSceneKeys(string guid);
 git commit -am "new: StashDB scene keys with release date"
 ```
 
-### Task 2: ScenePageService with keyset cursor
+### Task 2: Cache-only reads and the hydration queue
+
+**Files:**
+- Modify: `src/Backend/Cache/CachedEntityService.cs`. Add `Task<List<TCached>> GetCached(IEnumerable<string> entityIds)` to `ICachedEntityService` and implement it with `_repo.GetCache(ids)`. It never calls upstream, and an existing row counts as cached even when stale.
+- Create: `src/Backend/SkyHook/HydrationQueue.cs`, with `HydrationKind`, `IHydrationQueue` and `HydrationQueue : BackgroundService, IHydrationQueue`.
+- Modify: `src/API/Startup.cs`. Register `AddMemoryCache()` if it's missing, plus `services.AddSingleton<HydrationQueue>()`, `services.AddSingleton<IHydrationQueue>(sp => sp.GetRequiredService<HydrationQueue>())` and `services.AddHostedService(sp => sp.GetRequiredService<HydrationQueue>())`.
+- Test: create `src/Backend.Test/SkyHook/HydrationQueueFixture.cs`, and add `GetCached` cases to the existing cache-service tests, or to a new `src/Backend.Test/Cache/CachedEntityServiceGetCachedFixture.cs`.
+
+**Interfaces:**
+- Consumes: the existing `ISkyHook.GetScenes(List<string>)` and `ISkyHook.GetPerformers(List<string>)`, which fill the cache from upstream.
+- Produces:
+
+```csharp
+public enum HydrationKind { Scene, Performer }
+
+public interface IHydrationQueue
+{
+    void Enqueue(HydrationKind kind, IEnumerable<string> ids); // ignores ids already queued/in flight or gone
+    bool IsGone(HydrationKind kind, string id);                // upstream said not found within the last hour
+}
+```
+
+- [ ] **Step 1: Write the failing tests.**
+
+```csharp
+[Test] public async Task GetCached_should_return_only_existing_rows_without_calling_upstream()
+[Test] public async Task should_hydrate_queued_scenes_through_skyhook()        // Enqueue(Scene,[a,b]); worker → GetScenes([a,b]) once
+[Test] public async Task should_not_queue_an_id_twice_while_in_flight()        // Enqueue a; Enqueue a → GetScenes called with a once
+[Test] public async Task should_batch_up_to_100_ids_per_call()                 // Enqueue 250 performers → GetPerformers calls of ≤100
+[Test] public async Task should_mark_ids_upstream_did_not_return_as_gone()     // GetScenes([a,b]) returns only a → IsGone(Scene,b) true, IsGone(Scene,a) false
+[Test] public async Task should_not_queue_gone_ids()                           // after b is gone, Enqueue(Scene,[b]) → no further GetScenes call
+[Test] public async Task should_keep_working_after_a_failed_batch()            // GetScenes throws once → logged, next Enqueue still hydrates; failed ids NOT marked gone
+```
+
+Drive the worker with `StartAsync` and a short wait on a `TaskCompletionSource` that the mock completes. Don't use `Thread.Sleep`.
+
+- [ ] **Step 2: Run them to verify they fail.**
+  Run: `dotnet test src/Backend.Test/Backend.Test.csproj --filter "FullyQualifiedName~HydrationQueue|FullyQualifiedName~GetCached"`
+  Expected: build failure, because the types aren't defined yet.
+
+- [ ] **Step 3: Implement.**
+  - **Queue:** an unbounded `Channel<(HydrationKind, string)>` plus a `ConcurrentDictionary` holding the queued and in-flight IDs.
+  - **Worker:** it drains up to 100 IDs of one kind per batch, calls the matching `ISkyHook` method, and removes each ID from the in-flight set afterwards.
+  - **Gone set:** `IMemoryCache` entries `gone:{kind}:{id}`, with a 1-hour absolute expiry.
+  - **Concurrency:** one batch at a time per kind. The upstream rate limiters already bound throughput.
+
+- [ ] **Step 4: Run the tests to verify they pass.** Run the Step 2 command, then the full project.
+  Expected: PASS.
+
+- [ ] **Step 5: Commit.**
+
+```bash
+git commit -am "new: Background hydration queue and cache-only reads"
+```
+
+### Task 3: ScenePageService with keyset cursor
 
 **Files:**
 - Create: `src/Backend/SkyHook/SceneCursor.cs`
 - Create: `src/Backend/SkyHook/ScenePageService.cs`
-- Modify: `src/API/Startup.cs`:
-  - `services.AddMemoryCache()`, unless it's already registered;
-  - `services.AddSingleton<IScenePageService, ScenePageService>()`.
+- Modify: `src/API/Startup.cs`, adding `services.AddSingleton<IScenePageService, ScenePageService>()`.
 - Test: create `src/Backend.Test/SkyHook/SceneCursorFixture.cs` and `src/Backend.Test/SkyHook/ScenePageServiceFixture.cs`.
 
 **Interfaces:**
-- Consumes: `SceneKey` and `IStashDbProxy.GetSiteSceneKeys`/`GetPerformerSceneKeys` (Task 1), and the existing `ISkyHook.GetScenes(List<string>)`.
+- Consumes:
+  - `SceneKey` and `IStashDbProxy.GetSiteSceneKeys`/`GetPerformerSceneKeys` (Task 1);
+  - `ICachedSceneService.GetCached` and `IHydrationQueue` (Task 2).
 - Produces:
 
 ```csharp
@@ -134,7 +199,8 @@ public sealed class ScenePage
 {
     public int Total { get; init; }                    // size of the full key list
     public string NextCursor { get; init; }            // null on the last page
-    public List<Episode> Items { get; init; }
+    public List<Episode> Items { get; init; }          // cached scenes of the slice, in key order
+    public List<string> Pending { get; init; }         // slice ids not cached and not gone; queued for hydration
 }
 
 public interface IScenePageService
@@ -153,16 +219,15 @@ public void should_round_trip(string date, string id)  // Decode(Encode(k)) == k
 [TestCase("")] [TestCase("not-base64!")] [TestCase("bm9waXBl")] /* "nopipe" */
 public void should_reject_malformed_cursor(string c)   // Assert.Throws<FormatException>
 
-// ScenePageServiceFixture: keys d1..d5 with dates 2020-01-01..2020-01-04 plus one null date, given to the proxy unsorted
+// ScenePageServiceFixture: keys d1..d5 with dates 2020-01-01..2020-01-04 plus one null date, given to the proxy unsorted; all cached unless stated
 [Test] public async Task should_order_by_release_date_then_id_with_undated_last()
 [Test] public async Task should_return_next_cursor_until_the_last_page()     // limit 2 → pages of 2,2,1; last NextCursor null; Total 5
 [Test] public async Task should_continue_after_a_cursor_whose_scene_left_the_list()
-    // page 1 (limit 2) → cursor; key list changes (2nd item removed); next page starts at the first key > cursor key
-[Test] public async Task should_advance_past_scenes_upstream_no_longer_has()
-    // GetScenes returns 1 of the 2 requested; Items.Count == 1; NextCursor encodes the 2nd requested key
-[Test] public async Task should_preserve_key_order_in_items()                // GetScenes returns reversed; Items follow key order
-[Test] public async Task should_fetch_the_key_list_once_per_site_within_an_hour()
-    // two page calls for the same site → GetSiteSceneKeys called once (real MemoryCache)
+[Test] public async Task should_preserve_key_order_in_items()                // GetCached returns reversed; Items follow key order
+[Test] public async Task should_report_and_queue_uncached_scenes_as_pending()
+    // 1 of 2 slice ids uncached → Items has 1, Pending == [that id], Enqueue(Scene,[that id]) called; NextCursor still encodes the slice's last key
+[Test] public async Task should_drop_gone_scenes_from_items_and_pending()    // IsGone true → neither in Items nor Pending, not enqueued
+[Test] public async Task should_fetch_the_key_list_once_per_site_within_an_hour()  // two calls → GetSiteSceneKeys once (real MemoryCache)
 [Test] public async Task should_page_performer_scenes_the_same_way()
 ```
 
@@ -171,11 +236,11 @@ public void should_reject_malformed_cursor(string c)   // Assert.Throws<FormatEx
   Expected: build failure, because the types aren't defined yet.
 
 - [ ] **Step 3: Implement.**
-  - **Sort key:** `(ReleaseDate ?? "9999-99-99", Id)`, compared ordinally. ISO dates sort correctly as strings.
-  - **Slice:** the first `limit` keys whose sort key is strictly greater than the decoded cursor's sort key. Use a binary search on the sorted list.
-  - **`NextCursor`:** `Encode(lastKeyInSlice)` when keys remain after the slice, otherwise null. It's based on the slice, not on the hydrated items.
-  - **Memory cache:** key it `site:{guid}` / `performer:{guid}`, with a 1-hour absolute expiry.
-  - **`limit`:** arrives already clamped (Task 3), so don't clamp it again here.
+  - **Sort key:** `(ReleaseDate ?? "9999-99-99", Id)`, compared ordinally.
+  - **Slice:** the first `limit` keys strictly after the decoded cursor key, found with a binary search.
+  - **`NextCursor`:** `Encode(lastKeyInSlice)` when keys remain, otherwise null.
+  - **Key list cache:** `site:{guid}` / `performer:{guid}` in `IMemoryCache`, with a 1-hour expiry.
+  - **Never** call `ISkyHook.GetScenes` from here. Only the queue fetches upstream.
 
 - [ ] **Step 4: Run the tests to verify they pass.** Run the Step 2 command, then the full project.
   Expected: PASS.
@@ -186,34 +251,36 @@ public void should_reject_malformed_cursor(string c)   // Assert.Throws<FormatEx
 git commit -am "new: Keyset-paged scene pages for sites and performers"
 ```
 
-### Task 3: `scenes/full` endpoints
+### Task 4: `scenes/full` endpoints
 
 **Files:**
-- Create: `src/API/Resources/ScenePageResource.cs`, with `int Total`, `string NextCursor`, `List<Episode> Items`. It serializes camelCase like the other resources.
+- Create: `src/API/Resources/ScenePageResource.cs`, with `int Total`, `string NextCursor`, `List<Episode> Items`, `List<string> Pending`.
 - Modify:
   - `src/API/Controllers/SiteController.cs`: inject `IScenePageService` and add the action after `GetSiteScenes`.
   - `src/API/Controllers/PerformerController.cs`: inject `IScenePageService` and add the action after `GetPerformer`.
-  - Update every place the existing fixtures construct these controllers.
+  - Update the existing fixtures that construct these controllers.
 - Test: create `src/Backend.Test/API/SceneFullControllerFixture.cs`.
 
 **Interfaces:**
-- Consumes: `IScenePageService`, `ScenePage` and `SceneCursor` (Task 2).
+- Consumes: `IScenePageService`, `ScenePage` (Task 3).
 - Produces:
-  - `GET site/{guid}/scenes/full?cursor=&limit=` → `ScenePageResource`;
-  - `GET performer/{guid}/scenes/full?cursor=&limit=` → `ScenePageResource`.
+  - `GET site/{guid}/scenes/full?cursor=&limit=` → 200 or 202 `ScenePageResource`;
+  - `GET performer/{guid}/scenes/full?cursor=&limit=` → the same.
 
 - [ ] **Step 1: Write the failing tests.**
 
 ```csharp
 [TestCase("not-a-guid")] [TestCase("")]
 public async Task should_404_for_a_bad_site_guid(string guid)
-[Test] public async Task should_400_for_a_malformed_cursor()            // service throws FormatException → 400, nothing thrown out
+[Test] public async Task should_400_for_a_malformed_cursor()            // service throws FormatException → 400
 [TestCase(null, 250)] [TestCase(0, 1)] [TestCase(-5, 1)] [TestCase(5000, 1000)] [TestCase(40, 40)]
-public async Task should_clamp_limit(int? limit, int expected)           // service called with expected
-[Test] public async Task should_cache_a_middle_page_for_24_hours()      // NextCursor != null → Cache-Control "public,s-maxage=86400,max-age=0"
-[Test] public async Task should_cache_the_last_page_for_1_hour()        // NextCursor == null → "public,s-maxage=3600,max-age=0"
-[Test] public async Task should_normalise_the_guid_to_lowercase()       // service receives guid.ToLowerInvariant()
-[Test] public async Task should_serve_performer_scenes_full_the_same_way()  // 404 / 400 / TTL on PerformerController
+public async Task should_clamp_limit(int? limit, int expected)
+[Test] public async Task should_cache_a_complete_middle_page_for_24_hours()  // Pending empty, NextCursor set → 200, "public,s-maxage=86400,max-age=0"
+[Test] public async Task should_cache_a_complete_last_page_for_1_hour()      // Pending empty, NextCursor null → 200, "public,s-maxage=3600,max-age=0"
+[Test] public async Task should_return_202_no_store_while_scenes_are_pending()
+    // Pending non-empty → 202, Cache-Control "no-store", Retry-After "5", body Pending == service Pending
+[Test] public async Task should_normalise_the_guid_to_lowercase()
+[Test] public async Task should_serve_performer_scenes_full_the_same_way()   // 404 / 400 / 200 TTL / 202 on PerformerController
 ```
 
 - [ ] **Step 2: Run them to verify they fail.**
@@ -221,9 +288,9 @@ public async Task should_clamp_limit(int? limit, int expected)           // serv
   Expected: build failure, because the actions don't exist yet.
 
 - [ ] **Step 3: Implement.**
-  - Set `RequestPriorityContext.CurrentPriority.Value = 7`, the same as `GetSiteScenes`.
-  - Format the TTL with each controller's existing `GetCacheControlHeader(DateTime)`: `UtcNow + 24h`, or `UtcNow + 1h` on the last page. The test compares whole seconds, so compute the header from a fixed `TimeSpan` rather than `DateTime` arithmetic, or allow ±1s in the assertion.
-  - Map `TPDbApiException`/`StashDbApiException` 404 → 404, as the neighbouring actions do.
+  - Use priority 7, the same as `GetSiteScenes`.
+  - Write the 200 TTL headers from a fixed `TimeSpan`, so the seconds are exact.
+  - Map an upstream 404 on the key-list fetch to 404, as the neighbouring actions do.
 
 - [ ] **Step 4: Run the tests to verify they pass.** Run the Step 2 command, then the full project.
   Expected: PASS.
@@ -234,30 +301,34 @@ public async Task should_clamp_limit(int? limit, int expected)           // serv
 git commit -am "new: site and performer scenes/full paged endpoints"
 ```
 
-### Task 4: `POST performer/bulk`
+### Task 5: `POST performer/bulk`
 
 **Files:**
-- Modify: `src/API/Controllers/PerformerController.cs`. Add the action next to `RefreshPerformerCache`. It has no API key: it's a public read, like `performer/{guid}`.
+- Create: `src/API/Resources/PerformerBulkResource.cs`, with `List<Performer> Performers` and `List<string> Pending`.
+- Modify: `src/API/Controllers/PerformerController.cs`. Add the action next to `RefreshPerformerCache`. It's a public read with no API key.
 - Test: create `src/Backend.Test/API/PerformerBulkControllerFixture.cs`.
 
 **Interfaces:**
-- Consumes: the existing `ISkyHook.GetPerformers(List<string>)`, which reads from cache and fills misses.
-- Produces: `POST performer/bulk`, with a body of `["guid", ...]` → `List<Performer>`.
+- Consumes: `ICachedPerformerService.GetCached` and `IHydrationQueue` (Task 2).
+- Produces: `POST performer/bulk`, with a body of `["guid", ...]` → 200 or 202 `PerformerBulkResource`.
 
 - [ ] **Step 1: Write the failing tests.**
 
 ```csharp
-[Test] public async Task should_return_performers_for_the_given_ids()
-[Test] public async Task should_drop_duplicates_and_non_guids_before_fetching()  // ["A","a","x"] → GetPerformers(["a"])
-[Test] public async Task should_400_above_100_ids_after_cleaning()               // 101 distinct guids → 400, GetPerformers never called
-[Test] public async Task should_return_empty_for_an_empty_or_null_body()         // 200, [], GetPerformers never called
+[Test] public async Task should_return_200_when_all_performers_are_cached()      // Pending empty, no Enqueue
+[Test] public async Task should_return_202_and_queue_uncached_performers()
+    // 1 of 3 uncached → 202, Retry-After "5", Cache-Control "no-store", Performers has 2, Pending == [id], Enqueue(Performer,[id])
+[Test] public async Task should_leave_gone_performers_out_of_pending()           // IsGone → not pending, not enqueued; all others cached → 200
+[Test] public async Task should_drop_duplicates_and_non_guids_before_lookup()    // ["A","a","x"] → GetCached(["a"])
+[Test] public async Task should_400_above_100_ids_after_cleaning()
+[Test] public async Task should_return_empty_200_for_an_empty_or_null_body()
 ```
 
 - [ ] **Step 2: Run them to verify they fail.**
   Run: `dotnet test src/Backend.Test/Backend.Test.csproj --filter "FullyQualifiedName~PerformerBulkControllerFixture"`
   Expected: build failure, because the action doesn't exist yet.
 
-- [ ] **Step 3: Implement.** Lowercase each ID, keep those that pass `Guid.TryParse`, and remove duplicates. Use priority 7.
+- [ ] **Step 3: Implement.** Lowercase each ID, keep those that pass `Guid.TryParse`, and remove duplicates. Then read with `GetCached`, and enqueue whatever is neither cached nor gone. Use priority 7.
 
 - [ ] **Step 4: Run the tests to verify they pass.** Run the Step 2 command, then the full project.
   Expected: PASS.
@@ -265,10 +336,10 @@ git commit -am "new: site and performer scenes/full paged endpoints"
 - [ ] **Step 5: Commit.**
 
 ```bash
-git commit -am "new: POST performer/bulk for deferred performer hydration"
+git commit -am "new: POST performer/bulk with 202 while hydrating"
 ```
 
-### Task 5: `/v5` purge site and deployment runbook
+### Task 6: `/v5` purge site and deployment runbook
 
 **Files:**
 - Modify: `src/API/appsettings.json:47-53` and `src/API/appsettings.Development.json:46-52`. Add a second `Sites` entry `{ "BaseUrl": "https://api.whisparr.com/v5", "ZoneId": "<same ZoneId as the v4 entry>" }`.
@@ -318,14 +389,15 @@ git add docs/v5-deploy-runbook.md && git commit -m "Chore: Skyhook v5 deploy run
 ## Finish
 
 - [ ] Run the full `src/Backend.Test` project and build the solution. Both must pass with no new warnings.
-- [ ] **Local container test.**
-  - Start the compose DB: `docker compose up -d db` (postgres on port 5437).
-  - Build the image: `docker build -t whisparr-metadata:v5-bulk .`
-  - Run it against the compose DB. Pass the connection settings and the StashDB credentials from `appsettings.Development.json` as environment variables, and expose port 8080.
+- [ ] **Local container test**, using two throwaway containers on a dedicated Docker network.
+  - **Postgres:** `docker network create skyhook-v5`, then `docker run -d --name skyhook-v5-pg --network skyhook-v5 -e POSTGRES_USER=abc -e POSTGRES_PASSWORD=abc -e POSTGRES_DB=whisparr postgres:16`.
+  - **Skyhook:** build it with `docker build -t whisparr-metadata:v5-bulk .`, then run it with `--network skyhook-v5 -p 8080:8080`. Pass the DB connection (host `skyhook-v5-pg`) and the StashDB credentials from `appsettings.Development.json` as environment variables.
   - Then check:
-    1. Page through a large studio with `limit=1000`. `Total` equals the number of items across all pages, every ID is unique, and the last page has `nextCursor: null`.
-    2. A middle page returns `cache-control: public,s-maxage=86400,max-age=0`, and the last page `s-maxage=3600`.
-    3. `POST performer/bulk` with a few performer IDs from those scenes returns them.
-  - Stop and remove the container afterwards.
+    1. **Paging:** page through a large studio with `limit=250`. Uncached pages first answer `202` (`no-store`, `Retry-After: 5`, a non-empty `pending`). Repeating the same URL turns them into `200` with `pending: []`.
+       - Across all the final 200 pages, `Total` equals the number of items, every ID is unique, and the last page has `nextCursor: null`.
+    2. **Cache headers:** a complete middle page carries `s-maxage=86400` and the complete last page `s-maxage=3600`.
+    3. **Performer bulk:** `POST performer/bulk` with performer IDs from those scenes answers `202`, then `200` once hydrated.
+    4. **Logs:** the container log shows each scene ID fetched upstream once, even when the same page is requested repeatedly.
+  - **Clean up:** `docker rm -f skyhook-v5 skyhook-v5-pg && docker network rm skyhook-v5`.
   - If no StashDB credentials are available, run what works without them (a 404 for a bad GUID, a 400 for a bad cursor), and say what was skipped.
 - [ ] Push `v5-bulk` and open a PR into `v4` using the repo's conventions. The PR body lists the commits, the test results and the container check, and links the runbook. Don't merge it; plz12345 merges.

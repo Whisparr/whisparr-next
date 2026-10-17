@@ -236,6 +236,10 @@ is called.
 
 ### C. Bulk onboarding: studios and performers (items 1, 2)
 
+- **202 handling (from B1):** `scenes/full` pages and `performer/bulk` answer **202** while Skyhook is still fetching from StashDB.
+  - A 202 carries `Retry-After`, the cached items, and a `pending` ID list.
+  - The client upserts what it got, moves on to the next page, and re-requests 202 pages after `Retry-After` until they come back 200.
+  - Give up after a bounded number of retries and log the IDs still pending.
 - **Studio add or refresh:**
   - Page through `site/{id}/scenes/full`.
   - Map each page straight to `MovieMetadata`, then `MovieMetadataService.UpsertMany` and
