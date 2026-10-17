@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Cache;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -40,7 +41,6 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMovieRepository _movieRepository;
         private readonly IEventAggregator _eventAggregator;
         private readonly ICacheManager _cacheManager;
-        private readonly string _cacheName;
 
         public MediaFileService(IMediaFileRepository mediaFileRepository,
                                 IMovieRepository movieRepository,
@@ -51,7 +51,6 @@ namespace NzbDrone.Core.MediaFiles
             _movieRepository = movieRepository;
             _eventAggregator = eventAggregator;
             _cacheManager = cacheManager;
-            _cacheName = "Whisparr.Api.V3.Movies.MovieResource_movieResources";
         }
 
         public MovieFile Add(MovieFile movieFile)
@@ -231,11 +230,7 @@ namespace NzbDrone.Core.MediaFiles
 
         private void RemoveMovieResourcesCache(string cacheKey)
         {
-            var movieResourcesCache = _cacheManager.FindCache(_cacheName);
-            if (movieResourcesCache != null)
-            {
-                movieResourcesCache.Remove(cacheKey);
-            }
+            _cacheManager.Remove(ApiResourceCaches.Movie, cacheKey);
         }
     }
 }

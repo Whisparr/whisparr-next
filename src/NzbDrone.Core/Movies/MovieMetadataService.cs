@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NzbDrone.Common.Cache;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.ImportLists.ImportListMovies;
 
 namespace NzbDrone.Core.Movies
@@ -25,7 +26,6 @@ namespace NzbDrone.Core.Movies
         private readonly IMovieService _movieService;
         private readonly IImportListMovieService _importListMovieService;
         private readonly ICacheManager _cacheManager;
-        private readonly string _cacheName;
 
         public MovieMetadataService(IMovieMetadataRepository movieMetadataRepository, IMovieService movieService, IImportListMovieService importListMovieService, ICacheManager cacheManager)
         {
@@ -33,8 +33,6 @@ namespace NzbDrone.Core.Movies
             _movieService = movieService;
             _importListMovieService = importListMovieService;
             _cacheManager = cacheManager;
-
-            _cacheName = "Whisparr.Api.V3.Movies.MovieResource_movieResources";
         }
 
         public MovieMetadata FindByTmdbId(int tmdbId)
@@ -103,11 +101,7 @@ namespace NzbDrone.Core.Movies
 
         private void RemoveMovieResourcesCache(string cacheKey)
         {
-            var movieResourcesCache = _cacheManager.FindCache(_cacheName);
-            if (movieResourcesCache != null)
-            {
-                movieResourcesCache.Remove(cacheKey);
-            }
+            _cacheManager.Remove(ApiResourceCaches.Movie, cacheKey);
         }
 
         public int CountByType(ItemType itemType)

@@ -2,6 +2,7 @@ using System.Linq;
 using Dapper;
 using NLog;
 using NzbDrone.Common.Cache;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Profiles.Qualities;
 
@@ -37,11 +38,11 @@ namespace NzbDrone.Core.Housekeeping.Housekeepers
             using var mapper = _database.OpenConnection();
 
             // Define cache targets for revocation
-            var targets = new (string Table, string CacheName, string Label)[]
+            var targets = new (string Table, string[] CacheNames, string Label)[]
             {
-                ("Movies", "Whisparr.Api.V3.Movies.MovieResource_movieResources", "movie"),
-                ("Performers", "Whisparr.Api.V3.Performers.PerformerResource_performerResources", "performer"),
-                ("Studios", "Whisparr.Api.V3.Studios.StudioResource_studioResources", "studio")
+                ("Movies", ApiResourceCaches.Movie, "movie"),
+                ("Performers", ApiResourceCaches.Performer, "performer"),
+                ("Studios", ApiResourceCaches.Studio, "studio")
             };
 
             // Track overall results
@@ -76,14 +77,20 @@ namespace NzbDrone.Core.Housekeeping.Housekeepers
                 totalAffected += affected;
 
                 var revokedForThis = 0;
-                var resourcesCache = _cacheManager.FindCache(t.CacheName);
+                var resourcesCaches = t.CacheNames
+                    .Select(name => _cacheManager.FindCache(name))
+                    .Where(cache => cache != null)
+                    .ToList();
 
-                if (resourcesCache != null)
+                if (resourcesCaches.Any())
                 {
                     foreach (var id in impactedIds)
                     {
                         // Invalidate API cache entries for impacted items
-                        resourcesCache.Remove(id.ToString());
+                        foreach (var resourcesCache in resourcesCaches)
+                        {
+                            resourcesCache.Remove(id.ToString());
+                        }
                     }
 
                     revokedForThis = impactedIds.Count;

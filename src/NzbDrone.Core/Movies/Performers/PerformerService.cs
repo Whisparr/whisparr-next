@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaFiles;
@@ -43,7 +44,6 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly MediaFileService _movieFileService;
         private readonly MovieStatisticsService _movieStatisticsService;
         private readonly IImportListExclusionService _exclusionService;
-        private readonly string _cacheName;
 
         public PerformerService(
             IPerformerRepository performerRepo,
@@ -61,7 +61,6 @@ namespace NzbDrone.Core.Movies.Performers
             _eventAggregator = eventAggregator;
             _cacheManager = cacheManager;
             _exclusionService = exclusionService;
-            _cacheName = "Whisparr.Api.V3.Performers.PerformerResource_performerResources";
         }
 
         public Performer AddPerformer(Performer performer)
@@ -233,11 +232,7 @@ namespace NzbDrone.Core.Movies.Performers
 
         private void RemovePerformerResourcesCache(string cacheKey)
         {
-            var movieResourcesCache = _cacheManager.FindCache(_cacheName);
-            if (movieResourcesCache != null)
-            {
-                movieResourcesCache.Remove(cacheKey);
-            }
+            _cacheManager.Remove(ApiResourceCaches.Performer, cacheKey);
         }
 
         public void Handle(PerformerUpdatedEvent message)

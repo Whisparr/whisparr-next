@@ -8,6 +8,7 @@ using NzbDrone.Common;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.AutoTagging;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.IndexerSearch.Definitions;
@@ -97,7 +98,6 @@ namespace NzbDrone.Core.Movies
         private readonly IBuildMoviePaths _moviePathBuilder;
         private readonly IAutoTaggingService _autoTaggingService;
         private readonly ICacheManager _cacheManager;
-        private readonly string _cacheName;
         private readonly Logger _logger;
 
         public MovieService(IMovieRepository movieRepository,
@@ -118,7 +118,6 @@ namespace NzbDrone.Core.Movies
             _moviePathBuilder = moviePathBuilder;
             _autoTaggingService = autoTaggingService;
             _cacheManager = cacheManager;
-            _cacheName = "Whisparr.Api.V3.Movies.MovieResource_movieResources";
 
             _logger = logger;
         }
@@ -1258,11 +1257,7 @@ namespace NzbDrone.Core.Movies
         /// <returns>void</returns>
         private void RemoveMovieResourcesCache(string cacheKey)
         {
-            var movieResourcesCache = _cacheManager.FindCache(_cacheName);
-            if (movieResourcesCache != null)
-            {
-                movieResourcesCache.Remove(cacheKey);
-            }
+            _cacheManager.Remove(ApiResourceCaches.Movie, cacheKey);
         }
 
         /// <summary> Find a movie by studio foreign ID and release date. </summary>

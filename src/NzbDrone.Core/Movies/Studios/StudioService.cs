@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
+using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Studios.Events;
@@ -38,7 +39,6 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly ICacheManager _cacheManager;
         private readonly IMovieRepository _movieRepository;
         private readonly IMovieStatisticsService _movieStatisticsService;
-        private readonly string _cacheName;
 
         public StudioService(
             IStudioRepository studioRepo,
@@ -52,7 +52,6 @@ namespace NzbDrone.Core.Movies.Studios
             _cacheManager = cacheManager;
             _movieRepository = movieRepository;
             _movieStatisticsService = movieStatisticsService;
-            _cacheName = "Whisparr.Api.V3.Studios.StudioResource_studioResources";
         }
 
         public Studio AddStudio(Studio studio)
@@ -184,11 +183,7 @@ namespace NzbDrone.Core.Movies.Studios
 
         private void RemoveStudioResourcesCache(string foreignId)
         {
-            var studioResourcesCache = _cacheManager.FindCache(_cacheName);
-            if (studioResourcesCache != null)
-            {
-                studioResourcesCache.Remove(foreignId);
-            }
+            _cacheManager.Remove(ApiResourceCaches.Studio, foreignId);
         }
 
         public void HandleAsync(StudioUpdatedEvent message)
