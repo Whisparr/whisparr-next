@@ -111,8 +111,8 @@ namespace NzbDrone.Core.MediaCover
 
             // The operation cache holds source files open, which blocks replacing a cover on
             // Windows, and its reuse buys nothing when each cover is resized once.
-            NetVips.Cache.Max = 0;
-            NetVips.Cache.MaxFiles = 0;
+            Cache.Max = 0;
+            Cache.MaxFiles = 0;
 
             // MediaCoverService already runs resizes on a worker pool, so one libvips thread
             // per resize avoids oversubscribing the CPU.

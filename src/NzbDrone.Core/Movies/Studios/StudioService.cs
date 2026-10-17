@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
-using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Studios.Events;

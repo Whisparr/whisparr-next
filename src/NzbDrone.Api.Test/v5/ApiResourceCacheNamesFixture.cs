@@ -1,6 +1,6 @@
 using FluentAssertions;
 using NUnit.Framework;
-using NzbDrone.Core.Cache;
+using NzbDrone.Core.Movies;
 
 namespace NzbDrone.Api.Test.v5
 {

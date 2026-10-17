@@ -1,9 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
 using Dapper;
 using NLog;
 using NzbDrone.Common.Cache;
-using NzbDrone.Core.Cache;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.Profiles.Qualities;
 
 namespace NzbDrone.Core.Housekeeping.Housekeepers
@@ -38,7 +39,7 @@ namespace NzbDrone.Core.Housekeeping.Housekeepers
             using var mapper = _database.OpenConnection();
 
             // Define cache targets for revocation
-            var targets = new (string Table, string[] CacheNames, string Label)[]
+            var targets = new (string Table, IReadOnlyList<string> CacheNames, string Label)[]
             {
                 ("Movies", ApiResourceCaches.Movie, "movie"),
                 ("Performers", ApiResourceCaches.Performer, "performer"),
@@ -77,6 +78,8 @@ namespace NzbDrone.Core.Housekeeping.Housekeepers
                 totalAffected += affected;
 
                 var revokedForThis = 0;
+
+                // Not ApiResourceCaches.Remove: the log reports a revoked count, which needs to know whether any cache exists
                 var resourcesCaches = t.CacheNames
                     .Select(name => _cacheManager.FindCache(name))
                     .Where(cache => cache != null)

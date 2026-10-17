@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using NzbDrone.Common.Cache;
-using NzbDrone.Core.Cache;
 using NzbDrone.Core.ImportLists.ImportListMovies;
 
 namespace NzbDrone.Core.Movies

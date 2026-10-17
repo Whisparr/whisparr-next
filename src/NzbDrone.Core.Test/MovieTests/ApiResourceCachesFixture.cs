@@ -1,10 +1,10 @@
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Cache;
-using NzbDrone.Core.Cache;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.Test.Framework;
 
-namespace NzbDrone.Core.Test.Cache
+namespace NzbDrone.Core.Test.MovieTests
 {
     [TestFixture]
     public class ApiResourceCachesFixture : CoreTest

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using NzbDrone.Common.Cache;
 
-namespace NzbDrone.Core.Cache
+namespace NzbDrone.Core.Movies
 {
     /// <summary>
     /// Names of the API resource caches, one per API version. Controllers name their caches
@@ -9,19 +9,19 @@ namespace NzbDrone.Core.Cache
     /// </summary>
     public static class ApiResourceCaches
     {
-        public static readonly string[] Movie =
+        public static readonly IReadOnlyList<string> Movie = new[]
         {
             "Whisparr.Api.V3.Movies.MovieResource_movieResources",
             "Whisparr.Api.V5.Movies.MovieResource_movieResources"
         };
 
-        public static readonly string[] Performer =
+        public static readonly IReadOnlyList<string> Performer = new[]
         {
             "Whisparr.Api.V3.Performers.PerformerResource_performerResources",
             "Whisparr.Api.V5.Performers.PerformerResource_performerResources"
         };
 
-        public static readonly string[] Studio =
+        public static readonly IReadOnlyList<string> Studio = new[]
         {
             "Whisparr.Api.V3.Studios.StudioResource_studioResources",
             "Whisparr.Api.V5.Studios.StudioResource_studioResources"
