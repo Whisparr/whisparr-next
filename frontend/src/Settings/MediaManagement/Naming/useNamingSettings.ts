@@ -6,8 +6,8 @@ import NamingConfig from 'typings/Settings/NamingConfig';
 import NamingExample from 'typings/Settings/NamingExample';
 import { QueryParams } from 'Utilities/Fetch/getQueryString';
 
-// Sonarr's copies read `/settings/naming`; those routes are API v5, and Eros
-// is on v3.
+// Sonarr's copies read `/settings/naming`; those routes are API v5, and
+// so are these: Whisparr v5 serves the config routes under /config.
 const PATH = '/config/naming';
 const EXAMPLES_PATH = '/config/naming/examples';
 

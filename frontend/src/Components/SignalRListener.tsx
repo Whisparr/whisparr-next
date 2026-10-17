@@ -44,6 +44,9 @@ interface SignalRBody {
 interface SignalRMessage {
   name: string;
   body: SignalRBody;
+  // Stamped by the server: the API version of the controller that broadcast it.
+  // Absent on hub-level messages such as `version`.
+  version?: number;
 }
 
 // Helper to ensure updated data when a movie is updated in the background
@@ -352,6 +355,12 @@ function SignalRListener() {
   const connection = useRef<signalR.HubConnection | null>(null);
 
   const handleMessage = useRef((message: SignalRMessage) => {
+    // Controllers on /api/v3 and /api/v5 each broadcast every change; handle the
+    // v5 copy only so one edit does not update the cache twice.
+    if (message.version !== undefined && message.version < 5) {
+      return;
+    }
+
     const { name, body } = message;
 
     if (name === 'calendar') {
@@ -592,7 +601,12 @@ function SignalRListener() {
   });
 
   const handleReceiveMessage = useRef((message: SignalRMessage) => {
-    console.debug('[signalR] received', message.name, message.body);
+    console.debug(
+      '[signalR] received',
+      message.name,
+      message.version === undefined ? 'unversioned' : `v${message.version}`,
+      message.body
+    );
 
     handleMessage.current(message);
   });

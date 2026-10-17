@@ -6,7 +6,8 @@ import {
 } from 'Settings/useSettings';
 import UiSettings from 'typings/Settings/UiSettings';
 
-// Sonarr's copy reads `/settings/ui`; that route is API v5, and Eros is on v3.
+// Sonarr's copy reads `/settings/ui`; that route is API v5, and
+// so is this one: Whisparr v5 serves the config routes under /config.
 const PATH = '/config/ui';
 
 export const useUiSettingsValues = () => {
