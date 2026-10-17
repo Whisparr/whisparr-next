@@ -142,46 +142,61 @@ namespace NzbDrone.Core.Backup
                 var restoredFile = false;
                 var temporaryPath = Path.Combine(_appFolderInfo.TempFolder, "whisparr_backup_restore");
 
-                _archiveService.Extract(backupFileName, temporaryPath);
+                DeleteRestoreFolder(temporaryPath);
 
-                var files = _diskProvider.GetFiles(temporaryPath, false).ToList();
-
-                if (files.Any(f => IsLegacyBackupFile(Path.GetFileName(f))))
+                try
                 {
-                    throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, "This backup is from Whisparr v2 or v3. v5 only restores v5 backups; legacy installs are migrated by the v5 setup wizard.");
-                }
+                    _archiveService.Extract(backupFileName, temporaryPath);
 
-                var databaseName = Path.GetFileName(_appFolderInfo.GetDatabase());
-                var configName = Path.GetFileName(_appFolderInfo.GetConfigPath());
+                    var files = _diskProvider.GetFiles(temporaryPath, false).ToList();
 
-                foreach (var file in files)
-                {
-                    var fileName = Path.GetFileName(file);
-
-                    if (fileName.Equals(configName, StringComparison.InvariantCultureIgnoreCase))
+                    if (files.Any(f => IsLegacyBackupFile(Path.GetFileName(f))))
                     {
-                        _diskProvider.MoveFile(file, _appFolderInfo.GetConfigPath(), true);
-                        restoredFile = true;
+                        throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, "This backup is from Whisparr v2 or v3. v5 only restores v5 backups; legacy installs are migrated by the v5 setup wizard.");
                     }
 
-                    if (fileName.Equals(databaseName, StringComparison.InvariantCultureIgnoreCase))
+                    var databaseName = Path.GetFileName(_appFolderInfo.GetDatabase());
+                    var configName = Path.GetFileName(_appFolderInfo.GetConfigPath());
+
+                    foreach (var file in files)
                     {
-                        _diskProvider.MoveFile(file, _appFolderInfo.GetDatabaseRestore(), true);
-                        restoredFile = true;
+                        var fileName = Path.GetFileName(file);
+
+                        if (fileName.Equals(configName, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            _diskProvider.MoveFile(file, _appFolderInfo.GetConfigPath(), true);
+                            restoredFile = true;
+                        }
+
+                        if (fileName.Equals(databaseName, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            _diskProvider.MoveFile(file, _appFolderInfo.GetDatabaseRestore(), true);
+                            restoredFile = true;
+                        }
+                    }
+
+                    if (!restoredFile)
+                    {
+                        throw new RestoreBackupFailedException(HttpStatusCode.NotFound, "Unable to restore database file from backup");
                     }
                 }
-
-                if (!restoredFile)
+                finally
                 {
-                    throw new RestoreBackupFailedException(HttpStatusCode.NotFound, "Unable to restore database file from backup");
+                    DeleteRestoreFolder(temporaryPath);
                 }
-
-                _diskProvider.DeleteFolder(temporaryPath, true);
 
                 return;
             }
 
             _diskProvider.MoveFile(backupFileName, _appFolderInfo.GetDatabaseRestore(), true);
+        }
+
+        private void DeleteRestoreFolder(string path)
+        {
+            if (_diskProvider.FolderExists(path))
+            {
+                _diskProvider.DeleteFolder(path, true);
+            }
         }
 
         private static bool IsLegacyBackupFile(string fileName)

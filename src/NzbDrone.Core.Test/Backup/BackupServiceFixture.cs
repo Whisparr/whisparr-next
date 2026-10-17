@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Backup;
@@ -73,6 +75,34 @@ namespace NzbDrone.Core.Test.Backup
 
             Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFile(v5Backup), Times.Once());
             Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFile(v3Backup), Times.Never());
+        }
+
+        [Test]
+        public void should_clean_up_after_refusing_a_legacy_restore_so_the_next_restore_works()
+        {
+            var restoreFolder = Path.Combine(_temp, "whisparr_backup_restore");
+            var legacy = Path.Combine(restoreFolder, "whisparr3.db");
+            var database = Path.Combine(restoreFolder, "whisparr5.db");
+            var extracted = new List<string>();
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(restoreFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(restoreFolder, false)).Returns(() => extracted.ToArray());
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.DeleteFolder(restoreFolder, true)).Callback(() => extracted.Clear());
+            Mocker.GetMock<IArchiveService>()
+                  .Setup(s => s.Extract("legacy.zip", restoreFolder))
+                  .Callback(() => extracted.Add(legacy));
+            Mocker.GetMock<IArchiveService>()
+                  .Setup(s => s.Extract("v5.zip", restoreFolder))
+                  .Callback(() => extracted.Add(database));
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("legacy.zip"));
+
+            Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFolder(restoreFolder, true), Times.AtLeastOnce());
+
+            Subject.Restore("v5.zip");
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(database, Path.Combine(_appData, "whisparr5.restore"), true), Times.Once());
         }
 
         [TestCase("whisparr3.db")]
