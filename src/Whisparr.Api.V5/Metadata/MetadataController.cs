@@ -1,0 +1,52 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.ThingiProvider.Events;
+using NzbDrone.SignalR;
+using Whisparr.Http;
+
+namespace Whisparr.Api.V5.Metadata
+{
+    [V5ApiController]
+    public class MetadataController : ProviderControllerBase<MetadataResource, MetadataBulkResource, IMetadata, MetadataDefinition>
+    {
+        public static readonly MetadataResourceMapper ResourceMapper = new ();
+        public static readonly MetadataBulkResourceMapper BulkResourceMapper = new ();
+
+        public MetadataController(IBroadcastSignalRMessage signalRBroadcaster, IMetadataFactory metadataFactory)
+            : base(signalRBroadcaster, metadataFactory, "metadata", ResourceMapper, BulkResourceMapper)
+        {
+        }
+
+        [NonAction]
+        public override ActionResult<List<MetadataResource>> UpdateProvider([FromBody] MetadataBulkResource providerResource)
+        {
+            throw new NotImplementedException();
+        }
+
+        [NonAction]
+        public override void DeleteProviders([FromBody] MetadataBulkResource resource)
+        {
+            throw new NotImplementedException();
+        }
+
+        [NonAction]
+        public override void Handle(ProviderAddedEvent<IMetadata> message)
+        {
+            throw new NotImplementedException();
+        }
+
+        [NonAction]
+        public override void Handle(ProviderUpdatedEvent<IMetadata> message)
+        {
+            throw new NotImplementedException();
+        }
+
+        [NonAction]
+        public override void Handle(ProviderDeletedEvent<IMetadata> message)
+        {
+            throw new NotImplementedException();
+        }
+    }
+}

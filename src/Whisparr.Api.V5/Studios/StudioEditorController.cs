@@ -1,0 +1,129 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using FluentValidation;
+using FluentValidation.Results;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Core.DecisionEngine.Specifications;
+using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Movies.Studios;
+using Whisparr.Http;
+using Whisparr.Http.REST;
+
+namespace Whisparr.Api.V5.Studios
+{
+    [V5ApiController("studio/editor")]
+    public class StudioEditorController : Controller
+    {
+        private readonly IStudioService _studioService;
+        private readonly StudioEditorValidator _studioEditorValidator;
+
+        public StudioEditorController(IStudioService studioService, IManageCommandQueue commandQueueManager, IUpgradableSpecification upgradableSpecification, StudioEditorValidator studioEditorValidator)
+        {
+            _studioService = studioService;
+            _studioEditorValidator = studioEditorValidator;
+        }
+
+        /// <summary>
+        /// Edits multiple studios
+        /// </summary>
+        /// <param name="resource"></param>
+        /// <returns>StudioEditorResource containing as-edited values</returns>
+        [HttpPut]
+        [Consumes("application/json")]
+        [Produces("application/json")]
+        [ProducesResponseType(typeof(List<StudioResource>), StatusCodes.Status202Accepted)]
+        public ActionResult<List<StudioResource>> SaveAll([FromBody] StudioEditorResource resource)
+        {
+            if (resource.StudioIds == null || resource.StudioIds.Count == 0)
+            {
+                throw new BadRequestException("studioIds must be provided");
+            }
+
+            var studiosToUpdate = _studioService.GetStudios(resource.StudioIds);
+
+            // A bulk date has three states the wire can't express with a plain DateTime?:
+            // absent leaves each studio's own date alone, empty clears it, and anything
+            // else has to parse here rather than silently clearing every selected studio.
+            DateTime? afterDate = null;
+
+            if (resource.AfterDate.IsNotNullOrWhiteSpace())
+            {
+                if (!DateTime.TryParse(resource.AfterDate, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsedAfterDate))
+                {
+                    throw new ValidationException(new[] { new ValidationFailure(nameof(resource.AfterDate), $"Invalid after date: {resource.AfterDate}") });
+                }
+
+                afterDate = parsedAfterDate;
+            }
+
+            foreach (var studios in studiosToUpdate)
+            {
+                if (resource.Monitored.HasValue)
+                {
+                    studios.Monitored = resource.Monitored.Value;
+                }
+
+                if (resource.MoviesMonitored.HasValue)
+                {
+                    studios.MoviesMonitored = resource.MoviesMonitored.Value;
+                }
+
+                if (resource.WhisparrMonitorNewItems.HasValue)
+                {
+                    studios.WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems.Value;
+                }
+
+                if (resource.QualityProfileId.HasValue)
+                {
+                    studios.QualityProfileId = resource.QualityProfileId.Value;
+                }
+
+                if (resource.RootFolderPath.IsNotNullOrWhiteSpace())
+                {
+                    studios.RootFolderPath = resource.RootFolderPath;
+                }
+
+                if (resource.SearchOnAdd.HasValue)
+                {
+                    studios.SearchOnAdd = resource.SearchOnAdd.Value;
+                }
+
+                if (resource.AfterDate != null)
+                {
+                    studios.AfterDate = afterDate;
+                }
+
+                if (resource.Tags != null)
+                {
+                    var newTags = resource.Tags;
+                    var applyTags = resource.ApplyTags;
+
+                    switch (applyTags)
+                    {
+                        case ApplyTags.Add:
+                            newTags.ForEach(t => studios.Tags.Add(t));
+                            break;
+                        case ApplyTags.Remove:
+                            newTags.ForEach(t => studios.Tags.Remove(t));
+                            break;
+                        case ApplyTags.Replace:
+                            studios.Tags = new HashSet<int>(newTags);
+                            break;
+                    }
+                }
+
+                var validationResult = _studioEditorValidator.Validate(studios);
+
+                if (!validationResult.IsValid)
+                {
+                    throw new ValidationException(validationResult.Errors);
+                }
+            }
+
+            return Accepted(_studioService.Update(studiosToUpdate).ToResource());
+        }
+    }
+}

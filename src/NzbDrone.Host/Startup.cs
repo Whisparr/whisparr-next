@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using DryIoc;
 using Microsoft.AspNetCore.Authorization;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -89,6 +91,7 @@ namespace NzbDrone.Host
                 options.ReturnHttpNotAcceptable = true;
             })
             .AddApplicationPart(typeof(SystemController).Assembly)
+            .AddApplicationPart(typeof(Whisparr.Api.V5.System.SystemController).Assembly)
             .AddApplicationPart(typeof(StaticResourceController).Assembly)
             .AddJsonOptions(options =>
             {
@@ -98,6 +101,18 @@ namespace NzbDrone.Host
 
             services.AddSwaggerGen(c =>
             {
+                c.SwaggerDoc("v5", new OpenApiInfo
+                {
+                    Version = "5.0.0",
+                    Title = "Whisparr",
+                    Description = "Whisparr API docs",
+                    License = new OpenApiLicense
+                    {
+                        Name = "GPL-3.0",
+                        Url = new Uri("https://github.com/Whisparr/Whisparr/blob/develop/LICENSE")
+                    }
+                });
+
                 c.SwaggerDoc("v3", new OpenApiInfo
                 {
                     Version = "3.0.0",
@@ -111,10 +126,13 @@ namespace NzbDrone.Host
                 });
 
                 // Include XML comments for better documentation
-                var xmlPath = Path.Combine(AppContext.BaseDirectory, "Whisparr.Api.V3.xml");
-                if (File.Exists(xmlPath))
+                foreach (var xmlName in new[] { "Whisparr.Api.V3.xml", "Whisparr.Api.V5.xml" })
                 {
-                    c.IncludeXmlComments(xmlPath);
+                    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlName);
+                    if (File.Exists(xmlPath))
+                    {
+                        c.IncludeXmlComments(xmlPath);
+                    }
                 }
 
                 var apiKeyHeader = new OpenApiSecurityScheme
@@ -167,6 +185,24 @@ namespace NzbDrone.Host
                 c.SchemaFilter<CommandResourceSchemaFilter>();
 
                 c.DescribeAllParametersInCamelCase();
+
+                // Generate docs based on the controller's API version
+                c.DocInclusionPredicate((docName, apiDesc) =>
+                {
+                    if (apiDesc.ActionDescriptor is not ControllerActionDescriptor controllerActionDescriptor)
+                    {
+                        return false;
+                    }
+
+                    var attributes = controllerActionDescriptor.ControllerTypeInfo.GetCustomAttributes(true);
+
+                    var versions = attributes.OfType<VersionedApiControllerAttribute>().Select(attr => attr.Version)
+                        .Concat(attributes.OfType<VersionedFeedControllerAttribute>().Select(attr => attr.Version))
+                        .ToList();
+
+                    // Return anything with no version or a matching version
+                    return versions.Count == 0 || versions.Any(v => $"v{v}" == docName);
+                });
             });
 
             services
@@ -301,6 +337,7 @@ namespace NzbDrone.Host
             // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.)
             app.UseSwaggerUI(c =>
             {
+                c.SwaggerEndpoint("/docs/v5/openapi.json", "Whisparr API v5");
                 c.SwaggerEndpoint("/docs/v3/openapi.json", "Whisparr API v3");
                 c.RoutePrefix = "docs";
                 c.DocumentTitle = "Whisparr API";
@@ -322,7 +359,7 @@ namespace NzbDrone.Host
             app.UseMiddleware<StartingUpMiddleware>();
             app.UseMiddleware<CacheHeaderMiddleware>();
             app.UseMiddleware<IfModifiedMiddleware>();
-            app.UseMiddleware<BufferingMiddleware>(new List<string> { "/api/v3/command" });
+            app.UseMiddleware<BufferingMiddleware>(new List<string> { "/api/v3/command", "/api/v5/command" });
 
             app.UseWebSockets();
 

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
-using Whisparr.Api.V3.System.Backup;
+using V3 = Whisparr.Api.V3.System.Backup;
+using V5 = Whisparr.Api.V5.System.Backup;
 
 namespace NzbDrone.Host.OpenApi
 {
@@ -11,8 +12,10 @@ namespace NzbDrone.Host.OpenApi
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
-            if (context.MethodInfo.DeclaringType != typeof(BackupController) ||
-                context.MethodInfo.Name != nameof(BackupController.UploadAndRestore))
+            var declaringType = context.MethodInfo.DeclaringType;
+
+            if ((declaringType != typeof(V3.BackupController) && declaringType != typeof(V5.BackupController)) ||
+                context.MethodInfo.Name != nameof(V3.BackupController.UploadAndRestore))
             {
                 return;
             }

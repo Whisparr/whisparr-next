@@ -1,0 +1,251 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Core.CustomFormats;
+using NzbDrone.Core.Datastore.Events;
+using NzbDrone.Core.DecisionEngine.Specifications;
+using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.Languages;
+using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies;
+using NzbDrone.Core.Parser;
+using NzbDrone.Core.Parser.Model;
+using NzbDrone.SignalR;
+using Whisparr.Http;
+using Whisparr.Http.REST;
+using Whisparr.Http.REST.Attributes;
+
+namespace Whisparr.Api.V5.MovieFiles
+{
+    [V5ApiController]
+    public class MovieFileController : RestControllerWithSignalR<MovieFileResource, MovieFile>,
+                                 IHandle<MovieFileAddedEvent>,
+                                 IHandle<MovieFileUpdatedEvent>,
+                                 IHandle<MovieFileDeletedEvent>
+    {
+        private readonly IMediaFileService _mediaFileService;
+        private readonly IDeleteMediaFiles _mediaFileDeletionService;
+        private readonly IMovieService _movieService;
+        private readonly ICustomFormatCalculationService _formatCalculator;
+        private readonly IUpgradableSpecification _upgradableSpecification;
+
+        public MovieFileController(IBroadcastSignalRMessage signalRBroadcaster,
+                               IMediaFileService mediaFileService,
+                               IDeleteMediaFiles mediaFileDeletionService,
+                               IMovieService movieService,
+                               ICustomFormatCalculationService formatCalculator,
+                               IUpgradableSpecification upgradableSpecification)
+            : base(signalRBroadcaster)
+        {
+            _mediaFileService = mediaFileService;
+            _mediaFileDeletionService = mediaFileDeletionService;
+            _movieService = movieService;
+            _formatCalculator = formatCalculator;
+            _upgradableSpecification = upgradableSpecification;
+        }
+
+        [HttpGet]
+        [Produces("application/json")]
+        public List<MovieFileResource> GetMovieFiles([FromQuery(Name = "movieId")] List<int> movieIds, [FromQuery] List<int> movieFileIds, bool? unmapped)
+        {
+            if (unmapped.HasValue && unmapped.Value)
+            {
+                var files = _mediaFileService.GetUnmappedFiles();
+                return files.ConvertAll(f => MapToResource(f));
+            }
+
+            List<MovieFile> movieFiles;
+
+            if (!movieIds.Any() && !movieFileIds.Any())
+            {
+                movieFiles = _mediaFileService.GetAllMovieFiles();
+            }
+            else
+            {
+                movieFiles = movieIds.Any()
+                    ? _mediaFileService.GetFilesByMovies(movieIds)
+                    : _mediaFileService.GetMovies(movieFileIds);
+            }
+
+            if (movieFiles == null)
+            {
+                return new List<MovieFileResource>();
+            }
+
+            return movieFiles.GroupBy(e => e.MovieId)
+                .SelectMany(f => f.ToList()
+                    .ConvertAll(e => e.ToResource(_movieService.GetMovie(f.Key), _upgradableSpecification, _formatCalculator)))
+                .ToList();
+        }
+
+        [RestPutById]
+        [Consumes("application/json")]
+        public ActionResult<MovieFileResource> SetMovieFile([FromBody] MovieFileResource movieFileResource)
+        {
+            var movieFile = _mediaFileService.GetMovie(movieFileResource.Id);
+            movieFile.IndexerFlags = (IndexerFlags)movieFileResource.IndexerFlags;
+            movieFile.Quality = movieFileResource.Quality;
+            movieFile.Languages = movieFileResource.Languages;
+            movieFile.Edition = movieFileResource.Edition;
+            if (movieFileResource.ReleaseGroup != null)
+            {
+                movieFile.ReleaseGroup = movieFileResource.ReleaseGroup;
+            }
+
+            if (movieFileResource.SceneName != null && SceneChecker.IsSceneTitle(movieFileResource.SceneName))
+            {
+                movieFile.SceneName = movieFileResource.SceneName;
+            }
+
+            _mediaFileService.Update(movieFile);
+            return Accepted(movieFile.Id);
+        }
+
+        [RestDeleteById]
+        public void DeleteMovieFile(int id)
+        {
+            var movieFile = _mediaFileService.GetMovie(id);
+            if (movieFile == null)
+            {
+                throw new NzbDroneClientException(HttpStatusCode.NotFound, "Movie file not found");
+            }
+
+            // Unmapped files won't have a movie
+            if (movieFile.MovieId == 0)
+            {
+                _mediaFileDeletionService.DeleteMovieFile(movieFile);
+            }
+            else
+            {
+                var movie = _movieService.GetMovie(movieFile.MovieId);
+
+                _mediaFileDeletionService.DeleteMovieFile(movie, movieFile);
+            }
+        }
+
+        [HttpDelete("bulk")]
+        [Consumes("application/json")]
+        public void DeleteMovieFiles([FromBody] MovieFileListResource resource)
+        {
+            if (resource.MovieFileIds == null || resource.MovieFileIds.Count == 0)
+            {
+                throw new Whisparr.Http.REST.BadRequestException("movieFileIds must be provided");
+            }
+
+            var movieFiles = _mediaFileService.GetMovies(resource.MovieFileIds);
+
+            foreach (var movieFile in movieFiles)
+            {
+                if (movieFile.MovieId == 0)
+                {
+                    _mediaFileDeletionService.DeleteMovieFile(movieFile);
+                }
+                else
+                {
+                    var movie = _movieService.GetMovie(movieFile.MovieId);
+
+                    _mediaFileDeletionService.DeleteMovieFile(movie, movieFile);
+                }
+            }
+        }
+
+        [HttpPut("bulk")]
+        [Consumes("application/json")]
+        [ProducesResponseType(typeof(List<MovieFileResource>), StatusCodes.Status202Accepted)]
+        public ActionResult<List<MovieFileResource>> SetPropertiesBulk([FromBody] List<MovieFileResource> resources)
+        {
+            var movieFiles = _mediaFileService.GetMovies(resources.Select(r => r.Id));
+
+            foreach (var movieFile in movieFiles)
+            {
+                var resourceMovieFile = resources.Single(r => r.Id == movieFile.Id);
+
+                if (resourceMovieFile.Languages != null)
+                {
+                    // Don't allow user to set files with 'Any' or 'Original' language
+                    movieFile.Languages = resourceMovieFile.Languages.Where(l => l != null && l != Language.Any && l != Language.Original).ToList();
+                }
+
+                if (resourceMovieFile.Quality != null)
+                {
+                    movieFile.Quality = resourceMovieFile.Quality;
+                }
+
+                if (resourceMovieFile.SceneName != null && SceneChecker.IsSceneTitle(resourceMovieFile.SceneName))
+                {
+                    movieFile.SceneName = resourceMovieFile.SceneName;
+                }
+
+                if (resourceMovieFile.Edition != null)
+                {
+                    movieFile.Edition = resourceMovieFile.Edition;
+                }
+
+                if (resourceMovieFile.ReleaseGroup != null)
+                {
+                    movieFile.ReleaseGroup = resourceMovieFile.ReleaseGroup;
+                }
+
+                if (resourceMovieFile.IndexerFlags.HasValue)
+                {
+                    movieFile.IndexerFlags = (IndexerFlags)resourceMovieFile.IndexerFlags;
+                }
+            }
+
+            _mediaFileService.Update(movieFiles);
+
+            var movie = _movieService.GetMovie(movieFiles[0].MovieId);
+
+            return Accepted(movieFiles.ConvertAll(f => f.ToResource(movie, _upgradableSpecification, _formatCalculator)));
+        }
+
+        [NonAction]
+        public void Handle(MovieFileAddedEvent message)
+        {
+            BroadcastResourceChange(ModelAction.Updated, message.MovieFile.Id);
+        }
+
+        [NonAction]
+        public void Handle(MovieFileUpdatedEvent message)
+        {
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(message.MovieFile);
+            BroadcastResourceChange(ModelAction.Updated, message.MovieFile.Id);
+        }
+
+        [NonAction]
+        public void Handle(MovieFileDeletedEvent message)
+        {
+            BroadcastResourceChange(ModelAction.Deleted, message.MovieFile.Id);
+        }
+
+        protected override MovieFileResource GetResourceById(int id)
+        {
+            var movieFile = _mediaFileService.GetMovie(id);
+            var movie = new Movie();
+            if (movieFile.MovieId != 0)
+            {
+                movie = _movieService.GetMovie(movieFile.MovieId);
+            }
+
+            var resource = movieFile.ToResource(movie, _upgradableSpecification, _formatCalculator);
+
+            return resource;
+        }
+
+        private MovieFileResource MapToResource(MovieFile movieFile)
+        {
+            if (movieFile.MovieId > 0)
+            {
+                return movieFile.ToResource(movieFile.Movie, _upgradableSpecification, _formatCalculator);
+            }
+
+            return movieFile.ToResource();
+        }
+    }
+}

@@ -28,7 +28,8 @@ search, the folder and the assembly name often differ:
 | Folder (`src/…`)     | Assembly / project   | Responsibility                          |
 | -------------------- | -------------------- | --------------------------------------- |
 | `NzbDrone.Core`      | `Whisparr.Core`      | All business logic (~40 domain areas)   |
-| `Whisparr.Api.V3`    | `Whisparr.Api.V3`    | REST API — controllers + resource DTOs  |
+| `Whisparr.Api.V5`    | `Whisparr.Api.V5`    | REST API `/api/v5` — new endpoints go here |
+| `Whisparr.Api.V3`    | `Whisparr.Api.V3`    | REST API `/api/v3` — frozen for integrations |
 | `Whisparr.Http`      | `Whisparr.Http`      | HTTP framework, base controllers, REST/ |
 | `NzbDrone.SignalR`   | `Whisparr.SignalR`   | Real-time push to the UI                |
 | `NzbDrone.Host`      | `Whisparr.Host`      | Bootstrap, startup, DI wiring           |
@@ -82,7 +83,8 @@ Each item names a representative path — follow the existing neighbors.
   `Download/` (+ `Download/Clients/`), `Notifications/`, `ImportLists/`,
   `MetadataSource/`.
 - **New API surface** → a `*Controller : RestControllerWithSignalR<TResource,
-  TModel>` under `src/Whisparr.Api.V3/`, decorated `[V3ApiController]`, with a
+  TModel>` under `src/Whisparr.Api.V5/`, decorated `[V5ApiController]` (`Whisparr.Api.V3`
+  is frozen for integrations such as Prowlarr; don't add endpoints there), with a
   paired `*Resource` DTO carrying static `MapToResource` / `ToModel` mappers.
   Base classes and routing live in `src/Whisparr.Http/REST/`. Controllers often
   also implement `IHandle<…Event>` to push SignalR updates. The OpenAPI spec is

@@ -1,0 +1,148 @@
+using System.Collections.Generic;
+using System.Linq;
+using FluentValidation;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.DecisionEngine.Specifications;
+using NzbDrone.Core.MediaCover;
+using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Commands;
+using Whisparr.Http;
+using Whisparr.Http.REST;
+
+namespace Whisparr.Api.V5.Movies
+{
+    [V5ApiController("movie/editor")]
+    public class MovieEditorController : Controller
+    {
+        private readonly IMovieService _movieService;
+        private readonly IConfigService _configService;
+        private readonly IManageCommandQueue _commandQueueManager;
+        private readonly MovieEditorValidator _movieEditorValidator;
+        private readonly IUpgradableSpecification _upgradableSpecification;
+        private readonly IMapCoversToLocal _coverMapper;
+
+        public MovieEditorController(IMovieService movieService,
+            IMapCoversToLocal coverMapper,
+            IConfigService configService,
+            IManageCommandQueue commandQueueManager,
+            MovieEditorValidator movieEditorValidator,
+            IUpgradableSpecification upgradableSpecification)
+        {
+            _movieService = movieService;
+            _coverMapper = coverMapper;
+            _configService = configService;
+            _commandQueueManager = commandQueueManager;
+            _movieEditorValidator = movieEditorValidator;
+            _upgradableSpecification = upgradableSpecification;
+        }
+
+        [HttpPut]
+        [Consumes("application/json")]
+        [ProducesResponseType(typeof(List<MovieResource>), StatusCodes.Status202Accepted)]
+        public ActionResult<List<MovieResource>> SaveAll([FromBody] MovieEditorResource resource)
+        {
+            if (resource.MovieIds == null || resource.MovieIds.Count == 0)
+            {
+                throw new BadRequestException("movieIds must be provided");
+            }
+
+            var moviesToUpdate = _movieService.GetMovies(resource.MovieIds);
+            var moviesToMove = new List<BulkMoveMovie>();
+
+            foreach (var movie in moviesToUpdate)
+            {
+                if (resource.Monitored.HasValue)
+                {
+                    movie.Monitored = resource.Monitored.Value;
+                }
+
+                if (resource.QualityProfileId.HasValue)
+                {
+                    movie.QualityProfileId = resource.QualityProfileId.Value;
+                }
+
+                if (resource.RootFolderPath.IsNotNullOrWhiteSpace())
+                {
+                    movie.RootFolderPath = resource.RootFolderPath;
+                    moviesToMove.Add(new BulkMoveMovie
+                    {
+                        MovieId = movie.Id,
+                        SourcePath = movie.Path
+                    });
+                }
+
+                if (resource.Tags != null)
+                {
+                    var newTags = resource.Tags;
+                    var applyTags = resource.ApplyTags;
+
+                    switch (applyTags)
+                    {
+                        case ApplyTags.Add:
+                            newTags.ForEach(t => movie.Tags.Add(t));
+                            break;
+                        case ApplyTags.Remove:
+                            newTags.ForEach(t => movie.Tags.Remove(t));
+                            break;
+                        case ApplyTags.Replace:
+                            movie.Tags = new HashSet<int>(newTags);
+                            break;
+                    }
+                }
+
+                var validationResult = _movieEditorValidator.Validate(movie);
+
+                if (!validationResult.IsValid)
+                {
+                    throw new ValidationException(validationResult.Errors);
+                }
+            }
+
+            if (resource.MoveFiles && moviesToMove.Any())
+            {
+                _commandQueueManager.Push(new BulkMoveMovieCommand
+                {
+                    DestinationRootFolder = resource.RootFolderPath,
+                    Movies = moviesToMove
+                });
+            }
+
+            var availabilityDelay = _configService.AvailabilityDelay;
+
+            var updatedMovies = _movieService.UpdateMovie(moviesToUpdate, !resource.MoveFiles);
+
+            var moviesResources = new List<MovieResource>(updatedMovies.Count);
+
+            foreach (var movie in updatedMovies)
+            {
+                var movieResource = movie.ToResource(availabilityDelay, _upgradableSpecification);
+
+                MapCoversToLocal(movieResource);
+
+                moviesResources.Add(movieResource);
+            }
+
+            return Accepted(moviesResources);
+        }
+
+        [HttpDelete]
+        public void DeleteMovies([FromBody] MovieEditorResource resource)
+        {
+            if (resource.MovieIds == null || resource.MovieIds.Count == 0)
+            {
+                throw new BadRequestException("movieIds must be provided");
+            }
+
+            _movieService.DeleteMovies(resource.MovieIds, resource.DeleteFiles, resource.AddImportExclusion);
+        }
+
+        private void MapCoversToLocal(MovieResource movie)
+        {
+            _coverMapper.ConvertToLocalUrls(movie.Id, movie.Images, movie.Added);
+        }
+    }
+}

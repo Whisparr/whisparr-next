@@ -1,0 +1,104 @@
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Languages;
+using NzbDrone.Core.MediaFiles.MovieImport.Manual;
+using NzbDrone.Core.Qualities;
+using Whisparr.Api.V5.CustomFormats;
+using Whisparr.Api.V5.Movies;
+using Whisparr.Http;
+using Whisparr.Http.REST;
+
+namespace Whisparr.Api.V5.ManualImport
+{
+    [V5ApiController]
+    public class ManualImportController : Controller
+    {
+        private readonly IManualImportService _manualImportService;
+
+        public ManualImportController(IManualImportService manualImportService)
+        {
+            _manualImportService = manualImportService;
+        }
+
+        [HttpGet]
+        [Produces("application/json")]
+        public List<ManualImportResource> GetMediaFiles(string folder, string downloadId, [FromQuery] string[] downloadIds, int? movieId, bool filterExistingFiles = true)
+        {
+            // downloadId is kept for existing API clients; downloadIds lets the queue import several downloads at once
+            var allDownloadIds = (downloadIds ?? Enumerable.Empty<string>())
+                .Append(downloadId)
+                .Where(id => id.IsNotNullOrWhiteSpace())
+                .Distinct()
+                .ToList();
+
+            if (movieId.HasValue && allDownloadIds.Empty())
+            {
+                return _manualImportService.GetMediaFiles(movieId.Value).ToResource().Select(AddQualityWeight).ToList();
+            }
+
+            if (allDownloadIds.Any())
+            {
+                return allDownloadIds
+                    .SelectMany(id => _manualImportService.GetMediaFiles(null, id, movieId, filterExistingFiles))
+                    .ToResource()
+                    .Select(AddQualityWeight)
+                    .ToList();
+            }
+
+            return _manualImportService.GetMediaFiles(folder, null, movieId, filterExistingFiles).ToResource().Select(AddQualityWeight).ToList();
+        }
+
+        [HttpPost]
+        [Consumes("application/json")]
+        public List<ManualImportReprocessResource> ReprocessItems([FromBody] List<ManualImportReprocessResource> items)
+        {
+            if (items is { Count: 0 })
+            {
+                throw new BadRequestException("items must be provided");
+            }
+
+            foreach (var item in items)
+            {
+                var processedItem = _manualImportService.ReprocessItem(item.Path, item.DownloadId, item.MovieId, item.ReleaseGroup, item.Quality, item.Languages, item.IndexerFlags);
+
+                item.Movie = processedItem.Movie.ToResource(0);
+                item.IndexerFlags = processedItem.IndexerFlags;
+                item.Rejections = processedItem.Rejections.Select(r => r.ToResource());
+                item.CustomFormats = processedItem.CustomFormats.ToResource(false);
+                item.CustomFormatScore = processedItem.CustomFormatScore;
+
+                // Only set the language/quality if they're unknown and languages were returned.
+                if (item.Languages?.Count <= 1 && (item.Languages?.SingleOrDefault() ?? Language.Unknown) == Language.Unknown && processedItem.Languages.Any())
+                {
+                    item.Languages = processedItem.Languages;
+                }
+
+                if (item.Quality?.Quality == Quality.Unknown)
+                {
+                    item.Quality = processedItem.Quality;
+                }
+
+                if (item.ReleaseGroup.IsNullOrWhiteSpace())
+                {
+                    item.ReleaseGroup = processedItem.ReleaseGroup;
+                }
+            }
+
+            return items;
+        }
+
+        private ManualImportResource AddQualityWeight(ManualImportResource item)
+        {
+            if (item.Quality != null)
+            {
+                item.QualityWeight = Quality.DefaultQualityDefinitions.Single(q => q.Quality == item.Quality.Quality).Weight;
+                item.QualityWeight += item.Quality.Revision.Real * 10;
+                item.QualityWeight += item.Quality.Revision.Version;
+            }
+
+            return item;
+        }
+    }
+}

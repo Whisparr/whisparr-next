@@ -16,6 +16,7 @@
     <ProjectReference Include="..\NzbDrone.Core\Whisparr.Core.csproj" />
     <ProjectReference Include="..\NzbDrone.SignalR\Whisparr.SignalR.csproj" />
     <ProjectReference Include="..\Whisparr.Api.V3\Whisparr.Api.V3.csproj" />
+    <ProjectReference Include="..\Whisparr.Api.V5\Whisparr.Api.V5.csproj" />
     <ProjectReference Include="..\Whisparr.Http\Whisparr.Http.csproj" />
   </ItemGroup>
   <ItemGroup>

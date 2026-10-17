@@ -1,0 +1,48 @@
+using System.Collections.Generic;
+using NzbDrone.Core.Movies.Performers;
+
+namespace Whisparr.Api.V5.Performers
+{
+    /// <summary>A resource for editing multiple performers.</summary>
+    public class PerformerEditorResource
+    {
+        /// <summary>The IDs of the performers to be edited.</summary>
+        public List<int> PerformerIds { get; set; }
+
+        /// <summary>Whether the performers' scenes are monitored.</summary>
+        public bool? Monitored { get; set; }
+
+        /// <summary>Whether the performers' movies are monitored.</summary>
+        public bool? MoviesMonitored { get; set; }
+
+        /// <summary>Whether newly discovered works added by refreshing the performers are monitored.</summary>
+        public bool? WhisparrMonitorNewItems { get; set; }
+
+        /// <summary>Show or hide the selected performers. Hiding unmonitors them and deletes their downloaded artwork.</summary>
+        public PerformerVisibility? Visibility { get; set; }
+
+        /// <summary>The quality profile ID to set for the performers' movies.</summary>
+        public int? QualityProfileId { get; set; }
+
+        /// <summary>The root folder path to set for the performers' movies.</summary>
+        public string RootFolderPath { get; set; }
+
+        /// <summary>Whether to search for new content after it is added to the performers.</summary>
+        public bool? SearchOnAdd { get; set; }
+
+        /// <summary>The date to only add items after, as yyyy-MM-dd. Omit to leave the performers' existing dates alone, or send an empty string to clear them</summary>
+        public string AfterDate { get; set; }
+
+        /// <summary>The IDs of the tags to apply to the performers.</summary>
+        public List<int> Tags { get; set; }
+
+        /// <summary>Instructions for applying tags to the performers.</summary>
+        public ApplyTags ApplyTags { get; set; }
+
+        /// <summary>Whether to delete the performers' files from disk.</summary>
+        public bool DeleteFiles { get; set; }
+
+        /// <summary>Whether to add an import exclusion for the deleted performers.</summary>
+        public bool AddImportExclusion { get; set; }
+    }
+}

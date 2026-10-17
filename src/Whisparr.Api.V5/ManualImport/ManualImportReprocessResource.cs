@@ -1,0 +1,24 @@
+using System.Collections.Generic;
+using NzbDrone.Core.Languages;
+using NzbDrone.Core.Qualities;
+using Whisparr.Api.V5.CustomFormats;
+using Whisparr.Api.V5.Movies;
+using Whisparr.Http.REST;
+
+namespace Whisparr.Api.V5.ManualImport
+{
+    public class ManualImportReprocessResource : RestResource
+    {
+        public string Path { get; set; }
+        public int MovieId { get; set; }
+        public MovieResource Movie { get; set; }
+        public QualityModel Quality { get; set; }
+        public List<Language> Languages { get; set; }
+        public string ReleaseGroup { get; set; }
+        public string DownloadId { get; set; }
+        public List<CustomFormatResource> CustomFormats { get; set; }
+        public int CustomFormatScore { get; set; }
+        public int IndexerFlags { get; set; }
+        public IEnumerable<ImportRejectionResource> Rejections { get; set; }
+    }
+}

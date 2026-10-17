@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Platform", "Platform", "{4E
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Whisparr.Api.V3", "Whisparr.Api.V3\Whisparr.Api.V3.csproj", "{D1D48E1D-9EEB-470B-992C-3954F90FB014}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Whisparr.Api.V5", "Whisparr.Api.V5\Whisparr.Api.V5.csproj", "{D425FC6A-9D98-4BB8-887E-65FBD56946AC}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Whisparr.Http", "Whisparr.Http\Whisparr.Http.csproj", "{F8A02FD4-A7A4-40D0-BB81-6319105A3302}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Whisparr.Api.Test", "NzbDrone.Api.Test\Whisparr.Api.Test.csproj", "{E2EA47B1-6996-417D-A6EC-28C4F202715C}"
@@ -86,6 +88,14 @@ Global
 		{D1D48E1D-9EEB-470B-992C-3954F90FB014}.Release|Posix.Build.0 = Release|Any CPU
 		{D1D48E1D-9EEB-470B-992C-3954F90FB014}.Release|Windows.ActiveCfg = Release|Any CPU
 		{D1D48E1D-9EEB-470B-992C-3954F90FB014}.Release|Windows.Build.0 = Release|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Debug|Posix.ActiveCfg = Debug|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Debug|Posix.Build.0 = Debug|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Debug|Windows.ActiveCfg = Debug|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Debug|Windows.Build.0 = Debug|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Release|Posix.ActiveCfg = Release|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Release|Posix.Build.0 = Release|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Release|Windows.ActiveCfg = Release|Any CPU
+		{D425FC6A-9D98-4BB8-887E-65FBD56946AC}.Release|Windows.Build.0 = Release|Any CPU
 		{F8A02FD4-A7A4-40D0-BB81-6319105A3302}.Debug|Posix.ActiveCfg = Debug|Any CPU
 		{F8A02FD4-A7A4-40D0-BB81-6319105A3302}.Debug|Posix.Build.0 = Debug|Any CPU
 		{F8A02FD4-A7A4-40D0-BB81-6319105A3302}.Debug|Windows.ActiveCfg = Debug|Any CPU

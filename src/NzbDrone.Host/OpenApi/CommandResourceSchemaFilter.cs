@@ -1,6 +1,7 @@
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
-using Whisparr.Api.V3.Commands;
+using V3 = Whisparr.Api.V3.Commands;
+using V5 = Whisparr.Api.V5.Commands;
 
 namespace NzbDrone.Host.OpenApi
 {
@@ -16,7 +17,7 @@ namespace NzbDrone.Host.OpenApi
     {
         public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
         {
-            if (context.Type == typeof(CommandResource) && schema is OpenApiSchema concrete)
+            if ((context.Type == typeof(V3.CommandResource) || context.Type == typeof(V5.CommandResource)) && schema is OpenApiSchema concrete)
             {
                 concrete.AdditionalPropertiesAllowed = true;
                 concrete.AdditionalProperties = null;

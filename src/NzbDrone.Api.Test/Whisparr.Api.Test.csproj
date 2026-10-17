@@ -9,6 +9,7 @@
     <ProjectReference Include="..\NzbDrone.Core\Whisparr.Core.csproj" />
     <ProjectReference Include="..\NzbDrone.Test.Common\Whisparr.Test.Common.csproj" />
     <ProjectReference Include="..\Whisparr.Api.V3\Whisparr.Api.V3.csproj" />
+    <ProjectReference Include="..\Whisparr.Api.V5\Whisparr.Api.V5.csproj" />
     <ProjectReference Include="..\Whisparr.Http\Whisparr.Http.csproj" />
   </ItemGroup>
 </Project>

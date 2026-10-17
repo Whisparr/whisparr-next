@@ -7,21 +7,17 @@ namespace NzbDrone.Host.OpenApi
 {
     public static class OperationIds
     {
-        private const string ApiPrefix = "api/v3/";
-
+        private static readonly Regex ApiPrefixRegex = new Regex(@"^api/v\d+/", RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         private static readonly Regex ParameterRegex = new Regex(@"^\{(?<name>[^:?}]+)[^}]*\}$", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
         private static readonly Regex WordSeparatorRegex = new Regex("[^A-Za-z0-9]+", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
         // Built from the method and path rather than the controller action, so ids only change when the
-        // public route does, not when an action is renamed. GET api/v3/tag/{id} becomes getTagById.
+        // public route does, not when an action is renamed. GET api/v3/tag/{id} and GET api/v5/tag/{id} become getTagById.
         public static string FromRoute(string httpMethod, string relativePath)
         {
             var path = relativePath ?? string.Empty;
 
-            if (path.StartsWith(ApiPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                path = path.Substring(ApiPrefix.Length);
-            }
+            path = ApiPrefixRegex.Replace(path, string.Empty);
 
             var operationId = new StringBuilder((httpMethod ?? string.Empty).ToLowerInvariant());
 

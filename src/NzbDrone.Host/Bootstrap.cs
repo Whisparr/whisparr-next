@@ -38,6 +38,7 @@ namespace NzbDrone.Host
             "Whisparr.Core",
             "Whisparr.SignalR",
             "Whisparr.Api.V3",
+            "Whisparr.Api.V5",
             "Whisparr.Http"
         };
 
