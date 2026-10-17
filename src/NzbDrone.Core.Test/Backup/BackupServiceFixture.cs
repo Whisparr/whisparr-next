@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.IO;
+using Dapper;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -125,6 +127,62 @@ namespace NzbDrone.Core.Test.Backup
 
             Mocker.GetMock<IDiskProvider>()
                   .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_refuse_a_raw_legacy_database_before_moving_it()
+        {
+            var upload = GetTempFilePath();
+            SqliteVersionInfoDatabase.Create(upload, 247);
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore(upload))
+                  .Message.Should().Contain("v5");
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_refuse_a_raw_file_that_is_not_a_sqlite_database()
+        {
+            var upload = GetTempFilePath();
+            File.WriteAllText(upload, "not a database, just some text that is long enough to fill a header");
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore(upload));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_restore_a_raw_v5_database()
+        {
+            var upload = GetTempFilePath();
+            SqliteVersionInfoDatabase.Create(upload, 247, 300);
+
+            Subject.Restore(upload);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(upload, Path.Combine(_appData, "whisparr5.restore"), true), Times.Once());
+        }
+
+        [Test]
+        public void should_restore_a_raw_v5_database_in_wal_mode()
+        {
+            // whisparr5.db is in WAL mode on Linux and Windows, so a copy of it arrives that way
+            var upload = GetTempFilePath();
+            SqliteVersionInfoDatabase.Create(upload, 247, 300);
+
+            using (var connection = new SQLiteConnection($"Data Source={upload};Pooling=False"))
+            {
+                connection.Open();
+                connection.ExecuteScalar<string>("PRAGMA journal_mode=WAL").Should().Be("wal");
+            }
+
+            Subject.Restore(upload);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(upload, Path.Combine(_appData, "whisparr5.restore"), true), Times.Once());
         }
 
         [Test]

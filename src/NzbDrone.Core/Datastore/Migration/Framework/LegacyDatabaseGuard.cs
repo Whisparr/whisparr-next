@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Data.SQLite;
 
 namespace NzbDrone.Core.Datastore.Migration.Framework
 {
@@ -22,6 +23,31 @@ namespace NzbDrone.Core.Datastore.Migration.Framework
             var hasV5Migration = Convert.ToBoolean(command.ExecuteScalar());
 
             return !hasV5Migration;
+        }
+
+        // A restore candidate is accepted only if it opens as SQLite and isn't a v2/v3 database.
+        // It is opened read-only and unpooled so the check neither changes the file nor keeps it locked.
+        public static bool IsRestorableSqliteFile(string path)
+        {
+            var connectionString = new SQLiteConnectionStringBuilder
+            {
+                DataSource = path,
+                ReadOnly = true,
+                FailIfMissing = true,
+                Pooling = false
+            }.ConnectionString;
+
+            try
+            {
+                using var connection = new SQLiteConnection(connectionString);
+                connection.Open();
+
+                return !IsLegacy(connection, DatabaseType.SQLite);
+            }
+            catch (SQLiteException)
+            {
+                return false;
+            }
         }
 
         private static bool HasVersionInfoTable(IDbConnection connection, DatabaseType databaseType)

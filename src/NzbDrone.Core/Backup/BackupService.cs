@@ -13,6 +13,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Datastore.Migration.Framework;
 using NzbDrone.Core.Messaging.Commands;
 
 namespace NzbDrone.Core.Backup
@@ -28,6 +29,8 @@ namespace NzbDrone.Core.Backup
 
     public class BackupService : IBackupService, IExecute<BackupCommand>
     {
+        private const string LegacyBackupMessage = "This backup is from Whisparr v2 or v3. v5 only restores v5 backups; legacy installs are migrated by the v5 setup wizard.";
+
         private readonly IMainDatabase _maindDb;
         private readonly IMakeDatabaseBackup _makeDatabaseBackup;
         private readonly IDiskTransferService _diskTransferService;
@@ -152,7 +155,7 @@ namespace NzbDrone.Core.Backup
 
                     if (files.Any(f => IsLegacyBackupFile(Path.GetFileName(f))))
                     {
-                        throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, "This backup is from Whisparr v2 or v3. v5 only restores v5 backups; legacy installs are migrated by the v5 setup wizard.");
+                        throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, LegacyBackupMessage);
                     }
 
                     var databaseName = Path.GetFileName(_appFolderInfo.GetDatabase());
@@ -186,6 +189,11 @@ namespace NzbDrone.Core.Backup
                 }
 
                 return;
+            }
+
+            if (!LegacyDatabaseGuard.IsRestorableSqliteFile(backupFileName))
+            {
+                throw new RestoreBackupFailedException(HttpStatusCode.BadRequest, LegacyBackupMessage);
             }
 
             _diskProvider.MoveFile(backupFileName, _appFolderInfo.GetDatabaseRestore(), true);

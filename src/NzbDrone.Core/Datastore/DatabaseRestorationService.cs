@@ -4,6 +4,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Datastore.Migration.Framework;
 
 namespace NzbDrone.Core.Datastore
 {
@@ -30,6 +31,17 @@ namespace NzbDrone.Core.Datastore
 
             if (!_diskProvider.FileExists(dbRestorePath))
             {
+                return;
+            }
+
+            // A legacy or unreadable file would replace the v5 database and only be refused after it was gone
+            if (!LegacyDatabaseGuard.IsRestorableSqliteFile(dbRestorePath))
+            {
+                var rejectedPath = dbRestorePath + ".rejected";
+
+                Logger.Error("Not restoring {0}: it is a Whisparr v2/v3 database or not a SQLite database. The current database is unchanged; the file was moved to {1}", dbRestorePath, rejectedPath);
+                _diskProvider.MoveFile(dbRestorePath, rejectedPath, true);
+
                 return;
             }
 
