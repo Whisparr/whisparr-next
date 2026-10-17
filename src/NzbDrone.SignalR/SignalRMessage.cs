@@ -6,6 +6,7 @@ namespace NzbDrone.SignalR
     {
         public object Body { get; set; }
         public string Name { get; set; }
+        public int? Version { get; set; }
 
         [System.Text.Json.Serialization.JsonIgnore]
         public ModelAction Action { get; set; }

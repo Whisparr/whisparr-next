@@ -16,6 +16,7 @@ namespace Whisparr.Http.REST
         private const int DefaultBatchChunkSize = 50;
 
         protected string Resource { get; }
+        protected int? Version { get; }
         private readonly IBroadcastSignalRMessage _signalRBroadcaster;
 
         protected RestControllerWithSignalR(IBroadcastSignalRMessage signalRBroadcaster)
@@ -26,10 +27,12 @@ namespace Whisparr.Http.REST
             if (apiAttribute != null && apiAttribute.Resource != VersionedApiControllerAttribute.CONTROLLER_RESOURCE)
             {
                 Resource = apiAttribute.Resource;
+                Version = apiAttribute.Version;
             }
             else
             {
                 Resource = new TResource().ResourceName.Trim('/');
+                Version = apiAttribute?.Version;
             }
         }
 
@@ -74,17 +77,15 @@ namespace Whisparr.Http.REST
                 return;
             }
 
-            if (GetType().Namespace.Contains("V3"))
+            var signalRMessage = new SignalRMessage
             {
-                var signalRMessage = new SignalRMessage
-                {
-                    Name = Resource,
-                    Body = new ResourceChangeMessage<TResource>(resource, action),
-                    Action = action
-                };
+                Name = Resource,
+                Body = new ResourceChangeMessage<TResource>(resource, action),
+                Version = Version,
+                Action = action
+            };
 
-                _signalRBroadcaster.BroadcastMessage(signalRMessage);
-            }
+            _signalRBroadcaster.BroadcastMessage(signalRMessage);
         }
 
         // New: Batch broadcast method with chunking
@@ -95,17 +96,13 @@ namespace Whisparr.Http.REST
                 return;
             }
 
-            if (!GetType().Namespace.Contains("V3"))
-            {
-                return;
-            }
-
             foreach (var chunk in Chunk(resources, chunkSize))
             {
                 var signalRMessage = new SignalRMessage
                 {
                     Name = Resource,
                     Body = new ResourceChangeMessage<TResource>(chunk.ToList(), action),
+                    Version = Version,
                     Action = action
                 };
                 _signalRBroadcaster.BroadcastMessage(signalRMessage);
@@ -144,17 +141,15 @@ namespace Whisparr.Http.REST
                 return;
             }
 
-            if (GetType().Namespace.Contains("V3"))
+            var signalRMessage = new SignalRMessage
             {
-                var signalRMessage = new SignalRMessage
-                {
-                    Name = Resource,
-                    Body = new ResourceChangeMessage<TResource>(action),
-                    Action = action
-                };
+                Name = Resource,
+                Body = new ResourceChangeMessage<TResource>(action),
+                Version = Version,
+                Action = action
+            };
 
-                _signalRBroadcaster.BroadcastMessage(signalRMessage);
-            }
+            _signalRBroadcaster.BroadcastMessage(signalRMessage);
         }
     }
 }
