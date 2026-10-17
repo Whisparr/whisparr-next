@@ -444,6 +444,8 @@ with hotio's AppData layout, so that swapping the tag finds the legacy DB.
 - Fold the Skyhook v3/v4 loops into v5 and migrate both caches (data migration, not a
   cold hydrate).
 - Own CI and images, and the public repo.
+- When Actions come back on, the upstream sync (`upstream-watch.yml`, `.github/upstream/state.json`)
+  tracks **Sonarr only**. Drop the Radarr matrix entry and its state.
 - Optionally squash the v5 migration chain into a new baseline.
 
 ## Verification
