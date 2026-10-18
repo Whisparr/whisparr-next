@@ -21,6 +21,7 @@ namespace NzbDrone.Core.MetadataSource
         ScenePage GetStudioScenePage(string stashId, string cursor);
         ScenePage GetPerformerScenePage(string stashId, string cursor);
         List<string> PrefetchPerformers(IEnumerable<string> stashIds);
+        void ForgetPrefetched(IEnumerable<string> sceneStashIds, IEnumerable<string> performerStashIds);
         Studio GetStudioInfo(string stashId);
         (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) GetPerformerWorks(string stashId);
         List<string> GetStudioScenes(string stashId);

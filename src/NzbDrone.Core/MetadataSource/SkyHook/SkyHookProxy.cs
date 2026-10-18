@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -42,6 +43,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         private const string StashIdPrefixConst = "stashid:";
         private const int PerformerBulkBatchSize = 100;
         private static readonly TimeSpan PrefetchLifetime = TimeSpan.FromHours(2);
+        private static readonly TimeSpan MinRetryAfter = TimeSpan.FromSeconds(1);
+        private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromMinutes(5);
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
         private readonly IHttpRequestBuilderFactory _whisparrMetadata;
@@ -506,6 +509,19 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return notCached.Distinct().ToList();
         }
 
+        public void ForgetPrefetched(IEnumerable<string> sceneStashIds, IEnumerable<string> performerStashIds)
+        {
+            foreach (var id in (sceneStashIds ?? Enumerable.Empty<string>()).Where(i => i.IsNotNullOrWhiteSpace()))
+            {
+                _scenePrefetch.Remove(id);
+            }
+
+            foreach (var id in (performerStashIds ?? Enumerable.Empty<string>()).Where(i => i.IsNotNullOrWhiteSpace()))
+            {
+                _performerPrefetch.Remove(id);
+            }
+        }
+
         private ScenePage GetScenePage(string route, string stashId, string cursor)
         {
             var builder = _whisparrMetadata.Create()
@@ -548,7 +564,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             var resource = httpResponse.Resource;
             var items = new List<ScenePageItem>();
 
-            foreach (var scene in resource.Items ?? new List<MovieResource>())
+            foreach (var scene in resource?.Items ?? new List<MovieResource>())
             {
                 var sceneId = scene.ForeignIds?.StashId;
 
@@ -571,10 +587,10 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return new ScenePage
             {
                 Status = status,
-                Total = resource.Total,
-                NextCursor = resource.NextCursor,
+                Total = resource?.Total ?? 0,
+                NextCursor = resource?.NextCursor,
                 Items = items,
-                Pending = resource.Pending ?? new List<string>(),
+                Pending = resource?.Pending ?? new List<string>(),
                 RetryAfter = status == ScenePageStatus.Pending ? ParseRetryAfter(httpResponse, defaultRetryAfter) : defaultRetryAfter
             };
         }
@@ -588,19 +604,23 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
             var retryAfter = response.Headers["Retry-After"].ToString();
 
-            if (int.TryParse(retryAfter, out var seconds))
+            if (int.TryParse(retryAfter, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds))
             {
-                return TimeSpan.FromSeconds(seconds);
+                return ClampRetryAfter(TimeSpan.FromSeconds(seconds));
             }
 
-            if (DateTime.TryParse(retryAfter, out var date))
+            if (DateTime.TryParseExact(retryAfter, "r", CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var date))
             {
-                var delta = date.ToUniversalTime() - DateTime.UtcNow;
-
-                return delta > TimeSpan.Zero ? delta : fallback;
+                return ClampRetryAfter(date - DateTime.UtcNow);
             }
 
             return fallback;
+        }
+
+        // A bad header must neither spin the walker nor stall it for hours.
+        private static TimeSpan ClampRetryAfter(TimeSpan value)
+        {
+            return value < MinRetryAfter ? MinRetryAfter : value > MaxRetryAfter ? MaxRetryAfter : value;
         }
 
         private static Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> MapSceneInfo(MovieResource resource)

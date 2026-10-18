@@ -118,6 +118,94 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             page.RetryAfter.Should().Be(TimeSpan.FromSeconds(30));
         }
 
+        [TestCase("0", 1)]
+        [TestCase("-30", 1)]
+        [TestCase("99999", 300)]
+        [TestCase("45", 45)]
+        public void should_clamp_retry_after_seconds(string header, int expectedSeconds)
+        {
+            GivenPageBody(HttpStatusCode.ServiceUnavailable, "", new HttpHeader { { "Retry-After", header } });
+
+            Subject.GetStudioScenePage(StudioId, null).RetryAfter.Should().Be(TimeSpan.FromSeconds(expectedSeconds));
+        }
+
+        [Test]
+        public void should_parse_a_future_retry_after_http_date()
+        {
+            var date = DateTime.UtcNow.AddSeconds(60).ToString("r", System.Globalization.CultureInfo.InvariantCulture);
+            GivenPageBody(HttpStatusCode.ServiceUnavailable, "", new HttpHeader { { "Retry-After", date } });
+
+            Subject.GetStudioScenePage(StudioId, null).RetryAfter.Should().BeCloseTo(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(10));
+        }
+
+        [Test]
+        public void should_clamp_a_far_future_retry_after_http_date()
+        {
+            var date = DateTime.UtcNow.AddHours(3).ToString("r", System.Globalization.CultureInfo.InvariantCulture);
+            GivenPageBody(HttpStatusCode.ServiceUnavailable, "", new HttpHeader { { "Retry-After", date } });
+
+            Subject.GetStudioScenePage(StudioId, null).RetryAfter.Should().Be(TimeSpan.FromMinutes(5));
+        }
+
+        [Test]
+        public void should_clamp_a_past_retry_after_http_date_to_one_second()
+        {
+            var date = DateTime.UtcNow.AddMinutes(-10).ToString("r", System.Globalization.CultureInfo.InvariantCulture);
+            GivenPageBody(HttpStatusCode.ServiceUnavailable, "", new HttpHeader { { "Retry-After", date } });
+
+            Subject.GetStudioScenePage(StudioId, null).RetryAfter.Should().Be(TimeSpan.FromSeconds(1));
+        }
+
+        [Test]
+        public void should_fall_back_when_retry_after_is_unparseable()
+        {
+            GivenPageBody(HttpStatusCode.ServiceUnavailable, "", new HttpHeader { { "Retry-After", "soon" } });
+
+            Subject.GetStudioScenePage(StudioId, null).RetryAfter.Should().Be(TimeSpan.FromSeconds(30));
+        }
+
+        [Test]
+        public void should_treat_a_page_without_items_or_pending_as_empty()
+        {
+            GivenPageBody(HttpStatusCode.Accepted, "{\"total\":3}", new HttpHeader());
+
+            var page = Subject.GetStudioScenePage(StudioId, null);
+
+            page.Items.Should().BeEmpty();
+            page.Pending.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_go_to_http_for_a_scene_after_forgetting_it()
+        {
+            var scene = Scene("a", "p1");
+            GivenPage(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource> { scene } });
+            GivenSceneGet(scene);
+
+            Subject.GetStudioScenePage(StudioId, null);
+            Subject.ForgetPrefetched(new[] { "a" }, Array.Empty<string>());
+            Subject.GetSceneInfo("a");
+
+            Mocker.GetMock<IHttpClient>().Verify(
+                v => v.Get<MovieResource>(It.Is<HttpRequest>(r => r.Url.Path.EndsWith("scene/a"))),
+                Times.Once());
+        }
+
+        [Test]
+        public void should_go_to_http_for_a_performer_after_forgetting_it()
+        {
+            GivenBulk(_ => new PerformerBulkResource { Performers = new List<PerformerResource> { Performer("p1") } });
+            Mocker.GetMock<IHttpClient>()
+                .Setup(v => v.Get<PerformerResource>(It.IsAny<HttpRequest>()))
+                .Returns((HttpRequest request) => Response<PerformerResource>(request, HttpStatusCode.OK, Performer("p1").ToJson(), new HttpHeader()));
+
+            Subject.PrefetchPerformers(new[] { "p1" });
+            Subject.ForgetPrefetched(Array.Empty<string>(), new[] { "p1" });
+            Subject.GetPerformerInfo("p1");
+
+            Mocker.GetMock<IHttpClient>().Verify(v => v.Get<PerformerResource>(It.IsAny<HttpRequest>()), Times.Once());
+        }
+
         [Test]
         public void should_throw_not_found_for_unknown_studio()
         {
