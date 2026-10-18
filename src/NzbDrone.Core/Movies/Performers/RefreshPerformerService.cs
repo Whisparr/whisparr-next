@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using DryIoc.ImTools;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -25,6 +24,7 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly IAddPerformerService _addPerformerService;
         private readonly IMovieService _movieService;
         private readonly IAddMovieService _addMovieService;
+        private readonly ISceneCatalogImporter _sceneCatalogImporter;
         private readonly IConfigService _configService;
         private readonly IDiskScanService _diskScanService;
         private readonly IEventAggregator _eventAggregator;
@@ -37,6 +37,7 @@ namespace NzbDrone.Core.Movies.Performers
                                         IPerformerService performerService,
                                         IMovieService movieService,
                                         IAddMovieService addMovieService,
+                                        ISceneCatalogImporter sceneCatalogImporter,
                                         IConfigService configService,
                                         IDiskScanService diskScanService,
                                         IEventAggregator eventAggregator,
@@ -48,6 +49,7 @@ namespace NzbDrone.Core.Movies.Performers
             _addPerformerService = addPerformerService;
             _movieService = movieService;
             _addMovieService = addMovieService;
+            _sceneCatalogImporter = sceneCatalogImporter;
             _configService = configService;
             _diskScanService = diskScanService;
             _eventAggregator = eventAggregator;
@@ -162,35 +164,14 @@ namespace NzbDrone.Core.Movies.Performers
             // and without a search on add.
             var monitorNewItems = _configService.WhisparrMonitorNewItems && performer.WhisparrMonitorNewItems;
 
-            (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) performerWork;
-
-            try
-            {
-                performerWork = _movieInfo.GetPerformerWorks(performer.ForeignId);
-            }
-            catch (WebException ex)
-            {
-                _logger.Warn(
-                    ex,
-                    "Unable to refresh works for performer '{0}' ({1}). Skipping performer.",
-                    performer.Name,
-                    performer.ForeignId);
-
-                return;
-            }
-
             if (performer.Monitored)
             {
-                var existingScenes = _movieService.AllMovieStashIds();
-                var excludedScenes = _importListExclusionService.GetAllExclusions().Select(e => e.ForeignId);
-                var scenesToAdd = performerWork.StashdbIds.Where(m => !existingScenes.Contains(m)).Where(m => !excludedScenes.Contains(m));
-                var scenesAdded = 0;
-
-                if (scenesToAdd.Any())
-                {
-                    var sceneLists = scenesToAdd.Select(m => new Movie
+                var scenesAdded = _sceneCatalogImporter.ImportScenes(
+                    performer.Name,
+                    cursor => _movieInfo.GetPerformerScenePage(performer.ForeignId, cursor),
+                    stashId => new Movie
                     {
-                        ForeignId = m,
+                        ForeignId = stashId,
                         QualityProfileId = performer.QualityProfileId,
                         RootFolderPath = performer.RootFolderPath,
                         AddOptions = new AddMovieOptions
@@ -200,23 +181,30 @@ namespace NzbDrone.Core.Movies.Performers
                         },
                         Monitored = monitorNewItems,
                         Tags = performer.Tags
-                    }).Chunk(chunkSize);
+                    });
 
-                    foreach (var sceneList in sceneLists)
-                    {
-                        scenesAdded += _addMovieService.AddMovies(sceneList.ToList(), true).Count;
-                    }
-                }
-
-                _logger.Info("Synced performer {0} has {1} scenes adding {2} and added {3}",
-                    performer.Name,
-                    performerWork.StashdbIds.Count,
-                    scenesToAdd.Count(),
-                    scenesAdded);
+                _logger.Info("Synced performer {0} and added {1} scenes", performer.Name, scenesAdded);
             }
 
             if (performer.MoviesMonitored)
             {
+                (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) performerWork;
+
+                try
+                {
+                    performerWork = _movieInfo.GetPerformerWorks(performer.ForeignId);
+                }
+                catch (WebException ex)
+                {
+                    _logger.Warn(
+                        ex,
+                        "Unable to refresh works for performer '{0}' ({1}). Skipping performer.",
+                        performer.Name,
+                        performer.ForeignId);
+
+                    return;
+                }
+
                 var moviesAdded = 0;
 
                 if (_configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Net;
 
@@ -40,6 +41,7 @@ namespace NzbDrone.Core.Test.PerformerTests
                 .With(p => p.ForeignId = "timed-out")
                 .With(p => p.Name = "Timed Out Performer")
                 .With(p => p.Monitored = true)
+                .With(p => p.MoviesMonitored = true)
                 .Build();
 
             _successfulPerformer = Builder<Performer>.CreateNew()
@@ -47,6 +49,7 @@ namespace NzbDrone.Core.Test.PerformerTests
                 .With(p => p.ForeignId = "successful")
                 .With(p => p.Name = "Successful Performer")
                 .With(p => p.Monitored = true)
+                .With(p => p.MoviesMonitored = true)
                 .Build();
 
             Mocker.GetMock<IPerformerService>()
@@ -190,6 +193,21 @@ namespace NzbDrone.Core.Test.PerformerTests
                 .Returns(enabled);
         }
 
+        private Func<string, ScenePage> _fetchPage;
+        private Func<string, Movie> _buildStub;
+
+        private void GivenImporterCapturesCallbacks()
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Callback<string, Func<string, ScenePage>, Func<string, Movie>>((title, fetchPage, buildStub) =>
+                {
+                    _fetchPage = fetchPage;
+                    _buildStub = buildStub;
+                })
+                .Returns(1);
+        }
+
         private List<Movie> GivenAddedMoviesAreCaptured()
         {
             var addedMovies = new List<Movie>();
@@ -207,22 +225,72 @@ namespace NzbDrone.Core.Test.PerformerTests
         public void should_use_monitor_new_items_when_adding_scenes(bool monitorNewItems)
         {
             var performer = GivenPerformer(monitorNewItems);
-            var addedMovies = GivenAddedMoviesAreCaptured();
 
             GivenGlobalNewItemMonitoring(true);
-
-            Mocker.GetMock<IProvideMovieInfo>()
-                .Setup(s => s.GetPerformerWorks(performer.ForeignId))
-                .Returns((
-                    new List<string> { "new-scene" },
-                    new List<string>(),
-                    new List<int>()));
+            GivenImporterCapturesCallbacks();
 
             Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
 
-            addedMovies.Should().HaveCount(1);
-            addedMovies.Should().OnlyContain(m => m.Monitored == monitorNewItems);
-            addedMovies.Should().OnlyContain(m => m.AddOptions.SearchForMovie == monitorNewItems);
+            var stub = _buildStub("s1");
+
+            stub.ForeignId.Should().Be("s1");
+            stub.Monitored.Should().Be(monitorNewItems);
+            stub.AddOptions.SearchForMovie.Should().Be(monitorNewItems);
+            stub.AddOptions.AddMethod.Should().Be(AddMovieMethod.Performer);
+            stub.QualityProfileId.Should().Be(performer.QualityProfileId);
+            stub.RootFolderPath.Should().Be(performer.RootFolderPath);
+            stub.Tags.Should().BeEquivalentTo(performer.Tags);
+        }
+
+        [Test]
+        public void should_page_scenes_from_skyhook_for_monitored_performer()
+        {
+            var performer = GivenPerformer(true);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            _fetchPage("c1");
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Verify(s => s.GetPerformerScenePage(performer.ForeignId, "c1"), Times.Once());
+        }
+
+        [Test]
+        public void should_not_fetch_performer_works_when_movies_are_not_monitored()
+        {
+            var performer = GivenPerformer(true);
+
+            performer.MoviesMonitored = false;
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Verify(s => s.GetPerformerWorks(performer.ForeignId), Times.Never());
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+        }
+
+        [Test]
+        public void should_sync_next_performer_when_scene_paging_fails()
+        {
+            var request = new HttpRequest("https://api.whisparr.com/v4/scenes/full");
+            var response = new HttpResponse(request, new HttpHeader(), string.Empty, HttpStatusCode.BadGateway);
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Setup(s => s.ImportScenes(_timedOutPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Throws(new HttpException(request, response));
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { _timedOutPerformer.Id, _successfulPerformer.Id }));
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(_successfulPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+
+            ExceptionVerification.ExpectedErrors(3);
         }
 
         [TestCase(true)]
@@ -294,7 +362,7 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Setup(s => s.GetPerformerWorks(performer.ForeignId))
                 .Returns((
-                    new List<string> { "new-scene" },
+                    new List<string>(),
                     new List<string>(),
                     new List<int> { 123456 }));
 
@@ -303,7 +371,7 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Verify(s => s.GetPerformerWorks(performer.ForeignId), Times.Once());
 
-            addedMovies.Should().HaveCount(2);
+            addedMovies.Should().HaveCount(1);
             addedMovies.Should().OnlyContain(m => !m.Monitored);
         }
 
@@ -313,22 +381,16 @@ namespace NzbDrone.Core.Test.PerformerTests
         public void should_not_monitor_new_scenes_when_global_new_item_monitoring_is_disabled()
         {
             var performer = GivenPerformer(true);
-            var addedMovies = GivenAddedMoviesAreCaptured();
 
             GivenGlobalNewItemMonitoring(false);
-
-            Mocker.GetMock<IProvideMovieInfo>()
-                .Setup(s => s.GetPerformerWorks(performer.ForeignId))
-                .Returns((
-                    new List<string> { "new-scene" },
-                    new List<string>(),
-                    new List<int>()));
+            GivenImporterCapturesCallbacks();
 
             Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
 
-            addedMovies.Should().HaveCount(1);
-            addedMovies.Should().OnlyContain(m => !m.Monitored);
-            addedMovies.Should().OnlyContain(m => !m.AddOptions.SearchForMovie);
+            var stub = _buildStub("s1");
+
+            stub.Monitored.Should().BeFalse();
+            stub.AddOptions.SearchForMovie.Should().BeFalse();
         }
 
         [Test]
@@ -398,7 +460,7 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Setup(s => s.GetPerformerWorks(performer.ForeignId))
                 .Returns((
-                    new List<string> { "new-scene" },
+                    new List<string>(),
                     new List<string>(),
                     new List<int> { 123456 }));
 
@@ -407,7 +469,7 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Verify(s => s.GetPerformerWorks(performer.ForeignId), Times.Once());
 
-            addedMovies.Should().HaveCount(2);
+            addedMovies.Should().HaveCount(1);
             addedMovies.Should().OnlyContain(m => !m.Monitored);
             addedMovies.Should().OnlyContain(m => !m.AddOptions.SearchForMovie);
         }

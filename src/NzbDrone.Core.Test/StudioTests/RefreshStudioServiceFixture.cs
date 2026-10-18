@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Net;
 
@@ -39,6 +40,7 @@ namespace NzbDrone.Core.Test.StudioTests
                 .With(s => s.ForeignId = "timed-out")
                 .With(s => s.Title = "Timed Out Studio")
                 .With(s => s.Monitored = true)
+                .With(s => s.MoviesMonitored = true)
                 .Build();
 
             _successfulStudio = Builder<Studio>.CreateNew()
@@ -46,6 +48,7 @@ namespace NzbDrone.Core.Test.StudioTests
                 .With(s => s.ForeignId = "successful")
                 .With(s => s.Title = "Successful Studio")
                 .With(s => s.Monitored = true)
+                .With(s => s.MoviesMonitored = true)
                 .Build();
 
             Mocker.GetMock<IStudioService>()
@@ -127,6 +130,21 @@ namespace NzbDrone.Core.Test.StudioTests
                 .Returns(enabled);
         }
 
+        private Func<string, ScenePage> _fetchPage;
+        private Func<string, Movie> _buildStub;
+
+        private void GivenImporterCapturesCallbacks()
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Callback<string, Func<string, ScenePage>, Func<string, Movie>>((title, fetchPage, buildStub) =>
+                {
+                    _fetchPage = fetchPage;
+                    _buildStub = buildStub;
+                })
+                .Returns(1);
+        }
+
         private List<Movie> GivenAddedMoviesAreCaptured()
         {
             var addedMovies = new List<Movie>();
@@ -144,22 +162,72 @@ namespace NzbDrone.Core.Test.StudioTests
         public void should_use_monitor_new_items_when_adding_scenes(bool monitorNewItems)
         {
             var studio = GivenStudio(monitorNewItems);
-            var addedMovies = GivenAddedMoviesAreCaptured();
 
             GivenGlobalNewItemMonitoring(true);
-
-            Mocker.GetMock<IProvideMovieInfo>()
-                .Setup(s => s.GetStudioWorks(studio.ForeignId))
-                .Returns((
-                    new List<string> { "new-scene" },
-                    new List<string>(),
-                    new List<int>()));
+            GivenImporterCapturesCallbacks();
 
             Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
 
-            addedMovies.Should().HaveCount(1);
-            addedMovies.Should().OnlyContain(m => m.Monitored == monitorNewItems);
-            addedMovies.Should().OnlyContain(m => m.AddOptions.SearchForMovie == monitorNewItems);
+            var stub = _buildStub("s1");
+
+            stub.ForeignId.Should().Be("s1");
+            stub.Monitored.Should().Be(monitorNewItems);
+            stub.AddOptions.SearchForMovie.Should().Be(monitorNewItems);
+            stub.AddOptions.AddMethod.Should().Be(AddMovieMethod.Studio);
+            stub.QualityProfileId.Should().Be(studio.QualityProfileId);
+            stub.RootFolderPath.Should().Be(studio.RootFolderPath);
+            stub.Tags.Should().BeEquivalentTo(studio.Tags);
+        }
+
+        [Test]
+        public void should_page_scenes_from_skyhook_for_monitored_studio()
+        {
+            var studio = GivenStudio(true);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            _fetchPage("c1");
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Verify(s => s.GetStudioScenePage(studio.ForeignId, "c1"), Times.Once());
+        }
+
+        [Test]
+        public void should_not_fetch_studio_works_when_movies_are_not_monitored()
+        {
+            var studio = GivenStudio(true);
+
+            studio.MoviesMonitored = false;
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Verify(s => s.GetStudioWorks(studio.ForeignId), Times.Never());
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+        }
+
+        [Test]
+        public void should_sync_next_studio_when_scene_paging_fails()
+        {
+            var request = new HttpRequest("https://api.whisparr.com/v4/scenes/full");
+            var response = new HttpResponse(request, new HttpHeader(), string.Empty, HttpStatusCode.BadGateway);
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Setup(s => s.ImportScenes(_timedOutStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Throws(new HttpException(request, response));
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { _timedOutStudio.Id, _successfulStudio.Id }));
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(_successfulStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+
+            ExceptionVerification.ExpectedErrors(1);
         }
 
         [TestCase(true)]
@@ -231,7 +299,7 @@ namespace NzbDrone.Core.Test.StudioTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Setup(s => s.GetStudioWorks(studio.ForeignId))
                 .Returns((
-                    new List<string> { "new-scene" },
+                    new List<string>(),
                     new List<string>(),
                     new List<int> { 123456 }));
 
@@ -240,7 +308,7 @@ namespace NzbDrone.Core.Test.StudioTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Verify(s => s.GetStudioWorks(studio.ForeignId), Times.Once());
 
-            addedMovies.Should().HaveCount(2);
+            addedMovies.Should().HaveCount(1);
             addedMovies.Should().OnlyContain(m => !m.Monitored);
         }
 
@@ -250,22 +318,16 @@ namespace NzbDrone.Core.Test.StudioTests
         public void should_not_monitor_new_scenes_when_global_new_item_monitoring_is_disabled()
         {
             var studio = GivenStudio(true);
-            var addedMovies = GivenAddedMoviesAreCaptured();
 
             GivenGlobalNewItemMonitoring(false);
-
-            Mocker.GetMock<IProvideMovieInfo>()
-                .Setup(s => s.GetStudioWorks(studio.ForeignId))
-                .Returns((
-                    new List<string> { "new-scene" },
-                    new List<string>(),
-                    new List<int>()));
+            GivenImporterCapturesCallbacks();
 
             Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
 
-            addedMovies.Should().HaveCount(1);
-            addedMovies.Should().OnlyContain(m => !m.Monitored);
-            addedMovies.Should().OnlyContain(m => !m.AddOptions.SearchForMovie);
+            var stub = _buildStub("s1");
+
+            stub.Monitored.Should().BeFalse();
+            stub.AddOptions.SearchForMovie.Should().BeFalse();
         }
 
         [Test]
@@ -335,7 +397,7 @@ namespace NzbDrone.Core.Test.StudioTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Setup(s => s.GetStudioWorks(studio.ForeignId))
                 .Returns((
-                    new List<string> { "new-scene" },
+                    new List<string>(),
                     new List<string>(),
                     new List<int> { 123456 }));
 
@@ -344,7 +406,7 @@ namespace NzbDrone.Core.Test.StudioTests
             Mocker.GetMock<IProvideMovieInfo>()
                 .Verify(s => s.GetStudioWorks(studio.ForeignId), Times.Once());
 
-            addedMovies.Should().HaveCount(2);
+            addedMovies.Should().HaveCount(1);
             addedMovies.Should().OnlyContain(m => !m.Monitored);
             addedMovies.Should().OnlyContain(m => !m.AddOptions.SearchForMovie);
         }

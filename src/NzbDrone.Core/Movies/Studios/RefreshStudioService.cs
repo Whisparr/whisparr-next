@@ -22,6 +22,7 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly IStudioService _studioService;
         private readonly IMovieService _movieService;
         private readonly IAddMovieService _addMovieService;
+        private readonly ISceneCatalogImporter _sceneCatalogImporter;
         private readonly IConfigService _configService;
         private readonly IDiskScanService _diskScanService;
         private readonly IEventAggregator _eventAggregator;
@@ -33,6 +34,7 @@ namespace NzbDrone.Core.Movies.Studios
                                         IStudioService studioService,
                                         IMovieService movieService,
                                         IAddMovieService addMovieService,
+                                        ISceneCatalogImporter sceneCatalogImporter,
                                         IConfigService configService,
                                         IDiskScanService diskScanService,
                                         IEventAggregator eventAggregator,
@@ -43,6 +45,7 @@ namespace NzbDrone.Core.Movies.Studios
             _studioService = studioService;
             _movieService = movieService;
             _addMovieService = addMovieService;
+            _sceneCatalogImporter = sceneCatalogImporter;
             _configService = configService;
             _diskScanService = diskScanService;
             _eventAggregator = eventAggregator;
@@ -112,35 +115,14 @@ namespace NzbDrone.Core.Movies.Studios
             // and without a search on add.
             var monitorNewItems = _configService.WhisparrMonitorNewItems && studio.WhisparrMonitorNewItems;
 
-            (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) studioWork;
-
-            try
-            {
-                studioWork = _movieInfo.GetStudioWorks(studio.ForeignId);
-            }
-            catch (WebException ex)
-            {
-                _logger.Warn(
-                    ex,
-                    "Unable to refresh works for studio '{0}' ({1}). Skipping studio.",
-                    studio.Title,
-                    studio.ForeignId);
-
-                return;
-            }
-
             if (studio.Monitored)
             {
-                var existingScenes = _movieService.AllMovieStashIds();
-                var excludedScenes = _importListExclusionService.GetAllExclusions().Select(e => e.ForeignId);
-                var scenesToAdd = studioWork.StashdbIds.Where(m => !existingScenes.Contains(m)).Where(m => !excludedScenes.Contains(m));
-                var scenesAdded = 0;
-
-                if (scenesToAdd.Any())
-                {
-                    var sceneLists = scenesToAdd.Select(m => new Movie
+                var scenesAdded = _sceneCatalogImporter.ImportScenes(
+                    studio.Title,
+                    cursor => _movieInfo.GetStudioScenePage(studio.ForeignId, cursor),
+                    stashId => new Movie
                     {
-                        ForeignId = m,
+                        ForeignId = stashId,
                         QualityProfileId = studio.QualityProfileId,
                         RootFolderPath = studio.RootFolderPath,
                         AddOptions = new AddMovieOptions
@@ -150,23 +132,30 @@ namespace NzbDrone.Core.Movies.Studios
                         },
                         Monitored = monitorNewItems,
                         Tags = studio.Tags
-                    }).Chunk(chunkSize);
+                    });
 
-                    foreach (var sceneList in sceneLists)
-                    {
-                        scenesAdded += _addMovieService.AddMovies(sceneList.ToList(), true).Count;
-                    }
-
-                    _logger.Info("Synced studio {0} has {1} movies adding {2} and added {3}",
-                        studio.Title,
-                        studioWork.StashdbIds.Count,
-                        scenesToAdd.Count(),
-                        scenesAdded);
-                }
+                _logger.Info("Synced studio {0} and added {1} scenes", studio.Title, scenesAdded);
             }
 
             if (studio.MoviesMonitored)
             {
+                (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) studioWork;
+
+                try
+                {
+                    studioWork = _movieInfo.GetStudioWorks(studio.ForeignId);
+                }
+                catch (WebException ex)
+                {
+                    _logger.Warn(
+                        ex,
+                        "Unable to refresh works for studio '{0}' ({1}). Skipping studio.",
+                        studio.Title,
+                        studio.ForeignId);
+
+                    return;
+                }
+
                 if (_configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
                 {
                     var moviesAdded = 0;

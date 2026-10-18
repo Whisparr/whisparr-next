@@ -7,7 +7,7 @@ using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Test.Framework;
 
-namespace NzbDrone.Core.Test.MovieTests.StudioServiceTests
+namespace NzbDrone.Core.Test.StudioTests
 {
     [TestFixture]
     public class StudioResourceCacheFixture : CoreTest<StudioService>

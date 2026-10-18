@@ -7,7 +7,7 @@ using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Test.Framework;
 
-namespace NzbDrone.Core.Test.MovieTests.PerformerServiceTests
+namespace NzbDrone.Core.Test.PerformerTests
 {
     [TestFixture]
     public class PerformerResourceCacheFixture : CoreTest<PerformerService>
