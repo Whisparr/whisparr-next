@@ -611,12 +611,15 @@ function SignalRListener() {
   });
 
   const handleReceiveMessage = useRef((message: SignalRMessage) => {
-    console.debug(
-      '[signalR] received',
-      message.name,
-      message.version === undefined ? 'unversioned' : `v${message.version}`,
-      message.body
-    );
+    // Browsers keep logged objects alive, and a bulk add sends megabytes of bodies
+    if (import.meta.env.DEV) {
+      console.debug(
+        '[signalR] received',
+        message.name,
+        message.version === undefined ? 'unversioned' : `v${message.version}`,
+        message.body
+      );
+    }
 
     handleMessage.current(message);
   });
