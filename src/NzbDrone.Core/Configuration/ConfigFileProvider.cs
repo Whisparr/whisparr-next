@@ -189,11 +189,13 @@ namespace NzbDrone.Core.Configuration
         {
             get
             {
-                const string defaultValue = "https://api.whisparr.com/v4/{route}";
+                const string defaultValue = "https://api.whisparr.com/v5/{route}";
                 var whisparrMetadata = GetValue("WhisparrMetadata", defaultValue);
 
-                // Do not allow the old v3 URL for Whisparr V2 Metadata
-                if (string.IsNullOrWhiteSpace(whisparrMetadata) || whisparrMetadata.Equals("https://api.whisparr.com/v3/{route}", StringComparison.InvariantCultureIgnoreCase))
+                // Saved v3 and v4 URLs fall back to the v5 default; any other value is a custom override
+                if (string.IsNullOrWhiteSpace(whisparrMetadata) ||
+                    whisparrMetadata.Equals("https://api.whisparr.com/v3/{route}", StringComparison.InvariantCultureIgnoreCase) ||
+                    whisparrMetadata.Equals("https://api.whisparr.com/v4/{route}", StringComparison.InvariantCultureIgnoreCase))
                 {
                     return defaultValue;
                 }

@@ -83,6 +83,29 @@ namespace NzbDrone.Common.Test
             Subject.Branch.Should().Be("develop");
         }
 
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("https://api.whisparr.com/v3/{route}")]
+        [TestCase("https://api.whisparr.com/v4/{route}")]
+        [TestCase("HTTPS://API.WHISPARR.COM/V4/{route}")]
+        public void should_use_v5_metadata_for_missing_or_legacy_values(string saved)
+        {
+            if (saved != null)
+            {
+                Subject.SetValue("WhisparrMetadata", saved);
+            }
+
+            Subject.WhisparrMetadata.Should().Be("https://api.whisparr.com/v5/{route}");
+        }
+
+        [Test]
+        public void should_keep_a_custom_metadata_override()
+        {
+            Subject.SetValue("WhisparrMetadata", "http://localhost:5000/{route}");
+
+            Subject.WhisparrMetadata.Should().Be("http://localhost:5000/{route}");
+        }
+
         [Test]
         public void should_default_postgres_databases_to_v5_names()
         {

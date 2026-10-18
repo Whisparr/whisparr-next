@@ -60,7 +60,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             var whisparrMetadata = configFileProvider.WhisparrMetadata;
             if (whisparrMetadata.IsNullOrWhiteSpace())
             {
-                whisparrMetadata = "https://api.whisparr.com/v4/{route}";
+                whisparrMetadata = "https://api.whisparr.com/v5/{route}";
             }
 
             logger.Info($"Using WhisparrMetadata {whisparrMetadata}");

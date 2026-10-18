@@ -22,7 +22,7 @@ namespace NzbDrone.Common.Cloud
                 .SetHeader("Authorization", $"Bearer {AuthToken}")
                 .CreateFactory();
 
-            WhisparrMetadata = new HttpRequestBuilder("https://api.whisparr.com/v4/{route}")
+            WhisparrMetadata = new HttpRequestBuilder("https://api.whisparr.com/v5/{route}")
                 .CreateFactory();
 
             StashDB = new HttpRequestBuilder("https://stashdb.org/graphql")
