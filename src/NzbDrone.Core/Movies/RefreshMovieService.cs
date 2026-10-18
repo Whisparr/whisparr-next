@@ -386,9 +386,17 @@ namespace NzbDrone.Core.Movies
                     var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
                     RescanMovie(movie, true, CommandTrigger.Unspecified);
                 }
+                catch (MovieNotFoundException)
+                {
+                    _logger.Error("Movie '{0}' was not found upstream, it may have been removed.", scene);
+                }
                 catch (Exception e)
                 {
                     _logger.Error(e, "Couldn't refresh info for {0}", scene);
+
+                    // Same as Execute: a failed refresh still gets its rescan, so search on add
+                    // and clearing AddOptions happen.
+                    RescanMovie(_movieService.GetMovie(scene.Id), true, CommandTrigger.Unspecified);
                 }
             }
         }

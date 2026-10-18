@@ -259,6 +259,23 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_still_rescan_new_scene_when_its_refresh_fails()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(scenes[0].ForeignId))
+                  .Throws(new IOException());
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[0]), Times.Once());
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[1]), Times.Once());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
         public void should_not_publish_movie_updated_when_new_scene_was_deleted_upstream()
         {
             var scenes = GivenNewScenes(1);
