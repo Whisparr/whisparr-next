@@ -26,7 +26,7 @@ namespace NzbDrone.Core.Movies
     public interface IAddMovieService
     {
         Movie AddMovie(Movie newMovie);
-        List<Movie> AddMovies(List<Movie> newMovies, bool ignoreErrors = false);
+        List<Movie> AddMovies(List<Movie> newMovies, bool ignoreErrors = false, bool refreshInline = false);
     }
 
     public class AddMovieService :
@@ -92,7 +92,7 @@ namespace NzbDrone.Core.Movies
             return newMovie;
         }
 
-        public List<Movie> AddMovies(List<Movie> newMovies, bool ignoreErrors = false)
+        public List<Movie> AddMovies(List<Movie> newMovies, bool ignoreErrors = false, bool refreshInline = false)
         {
             var httpExceptionCount = 0;
             var added = DateTime.UtcNow;
@@ -193,7 +193,7 @@ namespace NzbDrone.Core.Movies
 
             moviesToAdd.ForEach(x => x.MovieMetadataId = x.MovieMetadata.Value.Id);
 
-            return _movieService.AddMovies(moviesToAdd);
+            return _movieService.AddMovies(moviesToAdd, refreshInline);
         }
 
         private Movie AddSkyhookData(Movie newMovie)

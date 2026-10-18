@@ -23,6 +23,12 @@ namespace NzbDrone.Core.Movies
 
         public void Handle(MoviesImportedEvent message)
         {
+            // Bulk adds refresh the scenes inline (IRefreshNewScenes), so there is nothing to queue.
+            if (message.RefreshInline)
+            {
+                return;
+            }
+
             _commandQueueManager.PushMany(message.Movies.Select(s => new RefreshMovieCommand(new List<int> { s.Id }, true)).ToList());
         }
     }

@@ -93,9 +93,9 @@ namespace NzbDrone.Core.Test.MovieTests
             var addedMovies = new List<Movie>();
 
             Mocker.GetMock<IAddMovieService>()
-                .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>()))
-                .Callback((List<Movie> movies, bool ignoreErrors) => addedMovies.AddRange(movies))
-                .Returns((List<Movie> movies, bool ignoreErrors) => movies);
+                .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                .Callback((List<Movie> movies, bool ignoreErrors, bool refreshInline) => addedMovies.AddRange(movies))
+                .Returns((List<Movie> movies, bool ignoreErrors, bool refreshInline) => movies);
 
             return addedMovies;
         }

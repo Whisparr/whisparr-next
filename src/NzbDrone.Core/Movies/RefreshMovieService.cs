@@ -26,7 +26,15 @@ using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Movies
 {
-    public class RefreshMovieService : IExecute<RefreshMovieCommand>
+    public interface IRefreshNewScenes
+    {
+        /// <summary>
+        /// Refreshes freshly added scenes inline and scans them, without queuing commands or publishing MovieUpdatedEvent.
+        /// </summary>
+        void RefreshNewScenes(List<Movie> movies);
+    }
+
+    public class RefreshMovieService : IExecute<RefreshMovieCommand>, IRefreshNewScenes
     {
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IMovieService _movieService;
@@ -92,7 +100,7 @@ namespace NzbDrone.Core.Movies
             _logger = logger;
         }
 
-        private Movie RefreshMovieInfo(int movieId)
+        private Movie RefreshMovieInfo(int movieId, bool publishUpdated = true)
         {
             // Get the movie before updating, that way any changes made to the movie after the refresh started,
             // but before this movie was refreshed won't be lost.
@@ -267,7 +275,11 @@ namespace NzbDrone.Core.Movies
             }
 
             _logger.Debug("Finished movie metadata refresh for {0}", movieMetadata.Title);
-            _eventAggregator.PublishEvent(new MovieUpdatedEvent(movie));
+
+            if (publishUpdated)
+            {
+                _eventAggregator.PublishEvent(new MovieUpdatedEvent(movie));
+            }
 
             return movie;
         }
@@ -358,6 +370,22 @@ namespace NzbDrone.Core.Movies
             if (tagsUpdated)
             {
                 _movieService.UpdateMovie(movie);
+            }
+        }
+
+        public void RefreshNewScenes(List<Movie> movies)
+        {
+            foreach (var scene in movies)
+            {
+                try
+                {
+                    var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
+                    RescanMovie(movie, true, CommandTrigger.Unspecified);
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e, "Couldn't refresh info for {0}", scene);
+                }
             }
         }
 

@@ -30,7 +30,7 @@ namespace NzbDrone.Core.Movies
         List<Movie> GetMovies(IEnumerable<int> movieIds);
         PagingSpec<Movie> Paged(PagingSpec<Movie> pagingSpec);
         Movie AddMovie(Movie newMovie);
-        List<Movie> AddMovies(List<Movie> newMovies);
+        List<Movie> AddMovies(List<Movie> newMovies, bool refreshInline = false);
         List<Movie> FindByIds(List<int> ids);
         Movie FindByTpdbId(string tpdbid);
         Movie FindByTmdbId(int tmdbid);
@@ -158,12 +158,13 @@ namespace NzbDrone.Core.Movies
 
         /// <summary> Add multiple new movies to the repository. </summary>
         /// <param name="newMovies">A list of movie objects to add.</param>
+        /// <param name="refreshInline">True when the caller refreshes the new movies itself, so no refresh command is queued.</param>
         /// <returns>The list of added movies.</returns>
-        public List<Movie> AddMovies(List<Movie> newMovies)
+        public List<Movie> AddMovies(List<Movie> newMovies, bool refreshInline = false)
         {
             _movieRepository.InsertMany(newMovies);
 
-            _eventAggregator.PublishEvent(new MoviesImportedEvent(newMovies));
+            _eventAggregator.PublishEvent(new MoviesImportedEvent(newMovies, refreshInline));
 
             return newMovies;
         }

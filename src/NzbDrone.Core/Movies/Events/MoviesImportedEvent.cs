@@ -7,9 +7,12 @@ namespace NzbDrone.Core.Movies.Events
     {
         public List<Movie> Movies { get; private set; }
 
-        public MoviesImportedEvent(List<Movie> movies)
+        public bool RefreshInline { get; private set; }
+
+        public MoviesImportedEvent(List<Movie> movies, bool refreshInline = false)
         {
             Movies = movies;
+            RefreshInline = refreshInline;
         }
     }
 }

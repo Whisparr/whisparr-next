@@ -6,11 +6,14 @@ using NUnit.Framework;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.RootFolders;
@@ -174,6 +177,85 @@ namespace NzbDrone.Core.Test.MovieTests
 
             // Both builder movies share TmdbId 1, so the mocked failure hits each of them.
             ExceptionVerification.ExpectedErrors(2);
+        }
+
+        private List<Movie> GivenNewScenes(int count)
+        {
+            var scenes = new List<Movie>();
+
+            for (var i = 1; i <= count; i++)
+            {
+                var id = 100 + i;
+                var metadata = new MovieMetadata
+                {
+                    Id = id,
+                    ForeignId = $"scene-{id}",
+                    Title = $"Scene {id}",
+                    Status = MovieStatusType.Released,
+                    MetadataSource = Core.Movies.MetadataSource.Stash
+                };
+
+                var scene = new Movie
+                {
+                    Id = id,
+                    MovieMetadataId = id,
+                    Path = string.Empty,
+                    MovieMetadata = new NzbDrone.Core.Datastore.LazyLoaded<MovieMetadata>(metadata)
+                };
+
+                Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(id)).Returns(scene);
+                Mocker.GetMock<IMovieMetadataService>().Setup(s => s.Get(id)).Returns(metadata);
+
+                Mocker.GetMock<IProvideMovieInfo>()
+                      .Setup(s => s.GetSceneInfo(metadata.ForeignId))
+                      .Returns(new System.Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(metadata.JsonClone(), new Studio(), new List<Performer>(), new List<Credit>()));
+
+                scenes.Add(scene);
+            }
+
+            return scenes;
+        }
+
+        [Test]
+        public void should_refresh_new_scenes_without_publishing_movie_updated()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<ICreditService>()
+                  .Verify(v => v.UpdateCredits(It.IsAny<List<Credit>>(), It.IsAny<MovieMetadata>()), Times.Exactly(2));
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
+        }
+
+        [Test]
+        public void should_rescan_new_scenes_so_search_on_add_runs()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[0]), Times.Once());
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[1]), Times.Once());
+        }
+
+        [Test]
+        public void should_continue_with_next_scene_when_one_fails()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(scenes[0].ForeignId))
+                  .Throws(new IOException());
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<ICreditService>()
+                  .Verify(v => v.UpdateCredits(It.IsAny<List<Credit>>(), It.Is<MovieMetadata>(m => m.Id == scenes[1].MovieMetadataId)), Times.Once());
+
+            ExceptionVerification.ExpectedErrors(1);
         }
     }
 }
