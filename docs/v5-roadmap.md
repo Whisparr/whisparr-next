@@ -234,43 +234,47 @@ is called.
 - Then `POST fingerprint/lookup {oshash?, phash?, source}` answers from the local table
   first, and asks upstream only on a miss.
 
-### C. Bulk onboarding: studios and performers (items 1, 2)
+### C. Bulk onboarding: studios and performers (items 1, 2): built
 
-- **202 handling (from B1):** `scenes/full` pages and `performer/bulk` answer **202** while Skyhook is still fetching from StashDB.
-  - A 202 carries `Retry-After`, the cached items, and a `pending` ID list.
-  - The client upserts what it got, moves on to the next page, and re-requests 202 pages after `Retry-After` until they come back 200.
-  - Give up after a bounded number of retries and log the IDs still pending.
-- **Studio add or refresh:**
-  - Page through `site/{id}/scenes/full`.
-  - Map each page straight to `MovieMetadata`, then `MovieMetadataService.UpsertMany` and
-    `MovieService.AddMovies`. No per-scene `GetSceneInfo`.
-- **Performer add:**
-  - The same, through `performer/{id}/scenes/full`.
-  - Then a cascade: the hidden performers on those scenes are hydrated asynchronously.
-- **No second fetch.** `RefreshMovieCommand(isNew)` skips the metadata fetch when the
-  metadata was just written (it checks `LastInfoSync`). It only links credits, runs a
-  disk scan, and searches if requested.
-- **Scenes before performers:**
-  - Move performer fetches out of `RefreshMovieService`.
-  - Collect the distinct new performer IDs per page.
-  - Push batched `AddPerformersCommand`s at `CommandPriority.Low`, using
-    `performer/bulk`.
-  - Credits already hold `PersonName` and `Images` (migration 016), so scenes display
-    before performer rows exist.
-- **Thumbnails don't wait for the next refresh.**
-  - After each page is upserted, publish `MovieUpdatedEvent`, or a batched equivalent.
-  - `MediaCoverService` downloads covers in the background on its own bounded queue,
-    separate from the command threads.
-- **Worked example: adding a 500-scene studio with 300 new performers.**
+Adding or refreshing a studio or performer now pulls its scenes from Skyhook's paged
+`scenes/full` endpoint instead of one HTTP call per scene.
 
-  | | Calls | How |
-  |---|---|---|
-  | Today | 1,303 | 3 + 500×2 + 300 |
-  | With C | 9 | 3 + ⌈500/250⌉ pages + ⌈300/100⌉ performer batches |
+- **Prefetch cache.**
+  - Each `scenes/full` page is held in a short-lived in-memory cache in the Skyhook proxy.
+  - The distinct performer IDs on a page are fetched with `performer/bulk` (batches of 100) and cached the same way.
+  - The existing per-scene refresh code then reads scenes and performers from the cache without touching the network.
+  - Only IDs that `performer/bulk` reports as pending fall back to a single `performer/{id}` call.
+- **Inline refresh, no queued commands.**
+  - The importer refreshes each new scene directly in the add or refresh command's thread.
+  - No `RefreshMovieCommand` is queued and no `MovieUpdatedEvent` is published for the bulk-added scenes.
+  - The `RefreshStudios` command is the single unit of work and finishes when the last scene row exists.
+- **Covers are hotlinked until a later refresh.** Scenes carry their remote image URL, so the UI loads covers straight from the source.
+  Nothing is written under `MediaCover/` for these scenes until a later refresh caches them.
+- **Shared importer.** Studio and performer adds go through one scene importer, so both get the same paging, caching and refresh behaviour.
+- **Walker rules (202 and 503).**
+  - A **202** page carries the items already cached and a `pending` ID list. The importer upserts what it got, moves on, and revisits the page after `Retry-After`.
+  - A **503** is treated as a throttle: back off for `Retry-After` and retry the same page.
+  - A walk that makes no progress for **5 minutes** gives up and logs the IDs still pending.
+- **Scenes before performers.** Credits already hold `PersonName` and `Images` (migration 016), so scenes display before performer rows exist.
 
-  For nubiles.net (16K scenes), today is 32,003 calls plus performers. With C it's about
-  67 calls plus ⌈P/100⌉. Scenes show up page by page within seconds, and covers and
-  performers fill in behind them.
+**Measured** (fresh local instance, trace logging, live `api.whisparr.com/v5`, Brazzers Exxtra, 3,987 scenes, monitored, search on add off):
+
+| | Result |
+|---|---|
+| Add to last scene row (`Synced` log line) | 120 s |
+| `RefreshStudios` command completed | 120 s |
+| `site/{id}/scenes/full` | 17 (1 first page + 16 cursor pages) |
+| `performer/bulk` (POST) | 25 (about 2,400 to 2,500 performers) |
+| `scene/{id}` | 0 |
+| `performer/{id}` | 0 |
+| Other Skyhook calls | 2 `site/{id}`, 1 `site/search` (the lookup before the add) |
+| `RefreshMovie` commands queued | 0 |
+| Skyhook responses | 44, all 200 |
+| Files under `MediaCover/` for the scenes | 0 |
+
+Before C the same add costs about 2 calls per scene plus one per performer: roughly 10,000 calls
+against 44 now. Scenes appear on the studio page as pages arrive, covers load by hotlink, and a
+scene's cast shows on its details page.
 
 ### D. Fingerprints in the app (item 8, Part B of `for-whisparr-one-of-tidy-sparkle.md`)
 
