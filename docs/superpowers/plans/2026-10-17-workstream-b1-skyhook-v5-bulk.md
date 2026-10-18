@@ -453,6 +453,8 @@ Task<IReadOnlyDictionary<string, Performer>> GetPerformersBatch(IReadOnlyList<st
   2. Rebuild and restart the Skyhook container.
   3. Re-run `hydrate_walk.py` for Brazzers Exxtra.
   4. Compare the elapsed time and the number of StashDB requests against the baseline.
+  5. Run `hydrate_walk.py` for Nubiles.net (`7e4dc83a-5fe6-490b-a421-3e289f5e5d7d`, 13,916 scenes, never fully hydrated). Expected: about 4–6 minutes with one batch at a time per kind. Record the elapsed time, the scene and performer batch counts, and the unique items against `Total`.
+  6. Report both measurements. Running 2–3 scene batches at once is a later decision, made after these numbers.
 
 - [ ] **Step 6: Commit.**
 
