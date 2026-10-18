@@ -386,6 +386,82 @@ git add docs/v5-deploy-runbook.md && git commit -m "Chore: Skyhook v5 deploy run
 
 ---
 
+### Task 7: Batched StashDB hydration (aliased `findScene` / `findPerformer`)
+
+Added after the live container test. It makes each hydration batch **one** StashDB request instead of one request per id.
+
+Verified against StashDB on 2026-10-18:
+- 100 aliased `findScene` with Skyhook's full field list return 100/100 in 1.6 s (200 also works).
+- 100 aliased `findPerformer` return 100/100 in 1.4 s.
+- A missing id comes back as a `null` alias, with no error.
+
+The queue, cache-only reads, 202/pending and gone rules don't change. Only the upstream fetch inside `HydrateScenes`/`HydratePerformers` changes.
+
+**Files:**
+- Modify:
+  - `src/Backend/MetadataSource/StashDb/Requests/GetSceneRequest.cs` and `GetPerformerRequest.cs`: move the field selection into a `public const string Selection`, so the single and batch queries share it verbatim.
+  - `src/Backend/MetadataSource/StashDb/StashDbProxy.cs`: add the two batch methods, mapping and validating each scene exactly as `GetScene` does (same `MapScene`, same deleted/invalid-date rule) and each performer as `GetPerformer` does.
+  - `src/Backend/SkyHook/SkyHook.cs`: `HydrateScenes`/`HydratePerformers` fetch misses through the batch methods. Before attaching credits, `HydrateScenes` warms the performer cache for every credited performer in the batch with one `HydratePerformers` call. That way `AttachCachedStudioAndPerformers` reads cached performers instead of making one upstream call per credit.
+- Create:
+  - `src/Backend/MetadataSource/StashDb/Requests/GetScenesBatchRequest.cs`
+  - `src/Backend/MetadataSource/StashDb/Requests/GetPerformersBatchRequest.cs`
+  - `src/Backend/MetadataSource/StashDb/Resources/BatchResponse.cs`: `data` is a dictionary of alias → resource.
+- Test: create `src/Backend.Test/MetadataSource/StashDbBatchFixture.cs`, and extend `src/Backend.Test/SkyHook/SkyHookHydrateFixture.cs`.
+
+**Interfaces:**
+- Consumes: `HydrationOutcome`, `HydrateScenes`/`HydratePerformers` (Task 2 and the final fix wave), and the existing `MapScene`/`MapPerformer`.
+- Produces:
+
+```csharp
+public const int MaxBatch = 100; // StashDbProxy
+// Per requested id: Found(entity) | NotFound (null alias, deleted, or invalid date). A whole-request failure throws (transient for every id in it).
+Task<IReadOnlyDictionary<string, Episode>> GetScenesBatch(IReadOnlyList<string> ids, ICollection<string> notFound);
+Task<IReadOnlyDictionary<string, Performer>> GetPerformersBatch(IReadOnlyList<string> ids, ICollection<string> notFound);
+```
+
+- [ ] **Step 1: Write the failing tests.** Mock `IStashDbRequestService`.
+
+```csharp
+[Test] public async Task should_fetch_250_scene_ids_in_three_requests()          // ExecuteRequest called 3 times (100, 100, 50 aliases)
+[Test] public async Task should_alias_ids_and_reuse_the_single_scene_selection() // request body contains "s0: findScene(id:", GetSceneRequest.Selection
+[Test] public async Task should_report_null_deleted_and_undated_aliases_as_not_found()
+[Test] public async Task should_map_a_batched_scene_identically_to_GetScene()    // same StashSceneResource → equal serialized Episode
+[Test] public async Task should_throw_for_a_failed_batch_request()               // request service throws → method throws, nothing reported not-found
+[Test] public async Task should_fetch_performers_100_per_request()
+// SkyHookHydrateFixture
+[Test] public async Task HydrateScenes_should_make_one_upstream_call_per_100_misses()
+[Test] public async Task HydrateScenes_should_warm_credited_performers_in_one_batch_before_attaching()
+    // 100 scenes with 150 distinct uncached performers → GetPerformersBatch called with ≤100 ids per call, 2 calls; zero single GetPerformer calls
+[Test] public async Task HydrateScenes_should_only_fetch_cache_misses()          // 30 of 100 cached → batch request carries 70 ids
+```
+
+- [ ] **Step 2: Run them to verify they fail.**
+  Run: `dotnet test src/Backend.Test/Backend.Test.csproj --filter "FullyQualifiedName~StashDbBatchFixture|FullyQualifiedName~SkyHookHydrateFixture"`
+  Expected: build failure, because the batch methods don't exist yet.
+
+- [ ] **Step 3: Implement as described under Files.**
+  - **Alias names:** `s{index}` / `p{index}`. Map each alias back to its id by index.
+  - **GraphQL `errors`:** keep the existing rule. A response with any `errors` throws, so the whole batch is transient.
+  - **Rate limiting:** one rate-limiter slot per batch request, at the hydration priority (9).
+  - **Studios** on attached scenes keep using `GetSite` through the cache. There are only a handful per batch.
+
+- [ ] **Step 4: Run the tests to verify they pass.** Run the Step 2 command, then the full project.
+  Expected: PASS.
+
+- [ ] **Step 5: Measure it in the local stack** (`skyhook-v5` + persistent `skyhook-v5-pg`).
+  1. Delete Brazzers Exxtra's cached scenes and their performers, so the cache is as cold as in the baseline run.
+  2. Rebuild and restart the Skyhook container.
+  3. Re-run `hydrate_walk.py` for Brazzers Exxtra.
+  4. Compare the elapsed time and the number of StashDB requests against the baseline.
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git commit -am "new: Hydrate scenes and performers 100 per StashDB request"
+```
+
+---
+
 ## Finish
 
 - [ ] Run the full `src/Backend.Test` project and build the solution. Both must pass with no new warnings.
