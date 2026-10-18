@@ -257,5 +257,25 @@ namespace NzbDrone.Core.Test.MovieTests
 
             ExceptionVerification.ExpectedErrors(1);
         }
+
+        [Test]
+        public void should_not_publish_movie_updated_when_new_scene_was_deleted_upstream()
+        {
+            var scenes = GivenNewScenes(1);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(scenes[0].ForeignId))
+                  .Throws(new MovieNotFoundException(scenes[0].ForeignId));
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IMovieMetadataService>()
+                  .Verify(v => v.Upsert(It.Is<MovieMetadata>(m => m.Status == MovieStatusType.Deleted)), Times.Once());
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
     }
 }
