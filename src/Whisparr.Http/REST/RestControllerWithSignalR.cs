@@ -36,10 +36,14 @@ namespace Whisparr.Http.REST
             }
         }
 
+        // The UI only consumes v5 messages, so v3 controllers stay silent and an edit is broadcast once.
+        // Unversioned controllers keep broadcasting.
+        private bool CanBroadcast => _signalRBroadcaster.IsConnected && (Version == null || Version >= 5);
+
         [NonAction]
         public void Handle(ModelEvent<TModel> message)
         {
-            if (!_signalRBroadcaster.IsConnected)
+            if (!CanBroadcast)
             {
                 return;
             }
@@ -54,7 +58,7 @@ namespace Whisparr.Http.REST
 
         protected void BroadcastResourceChange(ModelAction action, int id)
         {
-            if (!_signalRBroadcaster.IsConnected)
+            if (!CanBroadcast)
             {
                 return;
             }
@@ -72,7 +76,7 @@ namespace Whisparr.Http.REST
 
         protected void BroadcastResourceChange(ModelAction action, TResource resource)
         {
-            if (!_signalRBroadcaster.IsConnected)
+            if (!CanBroadcast)
             {
                 return;
             }
@@ -91,7 +95,7 @@ namespace Whisparr.Http.REST
         // New: Batch broadcast method with chunking
         protected void BroadcastResourceChangeBatch(ModelAction action, IEnumerable<TResource> resources, int chunkSize = DefaultBatchChunkSize)
         {
-            if (!_signalRBroadcaster.IsConnected)
+            if (!CanBroadcast)
             {
                 return;
             }
@@ -136,7 +140,7 @@ namespace Whisparr.Http.REST
 
         protected void BroadcastResourceChange(ModelAction action)
         {
-            if (!_signalRBroadcaster.IsConnected)
+            if (!CanBroadcast)
             {
                 return;
             }

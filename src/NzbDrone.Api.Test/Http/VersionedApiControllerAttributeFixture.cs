@@ -48,11 +48,23 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_stamp_controller_version_on_broadcasts()
         {
-            var controller = new V3TestController(_broadcaster.Object);
+            var controller = new V5TestController(_broadcaster.Object);
 
             controller.Handle(new ModelEvent<TestModel>(new TestModel { Id = 1 }, ModelAction.Updated));
 
-            _messages.Should().ContainSingle().Which.Version.Should().Be(3);
+            _messages.Should().ContainSingle().Which.Version.Should().Be(5);
+        }
+
+        [Test]
+        public void should_not_broadcast_from_v3_controllers()
+        {
+            var controller = new V3TestController(_broadcaster.Object);
+
+            controller.Handle(new ModelEvent<TestModel>(new TestModel { Id = 1 }, ModelAction.Updated));
+            controller.Handle(new ModelEvent<TestModel>(new TestModel { Id = 1 }, ModelAction.Deleted));
+            controller.Batch(new List<TestResource> { new() { Id = 1 }, new() { Id = 2 } }, 1);
+
+            _messages.Should().BeEmpty();
         }
 
         [Test]
