@@ -27,6 +27,7 @@ interface MovieResource {
   titleSlug: string;
   foreignId?: string;
   studioForeignId?: string;
+  performerForeignIds?: string[];
 }
 
 interface ForeignResource {
@@ -99,11 +100,12 @@ function updateMovieInPerformerWorksQueryCache(updatedMovie: MovieResource) {
   const queryCache = queryClient.getQueryCache().findAll();
   queryCache.forEach(({ queryKey }) => {
     // Look for keys like "/performer/{performerId}/works"
-    if (
-      Array.isArray(queryKey) &&
-      typeof queryKey[0] === 'string' &&
-      /performer\/[^/]+\/works$/.test(queryKey[0])
-    ) {
+    const performerForeignId =
+      Array.isArray(queryKey) && typeof queryKey[0] === 'string'
+        ? /performer\/([^/]+)\/works$/.exec(queryKey[0])?.[1]
+        : undefined;
+
+    if (performerForeignId) {
       queryClient.setQueryData(
         queryKey,
         (oldData: ReadonlyArray<MovieResource>) => {
@@ -115,8 +117,14 @@ function updateMovieInPerformerWorksQueryCache(updatedMovie: MovieResource) {
             (movie) => movie.id === updatedMovie.id
           );
 
+          // A scene added during a performer add belongs in the list once it
+          // credits this performer
           if (idx === -1) {
-            return oldData;
+            return updatedMovie.performerForeignIds?.includes(
+              performerForeignId
+            )
+              ? [...oldData, updatedMovie]
+              : oldData;
           }
 
           const newData = [...oldData];
@@ -145,8 +153,10 @@ function updateMovieInStudioWorksQueryCache(updatedMovie: MovieResource) {
 
       const idx = oldData.findIndex((movie) => movie.id === updatedMovie.id);
 
+      // The key is the movie's own studio, so a scene added during a studio
+      // add belongs in the list
       if (idx === -1) {
-        return oldData;
+        return [...oldData, updatedMovie];
       }
 
       const newData = [...oldData];

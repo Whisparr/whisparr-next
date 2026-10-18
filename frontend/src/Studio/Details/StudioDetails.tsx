@@ -609,7 +609,7 @@ function StudioDetails() {
           {isWorksFetching && !isPopulated ? <LoadingIndicator /> : null}
 
           {/* WORKS BY YEAR */}
-          {isPopulated && (studio.hasMovies || studio.hasScenes) && (
+          {isPopulated && (
             <FieldSet legend={translate('Works')}>
               {worksView === 'table' ? (
                 <WindowScroller scrollElement={scrollContainer ?? undefined}>

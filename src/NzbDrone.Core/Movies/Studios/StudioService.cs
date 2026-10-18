@@ -3,13 +3,16 @@ using System.Linq;
 using NzbDrone.Common.Cache;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Studios.Events;
 using NzbDrone.Core.MovieStats;
 using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Movies.Studios
 {
-    public interface IStudioService : IHandleAsync<StudioUpdatedEvent>
+    public interface IStudioService : IHandleAsync<StudioUpdatedEvent>,
+                                      IHandle<MovieUpdatedEvent>,
+                                      IHandle<MoviesImportedEvent>
     {
         Studio AddStudio(Studio studio);
         List<Studio> AddStudios(List<Studio> studios);
@@ -182,7 +185,31 @@ namespace NzbDrone.Core.Movies.Studios
 
         private void RemoveStudioResourcesCache(string foreignId)
         {
+            if (string.IsNullOrEmpty(foreignId))
+            {
+                return;
+            }
+
             _cacheManager.Remove(ApiResourceCaches.Studio, foreignId);
+        }
+
+        // The cached studio resource carries scene counts and HasScenes, so drop it when its scenes change
+        public void Handle(MovieUpdatedEvent message)
+        {
+            RemoveStudioResourcesCache(StudioForeignId(message.Movie));
+        }
+
+        public void Handle(MoviesImportedEvent message)
+        {
+            foreach (var foreignId in message.Movies.Select(StudioForeignId).Distinct())
+            {
+                RemoveStudioResourcesCache(foreignId);
+            }
+        }
+
+        private static string StudioForeignId(Movie movie)
+        {
+            return movie.MovieMetadata?.Value?.StudioForeignId;
         }
 
         public void HandleAsync(StudioUpdatedEvent message)

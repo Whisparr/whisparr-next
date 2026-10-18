@@ -6,13 +6,16 @@ using NzbDrone.Core.Datastore;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Performers.Events;
 using NzbDrone.Core.MovieStats;
 using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Movies.Performers
 {
-    public interface IPerformerService : IHandle<PerformerUpdatedEvent>
+    public interface IPerformerService : IHandle<PerformerUpdatedEvent>,
+                                         IHandle<MovieUpdatedEvent>,
+                                         IHandle<MoviesImportedEvent>
     {
         Performer AddPerformer(Performer performer);
         List<Performer> AddPerformers(List<Performer> performers);
@@ -232,6 +235,22 @@ namespace NzbDrone.Core.Movies.Performers
         private void RemovePerformerResourcesCache(string cacheKey)
         {
             _cacheManager.Remove(ApiResourceCaches.Performer, cacheKey);
+        }
+
+        // The cached performer resource carries scene counts, so drop it when a credited scene changes
+        public void Handle(MovieUpdatedEvent message)
+        {
+            PerformerForeignIds(message.Movie).ForEach(RemovePerformerResourcesCache);
+        }
+
+        public void Handle(MoviesImportedEvent message)
+        {
+            message.Movies.SelectMany(PerformerForeignIds).Distinct().ToList().ForEach(RemovePerformerResourcesCache);
+        }
+
+        private static List<string> PerformerForeignIds(Movie movie)
+        {
+            return movie.MovieMetadata?.Value?.PerformerForeignIds ?? new List<string>();
         }
 
         public void Handle(PerformerUpdatedEvent message)
