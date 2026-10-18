@@ -255,6 +255,11 @@ Adding or refreshing a studio or performer now pulls its scenes from Skyhook's p
   - A **202** page carries the items already cached and a `pending` ID list. The importer upserts what it got, moves on, and revisits the page after `Retry-After`.
   - A **503** is treated as a throttle: back off for `Retry-After` and retry the same page.
   - A 503 that persists for 5 minutes aborts the walk at that page. A 202 page whose pending list stops shrinking for 5 minutes is abandoned and its pending IDs are logged. Both are retried on the next sync.
+- **Bounded memory.** The proxy cache exists only so the inline refresh can read a page without the network.
+  The importer evicts a page's scenes and performers as soon as the page is done, so memory stays at about one page. The two-hour lifetime is only a safety net.
+- **Scheduled syncs walk full catalogs (accepted trade-off).** A daily scheduled sync walks every monitored studio's and performer's pages, not only what changed.
+  For a 4K-scene studio that is about 58 MB per day and holds one of the two command threads for minutes. This was kept on purpose in exchange for a single code path shared with adds; eviction keeps the memory cost bounded.
+- **Owner deleted mid-import.** Before each page the importer checks that the studio or performer still exists and is monitored, and ends the import with an Info log if not, so a delete during an import is not undone.
 - **Scenes before performers.** Credits already hold `PersonName` and `Images` (migration 016), so scenes display before performer rows exist.
 
 **Measured** (fresh local instance, trace logging, live `api.whisparr.com/v5`, Brazzers Exxtra, 3,987 scenes, monitored, search on add off):
@@ -264,7 +269,7 @@ Adding or refreshing a studio or performer now pulls its scenes from Skyhook's p
 | Add to last scene row (`Synced` log line) | 120 s |
 | `RefreshStudios` command completed | 120 s |
 | `site/{id}/scenes/full` | 17 (1 first page + 16 cursor pages) |
-| `performer/bulk` (POST) | 25 (about 2,400 to 2,500 performers) |
+| `performer/bulk` (POST) | 25 (about 1,700 performers; 25 x 100 is only the upper bound, and the run created 1,724 performer rows) |
 | `scene/{id}` | 0 |
 | `performer/{id}` | 0 |
 | Other Skyhook calls | 2 `site/{id}`, 1 `site/search` (the lookup before the add) |
@@ -273,7 +278,7 @@ Adding or refreshing a studio or performer now pulls its scenes from Skyhook's p
 | Files under `MediaCover/` for the scenes | 0 |
 
 Before C the same add costs about 2 calls per scene plus one per performer. That is an estimate,
-not a measurement: 2 x 3,987 scene calls plus about 2,450 performer calls, roughly 10,400 calls
+not a measurement: 2 x 3,987 scene calls plus about 1,700 performer calls, roughly 9,700 calls
 against 45 now. Scenes appear on the studio page as pages arrive, covers load by hotlink, and a
 scene's cast shows on its details page.
 
