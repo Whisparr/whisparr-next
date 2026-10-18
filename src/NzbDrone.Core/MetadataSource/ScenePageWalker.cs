@@ -24,13 +24,15 @@ namespace NzbDrone.Core.MetadataSource
     public class ScenePageWalkResult
     {
         public int Pages { get; set; }
+        public bool Stopped { get; set; }
         public List<string> GaveUp { get; set; } = new();
     }
 
     public interface IScenePageWalker
     {
-        // fetchPage(cursor) -> page; handlePage is called for EVERY response that carries items, 200 or 202
-        ScenePageWalkResult Walk(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage);
+        // fetchPage(cursor) -> page; handlePage is called for EVERY response that carries items, 200 or 202.
+        // keepGoing is asked before each fetch; when it returns false the walk ends cleanly with Stopped set.
+        ScenePageWalkResult Walk(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage, Func<bool> keepGoing);
     }
 
     public class ScenePageWalker : IScenePageWalker
@@ -46,19 +48,33 @@ namespace NzbDrone.Core.MetadataSource
             _logger = logger;
         }
 
-        public ScenePageWalkResult Walk(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage)
+        public ScenePageWalkResult Walk(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage, Func<bool> keepGoing)
         {
             var result = new ScenePageWalkResult();
             var revisit = new List<(string Cursor, ScenePage Page)>();
+            var visited = new HashSet<string> { string.Empty };
             string cursor = null;
 
             do
             {
+                if (!keepGoing())
+                {
+                    result.Stopped = true;
+                    return result;
+                }
+
                 var page = FetchUnthrottled(fetchPage, cursor);
 
                 if (page == null)
                 {
                     result.GaveUp.Add($"cursor:{cursor}");
+
+                    // The earlier pages still waiting on Skyhook would otherwise be forgotten.
+                    foreach (var (_, pending) in revisit)
+                    {
+                        result.GaveUp.AddRange(pending.Pending);
+                    }
+
                     return result;
                 }
 
@@ -71,12 +87,22 @@ namespace NzbDrone.Core.MetadataSource
                 }
 
                 cursor = page.NextCursor;
+
+                if (cursor != null && !visited.Add(cursor))
+                {
+                    _logger.Warn("Skyhook returned scene page cursor '{0}' twice; ending the first pass to avoid looping", cursor);
+                    break;
+                }
             }
             while (cursor != null);
 
             foreach (var (pageCursor, pending) in revisit)
             {
-                Revisit(fetchPage, handlePage, pageCursor, pending, result);
+                if (!Revisit(fetchPage, handlePage, keepGoing, pageCursor, pending, result))
+                {
+                    result.Stopped = true;
+                    break;
+                }
             }
 
             return result;
@@ -108,7 +134,8 @@ namespace NzbDrone.Core.MetadataSource
             }
         }
 
-        private void Revisit(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage, string cursor, ScenePage last, ScenePageWalkResult result)
+        // Returns false when keepGoing stopped the walk.
+        private bool Revisit(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage, Func<bool> keepGoing, string cursor, ScenePage last, ScenePageWalkResult result)
         {
             var stalledSince = _pacer.UtcNow;
             var lastPending = last.Pending;
@@ -118,6 +145,11 @@ namespace NzbDrone.Core.MetadataSource
             {
                 _pacer.Sleep(last.RetryAfter);
 
+                if (!keepGoing())
+                {
+                    return false;
+                }
+
                 var page = fetchPage(cursor);
 
                 if (page.Status != ScenePageStatus.Throttled)
@@ -126,7 +158,7 @@ namespace NzbDrone.Core.MetadataSource
 
                     if (page.Status == ScenePageStatus.Complete)
                     {
-                        return;
+                        return true;
                     }
 
                     if (page.Pending.Count < pendingCount)
@@ -144,7 +176,7 @@ namespace NzbDrone.Core.MetadataSource
                 {
                     _logger.Warn("Skyhook scene page cursor '{0}' made no progress for {1}; giving up on {2} scene(s): {3}", cursor, StallTimeout, lastPending.Count, string.Join(", ", lastPending));
                     result.GaveUp.AddRange(lastPending);
-                    return;
+                    return true;
                 }
             }
         }

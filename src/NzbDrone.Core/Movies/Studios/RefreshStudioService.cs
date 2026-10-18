@@ -117,7 +117,7 @@ namespace NzbDrone.Core.Movies.Studios
 
             if (studio.Monitored)
             {
-                var scenesAdded = _sceneCatalogImporter.ImportScenes(
+                _sceneCatalogImporter.ImportScenes(
                     studio.Title,
                     cursor => _movieInfo.GetStudioScenePage(studio.ForeignId, cursor),
                     stashId => new Movie
@@ -132,9 +132,8 @@ namespace NzbDrone.Core.Movies.Studios
                         },
                         Monitored = monitorNewItems,
                         Tags = studio.Tags
-                    });
-
-                _logger.Info("Synced studio {0} and added {1} scenes", studio.Title, scenesAdded);
+                    },
+                    () => _studioService.FindByForeignId(studio.ForeignId) is { Monitored: true });
             }
 
             if (studio.MoviesMonitored)
@@ -298,10 +297,9 @@ namespace NzbDrone.Core.Movies.Studios
                         RescanMovie(movie, isNew, trigger);
                     }
 
-                    // SyncStudioItems swallows the timeout itself, but GetStudioWorks
-                    // throws HttpException for any other HTTP error and
-                    // MovieNotFoundException on a 404. Without this, either one drops
-                    // every studio the user selected after the one that failed.
+                    // The scene import and GetStudioWorks both let HTTP errors propagate
+                    // (HttpException, or MovieNotFoundException on a 404). Without this,
+                    // either one drops every studio the user selected after the one that failed.
                     try
                     {
                         SyncStudioItems(studio);

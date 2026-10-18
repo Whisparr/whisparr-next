@@ -195,15 +195,17 @@ namespace NzbDrone.Core.Test.PerformerTests
 
         private Func<string, ScenePage> _fetchPage;
         private Func<string, Movie> _buildStub;
+        private Func<bool> _keepGoing;
 
         private void GivenImporterCapturesCallbacks()
         {
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
-                .Callback<string, Func<string, ScenePage>, Func<string, Movie>>((title, fetchPage, buildStub) =>
+                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((title, fetchPage, buildStub, keepGoing) =>
                 {
                     _fetchPage = fetchPage;
                     _buildStub = buildStub;
+                    _keepGoing = keepGoing;
                 })
                 .Returns(1);
         }
@@ -257,6 +259,24 @@ namespace NzbDrone.Core.Test.PerformerTests
                 .Verify(s => s.GetPerformerScenePage(performer.ForeignId, "c1"), Times.Once());
         }
 
+        [TestCase(true, true, true)]
+        [TestCase(false, true, false)]
+        [TestCase(true, false, false)]
+        public void should_keep_importing_only_while_the_performer_exists_and_is_monitored(bool exists, bool monitored, bool expected)
+        {
+            var performer = GivenPerformer(true);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            Mocker.GetMock<IPerformerService>()
+                .Setup(s => s.FindByForeignId(performer.ForeignId))
+                .Returns(exists ? new Performer { ForeignId = performer.ForeignId, Monitored = monitored } : null);
+
+            _keepGoing().Should().Be(expected);
+        }
+
         [Test]
         public void should_not_fetch_performer_works_when_movies_are_not_monitored()
         {
@@ -272,7 +292,7 @@ namespace NzbDrone.Core.Test.PerformerTests
                 .Verify(s => s.GetPerformerWorks(performer.ForeignId), Times.Never());
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
         }
 
         [Test]
@@ -282,13 +302,13 @@ namespace NzbDrone.Core.Test.PerformerTests
             var response = new HttpResponse(request, new HttpHeader(), string.Empty, HttpStatusCode.BadGateway);
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Setup(s => s.ImportScenes(_timedOutPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Setup(s => s.ImportScenes(_timedOutPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                 .Throws(new HttpException(request, response));
 
             Subject.Execute(new RefreshPerformersCommand(new List<int> { _timedOutPerformer.Id, _successfulPerformer.Id }));
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Verify(s => s.ImportScenes(_successfulPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+                .Verify(s => s.ImportScenes(_successfulPerformer.Name, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
 
             ExceptionVerification.ExpectedErrors(3);
         }

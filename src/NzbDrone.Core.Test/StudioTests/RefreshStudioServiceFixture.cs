@@ -132,15 +132,17 @@ namespace NzbDrone.Core.Test.StudioTests
 
         private Func<string, ScenePage> _fetchPage;
         private Func<string, Movie> _buildStub;
+        private Func<bool> _keepGoing;
 
         private void GivenImporterCapturesCallbacks()
         {
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
-                .Callback<string, Func<string, ScenePage>, Func<string, Movie>>((title, fetchPage, buildStub) =>
+                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((title, fetchPage, buildStub, keepGoing) =>
                 {
                     _fetchPage = fetchPage;
                     _buildStub = buildStub;
+                    _keepGoing = keepGoing;
                 })
                 .Returns(1);
         }
@@ -194,6 +196,24 @@ namespace NzbDrone.Core.Test.StudioTests
                 .Verify(s => s.GetStudioScenePage(studio.ForeignId, "c1"), Times.Once());
         }
 
+        [TestCase(true, true, true)]
+        [TestCase(false, true, false)]
+        [TestCase(true, false, false)]
+        public void should_keep_importing_only_while_the_studio_exists_and_is_monitored(bool exists, bool monitored, bool expected)
+        {
+            var studio = GivenStudio(true);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            Mocker.GetMock<IStudioService>()
+                .Setup(s => s.FindByForeignId(studio.ForeignId))
+                .Returns(exists ? new Studio { ForeignId = studio.ForeignId, Monitored = monitored } : null);
+
+            _keepGoing().Should().Be(expected);
+        }
+
         [Test]
         public void should_not_fetch_studio_works_when_movies_are_not_monitored()
         {
@@ -209,7 +229,7 @@ namespace NzbDrone.Core.Test.StudioTests
                 .Verify(s => s.GetStudioWorks(studio.ForeignId), Times.Never());
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
         }
 
         [Test]
@@ -219,13 +239,13 @@ namespace NzbDrone.Core.Test.StudioTests
             var response = new HttpResponse(request, new HttpHeader(), string.Empty, HttpStatusCode.BadGateway);
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Setup(s => s.ImportScenes(_timedOutStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()))
+                .Setup(s => s.ImportScenes(_timedOutStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                 .Throws(new HttpException(request, response));
 
             Subject.Execute(new RefreshStudiosCommand(new List<int> { _timedOutStudio.Id, _successfulStudio.Id }));
 
             Mocker.GetMock<ISceneCatalogImporter>()
-                .Verify(s => s.ImportScenes(_successfulStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>()), Times.Once());
+                .Verify(s => s.ImportScenes(_successfulStudio.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
 
             ExceptionVerification.ExpectedErrors(1);
         }

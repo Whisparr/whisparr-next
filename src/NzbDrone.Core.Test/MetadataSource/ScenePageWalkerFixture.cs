@@ -16,6 +16,7 @@ namespace NzbDrone.Core.Test.MetadataSource
         private FakePacer _pacer;
         private List<string> _requested;
         private List<ScenePage> _handled;
+        private Func<bool> _keepGoing;
 
         private class FakePacer : ISkyhookPacer
         {
@@ -35,6 +36,7 @@ namespace NzbDrone.Core.Test.MetadataSource
             _pacer = new FakePacer();
             _requested = new List<string>();
             _handled = new List<ScenePage>();
+            _keepGoing = () => true;
             Mocker.SetConstant<ISkyhookPacer>(_pacer);
         }
 
@@ -62,7 +64,8 @@ namespace NzbDrone.Core.Test.MetadataSource
                     calls[key] = calls.GetValueOrDefault(key) + 1;
                     return respond(cursor, calls[key]);
                 },
-                page => _handled.Add(page));
+                page => _handled.Add(page),
+                () => _keepGoing());
         }
 
         [Test]
@@ -164,6 +167,74 @@ namespace NzbDrone.Core.Test.MetadataSource
             _requested.Should().NotContain("b");
             _requested.Count(c => c == "a").Should().Be(6);
             ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_give_up_on_earlier_pending_pages_when_the_first_pass_is_throttled_out()
+        {
+            var result = Walk((cursor, _) =>
+            {
+                if (cursor == null)
+                {
+                    return Page(ScenePageStatus.Pending, "a", "p1", "x", "y");
+                }
+
+                var throttled = Page(ScenePageStatus.Throttled, "b");
+                throttled.RetryAfter = TimeSpan.FromMinutes(1);
+                throttled.Items.Clear();
+                return throttled;
+            });
+
+            result.GaveUp.Should().Equal("cursor:a", "x", "y");
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_stop_the_first_pass_when_a_cursor_repeats_and_still_revisit()
+        {
+            var result = Walk((cursor, call) => cursor switch
+            {
+                null when call == 1 => Page(ScenePageStatus.Pending, "a", "p1-202", "x"),
+                null => Page(ScenePageStatus.Complete, "a", "p1-200"),
+                _ => Page(ScenePageStatus.Complete, "a", "p2")
+            });
+
+            _handled.Select(p => p.Items[0].StashId).Should().Equal("p1-202", "p2", "p1-200");
+            result.GaveUp.Should().BeEmpty();
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_stop_before_fetching_the_next_page_when_told_to()
+        {
+            var fetches = 0;
+            _keepGoing = () => fetches < 2;
+
+            var result = Walk((cursor, _) =>
+            {
+                fetches++;
+                return Page(ScenePageStatus.Complete, cursor == null ? "a" : "b", "p");
+            });
+
+            result.Stopped.Should().BeTrue();
+            result.Pages.Should().Be(2);
+            _requested.Should().Equal(null, "a");
+        }
+
+        [Test]
+        public void should_stop_revisiting_when_told_to()
+        {
+            var keep = true;
+            _keepGoing = () => keep;
+
+            var result = Walk((cursor, call) =>
+            {
+                keep = false;
+                return Page(ScenePageStatus.Pending, null, "p1", "x");
+            });
+
+            result.Stopped.Should().BeTrue();
+            _requested.Should().HaveCount(1);
         }
 
         [Test]

@@ -20,6 +20,7 @@ namespace NzbDrone.Core.Test.MovieTests
         private List<string> _libraryIds;
         private List<string> _performerIds;
         private List<ImportListExclusion> _exclusions;
+        private Func<bool> _keepGoing;
 
         [SetUp]
         public void Setup()
@@ -27,6 +28,7 @@ namespace NzbDrone.Core.Test.MovieTests
             _libraryIds = new List<string>();
             _performerIds = new List<string>();
             _exclusions = new List<ImportListExclusion>();
+            _keepGoing = () => true;
 
             Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieStashIds()).Returns(() => _libraryIds);
             Mocker.GetMock<IPerformerService>().Setup(s => s.AllPerformerForeignIds()).Returns(() => _performerIds);
@@ -54,8 +56,8 @@ namespace NzbDrone.Core.Test.MovieTests
         private void GivenPages(params ScenePage[] pages)
         {
             Mocker.GetMock<IScenePageWalker>()
-                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>()))
-                  .Returns<Func<string, ScenePage>, Action<ScenePage>>((_, handle) =>
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
+                  .Returns<Func<string, ScenePage>, Action<ScenePage>, Func<bool>>((_, handle, _) =>
                   {
                       foreach (var page in pages)
                       {
@@ -68,7 +70,7 @@ namespace NzbDrone.Core.Test.MovieTests
 
         private int Import()
         {
-            return Subject.ImportScenes("Studio", _ => null, id => new Movie { ForeignId = id });
+            return Subject.ImportScenes("Studio", _ => null, id => new Movie { ForeignId = id }, () => _keepGoing());
         }
 
         private static List<string> Ids(List<Movie> movies) => movies.Select(m => m.ForeignId).ToList();
@@ -185,8 +187,8 @@ namespace NzbDrone.Core.Test.MovieTests
         public void should_keep_scenes_from_earlier_pages_when_a_later_page_fails()
         {
             Mocker.GetMock<IScenePageWalker>()
-                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>()))
-                  .Callback<Func<string, ScenePage>, Action<ScenePage>>((_, handle) =>
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
+                  .Callback<Func<string, ScenePage>, Action<ScenePage>, Func<bool>>((_, handle, _) =>
                   {
                       handle(Page(ScenePageStatus.Complete, 4, Item("a"), Item("b")));
                       throw new HttpException(new HttpResponse(new HttpRequest("http://skyhook.test"), new HttpHeader(), string.Empty, System.Net.HttpStatusCode.BadGateway));
@@ -202,12 +204,102 @@ namespace NzbDrone.Core.Test.MovieTests
         public void should_warn_about_scenes_the_walker_gave_up_on()
         {
             Mocker.GetMock<IScenePageWalker>()
-                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>()))
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
                   .Returns(new ScenePageWalkResult { Pages = 1, GaveUp = new List<string> { "x", "y" } });
 
             Import().Should().Be(0);
 
             ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_evict_prefetched_items_and_performers_after_each_page()
+        {
+            _performerIds.Add("known");
+            GivenPages(
+                Page(ScenePageStatus.Complete, 3, Item("a", "known", "new1"), Item("b")),
+                Page(ScenePageStatus.Complete, 3, Item("c", "new2")));
+
+            var forgotten = new List<(List<string> Scenes, List<string> Performers)>();
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.ForgetPrefetched(It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>()))
+                  .Callback<IEnumerable<string>, IEnumerable<string>>((s, p) => forgotten.Add((s.ToList(), p.ToList())));
+
+            Import();
+
+            forgotten.Should().HaveCount(2);
+            forgotten[0].Scenes.Should().Equal("a", "b");
+            forgotten[0].Performers.Should().Equal("new1");
+            forgotten[1].Scenes.Should().Equal("c");
+            forgotten[1].Performers.Should().Equal("new2");
+        }
+
+        [Test]
+        public void should_evict_prefetched_items_even_when_the_page_has_nothing_new()
+        {
+            _libraryIds.Add("a");
+            GivenPages(Page(ScenePageStatus.Complete, 1, Item("a")));
+
+            Import();
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.ForgetPrefetched(It.Is<IEnumerable<string>>(i => i.SequenceEqual(new[] { "a" })), It.IsAny<IEnumerable<string>>()), Times.Once());
+        }
+
+        [Test]
+        public void should_evict_prefetched_items_when_adding_throws()
+        {
+            GivenPages(Page(ScenePageStatus.Complete, 1, Item("a", "p1")));
+
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), true, true))
+                  .Throws(new InvalidOperationException());
+
+            Action act = () => Import();
+
+            act.Should().Throw<InvalidOperationException>();
+            Mocker.GetMock<IProvideMovieInfo>().Verify(
+                s => s.ForgetPrefetched(It.Is<IEnumerable<string>>(i => i.SequenceEqual(new[] { "a" })), It.Is<IEnumerable<string>>(p => p.SequenceEqual(new[] { "p1" }))),
+                Times.Once());
+        }
+
+        [Test]
+        public void should_not_add_a_fetched_page_once_told_to_stop()
+        {
+            var pages = 0;
+            _keepGoing = () => pages++ < 1;
+
+            GivenPages(
+                Page(ScenePageStatus.Complete, 2, Item("a")),
+                Page(ScenePageStatus.Complete, 2, Item("b")));
+
+            Import().Should().Be(1);
+
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "a" })), true, true), Times.Once());
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).Contains("b")), true, true), Times.Never());
+        }
+
+        [Test]
+        public void should_pass_the_keep_going_check_to_the_walker_and_stop_quietly()
+        {
+            Func<bool> passed = null;
+            Mocker.GetMock<IScenePageWalker>()
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
+                  .Callback<Func<string, ScenePage>, Action<ScenePage>, Func<bool>>((_, _, keep) => passed = keep)
+                  .Returns(new ScenePageWalkResult { Stopped = true });
+
+            _keepGoing = () => false;
+
+            Import().Should().Be(0);
+
+            passed().Should().BeFalse();
+        }
+
+        [Test]
+        public void should_tolerate_a_page_without_items()
+        {
+            GivenPages(new ScenePage { Status = ScenePageStatus.Complete, Items = null });
+
+            Import().Should().Be(0);
         }
     }
 }

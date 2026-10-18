@@ -166,7 +166,7 @@ namespace NzbDrone.Core.Movies.Performers
 
             if (performer.Monitored)
             {
-                var scenesAdded = _sceneCatalogImporter.ImportScenes(
+                _sceneCatalogImporter.ImportScenes(
                     performer.Name,
                     cursor => _movieInfo.GetPerformerScenePage(performer.ForeignId, cursor),
                     stashId => new Movie
@@ -181,9 +181,8 @@ namespace NzbDrone.Core.Movies.Performers
                         },
                         Monitored = monitorNewItems,
                         Tags = performer.Tags
-                    });
-
-                _logger.Info("Synced performer {0} and added {1} scenes", performer.Name, scenesAdded);
+                    },
+                    () => _performerService.FindByForeignId(performer.ForeignId) is { Monitored: true });
             }
 
             if (performer.MoviesMonitored)
@@ -342,10 +341,9 @@ namespace NzbDrone.Core.Movies.Performers
                         RescanMovie(movie, isNew, trigger);
                     }
 
-                    // SyncPerformerItems swallows the timeout itself, but
-                    // GetPerformerWorks throws HttpException for any other HTTP error
-                    // and MovieNotFoundException on a 404. Without this, either one
-                    // drops every performer the user selected after the one that failed.
+                    // The scene import and GetPerformerWorks both let HTTP errors propagate
+                    // (HttpException, or MovieNotFoundException on a 404). Without this,
+                    // either one drops every performer the user selected after the one that failed.
                     try
                     {
                         SyncPerformerItems(performer);
