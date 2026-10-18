@@ -18,6 +18,9 @@ namespace NzbDrone.Core.MetadataSource
         List<MovieMetadata> GetBulkTpdbMovieInfo(List<string> tpdbIds);
         MovieCollection GetCollectionInfo(int tmdbId);
         Performer GetPerformerInfo(string stashId);
+        ScenePage GetStudioScenePage(string stashId, string cursor);
+        ScenePage GetPerformerScenePage(string stashId, string cursor);
+        List<string> PrefetchPerformers(IEnumerable<string> stashIds);
         Studio GetStudioInfo(string stashId);
         (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) GetPerformerWorks(string stashId);
         List<string> GetStudioScenes(string stashId);

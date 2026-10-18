@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.Cloud;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -39,6 +40,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         private const string SinceConst = "since";
         private const string StashPrefixConst = "stash:";
         private const string StashIdPrefixConst = "stashid:";
+        private const int PerformerBulkBatchSize = 100;
+        private static readonly TimeSpan PrefetchLifetime = TimeSpan.FromHours(2);
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
         private readonly IHttpRequestBuilderFactory _whisparrMetadata;
@@ -46,6 +49,9 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         private readonly IMovieService _movieService;
         private readonly IMovieMetadataService _movieMetadataService;
         private readonly IStudioService _studioService;
+        private readonly ICached<MovieResource> _scenePrefetch;
+        private readonly ICached<PerformerResource> _performerPrefetch;
+
         public SkyHookProxy(IHttpClient httpClient,
             IWhisparrCloudRequestBuilder requestBuilder,
             IConfigService configService,
@@ -53,6 +59,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             IMovieService movieService,
             IMovieMetadataService movieMetadataService,
             IStudioService studioService,
+            ICacheManager cacheManager,
             Logger logger)
         {
             _httpClient = httpClient;
@@ -70,6 +77,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             _movieService = movieService;
             _movieMetadataService = movieMetadataService;
             _studioService = studioService;
+            _scenePrefetch = cacheManager.GetCache<MovieResource>(GetType(), "scenePrefetch");
+            _performerPrefetch = cacheManager.GetCache<PerformerResource>(GetType(), "performerPrefetch");
 
             _logger = logger;
         }
@@ -403,6 +412,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
         public Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetSceneInfo(string stashId)
         {
+            var cached = _scenePrefetch.Find(stashId);
+
+            if (cached != null)
+            {
+                return MapSceneInfo(cached);
+            }
+
             var httpRequest = _whisparrMetadata.Create()
                                              .SetSegment(RouteConst, "scene")
                                              .Resource(stashId)
@@ -425,16 +441,180 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 }
             }
 
-            var movie = MapMovie(httpResponse.Resource);
+            return MapSceneInfo(httpResponse.Resource);
+        }
 
-            var credits = httpResponse.Resource.Credits.Select(c => MapSceneCast(c)).ToList();
+        public ScenePage GetStudioScenePage(string stashId, string cursor)
+        {
+            return GetScenePage("site", stashId, cursor);
+        }
 
-            var performers = httpResponse.Resource.Credits.Select(c => MapPerformer(c.Performer)).DistinctBy(p => p.ForeignId).ToList();
+        public ScenePage GetPerformerScenePage(string stashId, string cursor)
+        {
+            return GetScenePage("performer", stashId, cursor);
+        }
+
+        public List<string> PrefetchPerformers(IEnumerable<string> stashIds)
+        {
+            var notCached = new List<string>();
+
+            foreach (var batch in stashIds.Where(i => i.IsNotNullOrWhiteSpace()).Distinct().Chunk(PerformerBulkBatchSize))
+            {
+                try
+                {
+                    var httpRequest = _whisparrMetadata.Create()
+                                                     .SetSegment(RouteConst, "performer/bulk")
+                                                     .Build();
+
+                    httpRequest.AllowAutoRedirect = true;
+                    httpRequest.SuppressHttpError = true;
+                    httpRequest.Headers.ContentType = "application/json";
+                    httpRequest.SetContent(batch.ToJson());
+
+                    var httpResponse = _httpClient.Post<PerformerBulkResource>(httpRequest);
+
+                    if (httpResponse.StatusCode != HttpStatusCode.OK && httpResponse.StatusCode != HttpStatusCode.Accepted)
+                    {
+                        throw new HttpException(httpRequest, httpResponse);
+                    }
+
+                    var resource = httpResponse.Resource;
+                    var cachedIds = new HashSet<string>();
+
+                    foreach (var performer in resource?.Performers ?? new List<PerformerResource>())
+                    {
+                        var id = performer?.ForeignIds?.StashId;
+
+                        if (id.IsNullOrWhiteSpace())
+                        {
+                            continue;
+                        }
+
+                        _performerPrefetch.Set(id, performer, PrefetchLifetime);
+                        cachedIds.Add(id);
+                    }
+
+                    notCached.AddRange(batch.Where(i => !cachedIds.Contains(i)));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Performer bulk prefetch failed for {0} performers", batch.Length);
+                    notCached.AddRange(batch);
+                }
+            }
+
+            return notCached.Distinct().ToList();
+        }
+
+        private ScenePage GetScenePage(string route, string stashId, string cursor)
+        {
+            var builder = _whisparrMetadata.Create()
+                                           .SetSegment(RouteConst, route)
+                                           .Resource($"{stashId}/scenes/full");
+
+            if (cursor.IsNotNullOrWhiteSpace())
+            {
+                builder.AddQueryParam("cursor", cursor);
+            }
+
+            var httpRequest = builder.Build();
+
+            httpRequest.AllowAutoRedirect = true;
+            httpRequest.SuppressHttpError = true;
+
+            var httpResponse = _httpClient.Get<ScenePageResource>(httpRequest);
+
+            switch (httpResponse.StatusCode)
+            {
+                case HttpStatusCode.OK:
+                    return MapScenePage(httpResponse, ScenePageStatus.Complete, TimeSpan.Zero);
+                case HttpStatusCode.Accepted:
+                    return MapScenePage(httpResponse, ScenePageStatus.Pending, TimeSpan.FromSeconds(5));
+                case HttpStatusCode.ServiceUnavailable:
+                    return new ScenePage
+                    {
+                        Status = ScenePageStatus.Throttled,
+                        RetryAfter = ParseRetryAfter(httpResponse, TimeSpan.FromSeconds(30))
+                    };
+                case HttpStatusCode.NotFound:
+                    throw new MovieNotFoundException(stashId);
+                default:
+                    throw new HttpException(httpRequest, httpResponse);
+            }
+        }
+
+        private ScenePage MapScenePage(HttpResponse<ScenePageResource> httpResponse, ScenePageStatus status, TimeSpan defaultRetryAfter)
+        {
+            var resource = httpResponse.Resource;
+            var items = new List<ScenePageItem>();
+
+            foreach (var scene in resource.Items ?? new List<MovieResource>())
+            {
+                var sceneId = scene.ForeignIds?.StashId;
+
+                if (sceneId.IsNotNullOrWhiteSpace())
+                {
+                    _scenePrefetch.Set(sceneId, scene, PrefetchLifetime);
+                }
+
+                items.Add(new ScenePageItem
+                {
+                    StashId = sceneId,
+                    PerformerStashIds = (scene.Credits ?? new List<CastResource>())
+                        .Select(c => c.Performer?.ForeignIds?.StashId)
+                        .Where(i => i.IsNotNullOrWhiteSpace())
+                        .Distinct()
+                        .ToList()
+                });
+            }
+
+            return new ScenePage
+            {
+                Status = status,
+                Total = resource.Total,
+                NextCursor = resource.NextCursor,
+                Items = items,
+                Pending = resource.Pending ?? new List<string>(),
+                RetryAfter = status == ScenePageStatus.Pending ? ParseRetryAfter(httpResponse, defaultRetryAfter) : defaultRetryAfter
+            };
+        }
+
+        private static TimeSpan ParseRetryAfter(HttpResponse response, TimeSpan fallback)
+        {
+            if (!response.Headers.ContainsKey("Retry-After"))
+            {
+                return fallback;
+            }
+
+            var retryAfter = response.Headers["Retry-After"].ToString();
+
+            if (int.TryParse(retryAfter, out var seconds))
+            {
+                return TimeSpan.FromSeconds(seconds);
+            }
+
+            if (DateTime.TryParse(retryAfter, out var date))
+            {
+                var delta = date.ToUniversalTime() - DateTime.UtcNow;
+
+                return delta > TimeSpan.Zero ? delta : fallback;
+            }
+
+            return fallback;
+        }
+
+        private static Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> MapSceneInfo(MovieResource resource)
+        {
+            var movie = MapMovie(resource);
+
+            var credits = resource.Credits.Select(c => MapSceneCast(c)).ToList();
+
+            var performers = resource.Credits.Select(c => MapPerformer(c.Performer)).DistinctBy(p => p.ForeignId).ToList();
 
             movie.PerformerForeignIds = performers.Select(p => p.ForeignId).ToList();
             movie.PerformerNames = credits.Select(p => p.PersonName).ToList();
 
-            return new Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(movie, MapStudio(httpResponse.Resource.Studio), performers, credits);
+            return new Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(movie, MapStudio(resource.Studio), performers, credits);
         }
 
         public MovieCollection GetCollectionInfo(int tmdbId)
@@ -556,6 +736,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
         public Performer GetPerformerInfo(string stashId)
         {
+            var cached = _performerPrefetch.Find(stashId);
+
+            if (cached != null)
+            {
+                return MapPerformer(cached);
+            }
+
             var httpRequest = _whisparrMetadata.Create()
                                              .SetSegment(RouteConst, "performer")
                                              .Resource(stashId)
@@ -1783,7 +1970,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
         }
 
-        private Studio MapStudio(StudioResource studioResource)
+        private static Studio MapStudio(StudioResource studioResource)
         {
             if (studioResource == null)
             {
@@ -1842,7 +2029,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return movie;
         }
 
-        private Performer MapPerformer(PerformerResource performer)
+        private static Performer MapPerformer(PerformerResource performer)
         {
             if (performer == null)
             {
