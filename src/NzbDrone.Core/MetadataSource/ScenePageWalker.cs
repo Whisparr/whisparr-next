@@ -111,7 +111,8 @@ namespace NzbDrone.Core.MetadataSource
         private void Revisit(Func<string, ScenePage> fetchPage, Action<ScenePage> handlePage, string cursor, ScenePage last, ScenePageWalkResult result)
         {
             var stalledSince = _pacer.UtcNow;
-            var pendingCount = last.Pending.Count;
+            var lastPending = last.Pending;
+            var pendingCount = lastPending.Count;
 
             while (true)
             {
@@ -134,14 +135,15 @@ namespace NzbDrone.Core.MetadataSource
                     }
 
                     pendingCount = page.Pending.Count;
+                    lastPending = page.Pending;
                 }
 
                 last = page;
 
                 if (_pacer.UtcNow - stalledSince >= StallTimeout)
                 {
-                    _logger.Warn("Skyhook scene page cursor '{0}' made no progress for {1}; giving up on {2} scene(s): {3}", cursor, StallTimeout, last.Pending.Count, string.Join(", ", last.Pending));
-                    result.GaveUp.AddRange(last.Pending);
+                    _logger.Warn("Skyhook scene page cursor '{0}' made no progress for {1}; giving up on {2} scene(s): {3}", cursor, StallTimeout, lastPending.Count, string.Join(", ", lastPending));
+                    result.GaveUp.AddRange(lastPending);
                     return;
                 }
             }

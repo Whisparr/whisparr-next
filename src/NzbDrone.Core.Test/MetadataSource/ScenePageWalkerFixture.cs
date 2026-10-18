@@ -115,9 +115,54 @@ namespace NzbDrone.Core.Test.MetadataSource
             var result = Walk((_, _) => Page(ScenePageStatus.Pending, null, "p1", "x", "y"));
 
             result.GaveUp.Should().Equal("x", "y");
-            var fetchesAtGiveUp = _requested.Count;
-            fetchesAtGiveUp.Should().BeGreaterThan(1);
-            _pacer.UtcNow.Should().BeOnOrAfter(new DateTime(2026, 1, 1, 0, 5, 0, DateTimeKind.Utc));
+
+            // first pass + 30 revisits, each preceded by a 10s sleep, then no further fetches
+            _requested.Should().HaveCount(31);
+            _pacer.UtcNow.Should().Be(new DateTime(2026, 1, 1, 0, 5, 0, DateTimeKind.Utc));
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_keep_pending_ids_when_a_revisit_gives_up_right_after_a_throttle()
+        {
+            var result = Walk((_, call) =>
+            {
+                if (call % 2 == 1 && call > 1)
+                {
+                    var throttled = Page(ScenePageStatus.Throttled);
+                    throttled.Items.Clear();
+                    return throttled;
+                }
+
+                return Page(ScenePageStatus.Pending, null, "p1", "x", "y");
+            });
+
+            result.GaveUp.Should().Equal("x", "y");
+            _requested.Should().HaveCount(31);
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_stop_walking_when_the_first_pass_is_throttled_for_five_minutes()
+        {
+            var result = Walk((cursor, _) =>
+            {
+                if (cursor == null)
+                {
+                    return Page(ScenePageStatus.Complete, "a", "p1");
+                }
+
+                var throttled = Page(ScenePageStatus.Throttled, "b");
+                throttled.RetryAfter = TimeSpan.FromMinutes(1);
+                throttled.Items.Clear();
+                return throttled;
+            });
+
+            result.GaveUp.Should().Equal("cursor:a");
+            _handled.Should().HaveCount(1);
+            result.Pages.Should().Be(1);
+            _requested.Should().NotContain("b");
+            _requested.Count(c => c == "a").Should().Be(6);
             ExceptionVerification.ExpectedWarns(1);
         }
 
