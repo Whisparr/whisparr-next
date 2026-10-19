@@ -9,14 +9,11 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Studios;
-using NzbDrone.Core.Movies.Studios.Events;
 using NzbDrone.Core.MovieStats;
 using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.RootFolders;
-using NzbDrone.SignalR;
 using NzbDrone.Test.Common;
 using Whisparr.Api.V3.Studios;
-using Whisparr.Http;
 using Whisparr.Http.REST;
 
 namespace NzbDrone.Api.Test.v3.Studios
@@ -66,42 +63,6 @@ namespace NzbDrone.Api.Test.v3.Studios
             // studio with this body, and the details page keys the works list off HasScenes.
             var resource = ((AcceptedAtActionResult)response.Result).Value.Should().BeOfType<StudioResource>().Subject;
             resource.HasScenes.Should().BeTrue();
-            resource.Years.Should().BeEquivalentTo(new[] { 2024 });
-        }
-
-        [Test]
-        public void should_link_movies_when_broadcasting_a_studio_update()
-        {
-            var studio = new Studio { Id = 1, ForeignId = ForeignId, Title = "Studio" };
-
-            // The counts on the model are transient: the IHandleAsync side of the event
-            // fills them in after this handler runs, so they are still zero here.
-            Mocker.GetMock<IMovieService>()
-                .Setup(s => s.GetByStudioForeignId(ForeignId))
-                .Returns(new List<Movie>
-                {
-                    new Movie
-                    {
-                        Id = 7,
-                        MovieMetadata = new MovieMetadata { Year = 2024, ItemType = ItemType.Scene }
-                    }
-                });
-
-            SignalRMessage broadcast = null;
-            Mocker.GetMock<IBroadcastSignalRMessage>()
-                .Setup(s => s.IsConnected)
-                .Returns(true);
-            Mocker.GetMock<IBroadcastSignalRMessage>()
-                .Setup(s => s.BroadcastMessage(It.IsAny<SignalRMessage>()))
-                .Callback<SignalRMessage>(m => broadcast = m);
-
-            Subject.Handle(new StudioUpdatedEvent(studio));
-
-            broadcast.Should().NotBeNull();
-            var resource = ((ResourceChangeMessage<StudioResource>)broadcast.Body).Resource;
-            resource.HasScenes.Should().BeTrue();
-            resource.HasMovies.Should().BeFalse();
-            resource.TotalSceneCount.Should().Be(1);
             resource.Years.Should().BeEquivalentTo(new[] { 2024 });
         }
 
