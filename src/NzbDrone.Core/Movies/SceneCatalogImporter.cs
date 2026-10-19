@@ -48,7 +48,7 @@ namespace NzbDrone.Core.Movies
 
         public int ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing)
         {
-            var library = new HashSet<string>(_movieService.AllMovieStashIds());
+            var library = new HashSet<string>(_movieService.AllSceneForeignIds());
             var excluded = new HashSet<string>(_exclusionService.GetAllExclusions().Select(e => e.ForeignId));
             var addedCount = 0;
             var total = 0;

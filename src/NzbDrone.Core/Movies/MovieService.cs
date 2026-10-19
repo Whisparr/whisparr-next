@@ -51,6 +51,7 @@ namespace NzbDrone.Core.Movies
         List<int> AllMovieTmdbIds();
         List<string> AllMovieTpdbIds();
         List<string> AllMovieStashIds();
+        List<string> AllSceneForeignIds();
         List<string> AllMovieForeignIds();
         bool MovieExists(Movie movie);
         List<Movie> GetMoviesByFileId(int fileId);
@@ -364,6 +365,13 @@ namespace NzbDrone.Core.Movies
         public List<string> AllMovieStashIds()
         {
             return _movieRepository.AllMovieStashIds();
+        }
+
+        /// <summary> Get the foreign IDs of every scene in the repository, whichever source is locked. </summary>
+        /// <returns>A list of scene foreign IDs.</returns>
+        public List<string> AllSceneForeignIds()
+        {
+            return _movieRepository.AllSceneForeignIds();
         }
 
         /// <summary> Get a list of all foreign IDs for movies in the repository. </summary>

@@ -17,7 +17,7 @@ namespace NzbDrone.Core.Test.MovieTests
     [TestFixture]
     public class SceneCatalogImporterFixture : CoreTest<SceneCatalogImporter>
     {
-        private List<string> _libraryIds;
+        private List<string> _sceneForeignIds;
         private List<string> _performerIds;
         private List<ImportListExclusion> _exclusions;
         private Func<bool> _keepGoing;
@@ -25,12 +25,13 @@ namespace NzbDrone.Core.Test.MovieTests
         [SetUp]
         public void Setup()
         {
-            _libraryIds = new List<string>();
             _performerIds = new List<string>();
             _exclusions = new List<ImportListExclusion>();
             _keepGoing = () => true;
 
-            Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieStashIds()).Returns(() => _libraryIds);
+            _sceneForeignIds = new List<string>();
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllSceneForeignIds()).Returns(() => _sceneForeignIds);
             Mocker.GetMock<IPerformerService>().Setup(s => s.AllPerformerForeignIds()).Returns(() => _performerIds);
             Mocker.GetMock<IImportListExclusionService>().Setup(s => s.GetAllExclusions()).Returns(() => _exclusions);
 
@@ -103,7 +104,7 @@ namespace NzbDrone.Core.Test.MovieTests
         [Test]
         public void should_skip_scenes_already_in_library_or_excluded()
         {
-            _libraryIds.Add("a");
+            _sceneForeignIds.Add("a");
             _exclusions.Add(new ImportListExclusion { ForeignId = "b" });
 
             GivenPages(Page(ScenePageStatus.Complete, 3, Item("a", "pa"), Item("b", "pb"), Item("c", "pc")));
@@ -114,6 +115,32 @@ namespace NzbDrone.Core.Test.MovieTests
             Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "c" })), true, true), Times.Once());
             Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.PrefetchPerformers(It.Is<IEnumerable<string>>(p => p.Contains("pa") || p.Contains("pb"))), Times.Never());
             Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.PrefetchPerformers(It.Is<IEnumerable<string>>(p => p.SequenceEqual(new[] { "pc" }))), Times.Once());
+        }
+
+        [Test]
+        public void should_skip_scenes_already_in_library_when_source_is_tpdb()
+        {
+            var tpdbId = "3f2b1c9e-0000-4000-8000-000000000001";
+            _sceneForeignIds.Add(tpdbId);
+
+            GivenPages(Page(ScenePageStatus.Complete, 2, Item(tpdbId), Item("3f2b1c9e-0000-4000-8000-000000000002")));
+
+            var result = Import();
+
+            result.Should().Be(1);
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "3f2b1c9e-0000-4000-8000-000000000002" })), true, true), Times.Once());
+        }
+
+        [Test]
+        public void should_import_undated_tpdb_scene()
+        {
+            GivenPages(Page(ScenePageStatus.Complete, 1, new ScenePageItem { SceneId = "undated", PerformerIds = new List<string>() }));
+
+            // The page item carries no date; the stub has none either and is added as-is for the inline refresh to fill in.
+            var result = Import();
+
+            result.Should().Be(1);
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "undated" })), true, true), Times.Once());
         }
 
         [Test]
@@ -237,7 +264,7 @@ namespace NzbDrone.Core.Test.MovieTests
         [Test]
         public void should_evict_prefetched_items_even_when_the_page_has_nothing_new()
         {
-            _libraryIds.Add("a");
+            _sceneForeignIds.Add("a");
             GivenPages(Page(ScenePageStatus.Complete, 1, Item("a")));
 
             Import();

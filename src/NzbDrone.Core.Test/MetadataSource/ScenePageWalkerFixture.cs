@@ -112,6 +112,47 @@ namespace NzbDrone.Core.Test.MetadataSource
             result.Pages.Should().Be(1);
         }
 
+        private static ScenePage Building(TimeSpan retryAfter)
+        {
+            return new ScenePage
+            {
+                Status = ScenePageStatus.Building,
+                RetryAfter = retryAfter,
+                Items = new List<ScenePageItem>()
+            };
+        }
+
+        [Test]
+        public void should_wait_out_building_then_walk_all_pages()
+        {
+            var result = Walk((cursor, call) => cursor switch
+            {
+                null when call <= 2 => Building(TimeSpan.FromSeconds(5)),
+                null => Page(ScenePageStatus.Complete, "a", "p1"),
+                _ => Page(ScenePageStatus.Complete, null, "p2")
+            });
+
+            _pacer.Sleeps.Should().Equal(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            _requested.Should().Equal(null, null, null, "a");
+            _handled.Select(p => p.Items[0].SceneId).Should().Equal("p1", "p2");
+            result.Pages.Should().Be(2);
+            result.GaveUp.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_give_up_after_build_timeout()
+        {
+            var result = Walk((cursor, _) => cursor == null
+                ? Page(ScenePageStatus.Complete, "a", "p1")
+                : Building(TimeSpan.FromMinutes(5)));
+
+            result.GaveUp.Should().Equal("cursor:a");
+            _handled.Should().HaveCount(1);
+            result.Pages.Should().Be(1);
+            _requested.Count(c => c == "a").Should().Be(4);
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
         [Test]
         public void should_give_up_on_a_page_after_five_minutes_without_progress()
         {

@@ -91,5 +91,20 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
 
             _movieRepositoryMock.Verify(r => r.FindByStudioAndDate(studioId, releaseDate), Times.Once);
         }
+
+        [Test]
+        public void should_find_scene_by_tpdb_uuid_in_title()
+        {
+            // The parser puts any UUID found in the title into StashId; under TPDB that is the scene's ForeignId.
+            var tpdbId = "3f2b1c9e-0000-4000-8000-000000000001";
+            var scene = new Movie { ForeignId = tpdbId };
+
+            _movieRepositoryMock.Setup(r => r.FindByForeignId(tpdbId)).Returns(scene);
+
+            var result = _movieService.FindScene(new ParsedMovieInfo { StashId = tpdbId });
+
+            Assert.That(result, Is.SameAs(scene));
+            _studioServiceMock.Verify(s => s.FindAllByTitle(It.IsAny<string>()), Times.Never);
+        }
     }
 }

@@ -38,6 +38,7 @@ namespace NzbDrone.Core.MetadataSource
     public class ScenePageWalker : IScenePageWalker
     {
         public static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(5);
+        public static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(15);
 
         private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
@@ -108,14 +109,30 @@ namespace NzbDrone.Core.MetadataSource
             return result;
         }
 
-        // Returns null when throttling has outlasted StallTimeout.
+        // Returns null when throttling has outlasted StallTimeout or the catalogue is still building after BuildTimeout.
+        // A Building page carries no items, so it is waited out in place and never reaches handlePage or the revisit list.
         private ScenePage FetchUnthrottled(Func<string, ScenePage> fetchPage, string cursor)
         {
             var throttledSince = (DateTime?)null;
+            var buildingSince = (DateTime?)null;
 
             while (true)
             {
                 var page = fetchPage(cursor);
+
+                if (page.Status == ScenePageStatus.Building)
+                {
+                    buildingSince ??= _pacer.UtcNow;
+
+                    if (_pacer.UtcNow - buildingSince.Value >= BuildTimeout)
+                    {
+                        _logger.Warn("Skyhook was still building the catalogue for scene page cursor '{0}' after {1}; giving up until the next sync", cursor, BuildTimeout);
+                        return null;
+                    }
+
+                    _pacer.Sleep(page.RetryAfter);
+                    continue;
+                }
 
                 if (page.Status != ScenePageStatus.Throttled)
                 {
@@ -152,7 +169,7 @@ namespace NzbDrone.Core.MetadataSource
 
                 var page = fetchPage(cursor);
 
-                if (page.Status != ScenePageStatus.Throttled)
+                if (page.Status != ScenePageStatus.Throttled && page.Status != ScenePageStatus.Building)
                 {
                     handlePage(page);
 

@@ -41,6 +41,7 @@ namespace NzbDrone.Core.Movies
         List<int> AllMovieTmdbIds();
         List<string> AllMovieTpdbIds();
         List<string> AllMovieStashIds();
+        List<string> AllSceneForeignIds();
         List<string> AllMovieForeignIds();
         Dictionary<int, List<int>> AllMovieTags();
         bool ExistsByMetadataId(int metadataId);
@@ -425,6 +426,16 @@ namespace NzbDrone.Core.Movies
             using (var conn = _database.OpenConnection())
             {
                 return conn.Query<string>("SELECT \"StashId\" FROM \"MovieMetadata\" JOIN \"Movies\" ON (\"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\") WHERE \"StashId\" IS NOT NULL").ToList();
+            }
+        }
+
+        public List<string> AllSceneForeignIds()
+        {
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<string>(
+                    "SELECT \"MovieMetadata\".\"ForeignId\" FROM \"MovieMetadata\" JOIN \"Movies\" ON (\"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\") WHERE \"MovieMetadata\".\"ItemType\" = @ItemType",
+                    new { ItemType = (int)ItemType.Scene }).ToList();
             }
         }
 
