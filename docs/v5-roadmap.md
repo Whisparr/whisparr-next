@@ -185,10 +185,11 @@ B and D can run in parallel. G comes last because it uses all the others.
     `WhisparrCloudRequestBuilder.cs:25`.
   - The `ConfigFileProvider.cs:188-202` guard rejects saved v3/v4 values.
 
-### B. Skyhook v5 (`~/Git/Whisparr-Eros-Metadata`, branch v4)
+### B. Skyhook v5 (`~/Git/Whisparr-Eros-Metadata`, branches v4 and v5)
 
-plz12345 commits directly on this repo, so leave the work uncommitted until a prod push
-is called.
+Changes land by PR, after a local Docker test. B1 went to `v4`. B2 onward goes to `v5`,
+which was cut from `v4`'s tip and builds its own `:v5` image. Fixes made on `v4` are
+merged forward into `v5`.
 
 **Routing:**
 - A proxy rule strips `/v5` the same way `/v4` is stripped, so every existing route is
@@ -213,15 +214,39 @@ is called.
   paging before it's returned.
 - **Performers:** `POST performer/bulk` (by IDs) for deferred performer hydration.
 
-**TPDB scene path:**
-- Cache tables keyed by TPDB UUID: `tpdbscenecache`, `tpdbsitecache`,
-  `tpdbperformercache`.
-- Routes: `tpdb/scene|site|performer/{uuid}`, search, and `tpdb/site|performer/{uuid}/
-  scenes/full`.
-- A TPDB `/changes` loop next to the movie loop in `CacheRefreshService`.
-- **Reuse the v2 Skyhook's TPDB scene/site client and mapping code**
-  (`~/Git/WhisparrAPI.Metadata` `TPDbProxy.cs`).
-- **Accept numeric TPDB IDs and resolve them to UUIDs.** The v2 seed relies on this.
+**TPDB scene path (B2): built** on Eros-Metadata branch `v5`, by PR from `v5-tpdb-scenes`.
+- **Deployment:** v5 runs as its own container sharing the v4 database; host details live
+  outside the repo.
+  - Per-loop switches under `Caching:Loops` (`StashDb`, `Tmdb`, `TpdbMovies`,
+    `ClientAnalytics`, `TpdbScenes`). All default to today's behaviour, and `TpdbScenes`
+    defaults to off.
+  - The v5 container turns the other four off and `TpdbScenes` on, so v4 keeps the
+    StashDB/TMDB/TPDB-movie loops and v5 runs only the TPDB scene loops.
+- **Storage:** migration **100** adds `tpdbscenecache`, `tpdbsitecache`, `tpdbperformercache`
+  and `tpdbidmap` (numeric id ↔ UUID). It only creates tables. v5-only migrations start at
+  100 so v4 can keep using 15+, and v4 boots cleanly with 100 applied.
+- **Routes:**
+  - `tpdb/scene|site|performer/{uuid}` and `tpdb/scene|site|performer/search?q=`.
+  - `tpdb/site|performer/{uuid}/scenes/full`, on B1's paging contract. The 202 body adds
+    `Building: true` while the key list is still being built.
+  - `POST tpdb/performer/bulk`.
+  - `POST tpdb/resolve` with `{Kind, Ids}`, up to 1000 numeric ids. It answers mapped ids
+    at once and resolves up to 100 misses per call in the background. It returns 202 with
+    the partial map until every id is mapped or known to be missing, then 200.
+- **Ids:** every TPDB entity carries `ForeignIds.TpdbId` (UUID) and `ForeignIds.TpdbNumericId`
+  (the numeric id v2 stored), so the v2 seed can match without a call per scene.
+- **Undated TPDB scenes** are kept and sort first. StashDB still drops them.
+- **The key fetch is the catalogue fetch:** paging a TPDB site's scenes 100 at a time also
+  caches every scene. The first caller waits at most 5 s, then gets 202 while the build
+  finishes in the background. A failed build backs off for 60 s (503) instead of
+  restarting on every poll.
+- **Loops:** a TPDB scene `/changes` feed (refreshes only scenes already cached), plus
+  stale-row loops for scenes, sites and performers. Each refresh purges its
+  `tpdb/...` route on every Cloudflare site.
+- **Measured locally** on Brazzers Exxtra (4,037 scenes, `limit=1000`):
+  - cold: 5 pages, 19 × 202, 100 s;
+  - warm: 0.3 s, all 200s, 4,037/4,037 unique.
+- **Later:** JAV comes to v5 as its own feature across the v5 client and v5 Skyhook.
 
 **Fingerprints in the cache:**
 - Fetch scene hashes during normal hydration and the refresh loops.
