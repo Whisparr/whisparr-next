@@ -101,6 +101,9 @@ namespace NzbDrone.Core.Movies
     {
         Tmdb,
         Stash,
-        TpdbMovie
+        TpdbMovie,
+
+        // Appended so stored values (an int column) keep their numbers.
+        TpdbScene
     }
 }

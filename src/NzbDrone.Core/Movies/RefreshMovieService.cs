@@ -300,7 +300,7 @@ namespace NzbDrone.Core.Movies
                 {
                     return _movieInfo.GetTpdbMovieInfo(movie.TpdbId);
                 }
-                else if (movie.MovieMetadata.Value.MetadataSource == MetadataSource.Stash)
+                else if (movie.MovieMetadata.Value.MetadataSource is MetadataSource.Stash or MetadataSource.TpdbScene)
                 {
                     return _movieInfo.GetSceneInfo(movie.ForeignId);
                 }

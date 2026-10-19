@@ -294,5 +294,21 @@ namespace NzbDrone.Core.Test.MovieTests
 
             ExceptionVerification.ExpectedErrors(1);
         }
+
+        [Test]
+        public void should_refresh_tpdb_scene_through_get_scene_info()
+        {
+            var scenes = GivenNewScenes(1);
+            var metadata = scenes[0].MovieMetadata.Value;
+
+            // A TPDB scene keys by its bare UUID, which TpdbId also holds; it must not fall through to the TPDB movie lookup.
+            metadata.MetadataSource = Core.Movies.MetadataSource.TpdbScene;
+            metadata.TpdbId = metadata.ForeignId;
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(metadata.ForeignId), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetTpdbMovieInfo(It.IsAny<string>()), Times.Never());
+        }
     }
 }
