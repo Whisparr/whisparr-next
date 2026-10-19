@@ -305,6 +305,34 @@ namespace NzbDrone.Core.Test.StudioTests
         }
 
         [Test]
+        public void should_add_no_tmdb_movies_for_a_tpdb_studio()
+        {
+            var studio = GivenStudio(true);
+            var addedMovies = GivenAddedMoviesAreCaptured();
+
+            GivenGlobalNewItemMonitoring(true);
+
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrMovieMetadataSource)
+                .Returns(MovieMetadataType.TMDB);
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrSceneMetadataSource)
+                .Returns(SceneMetadataType.Tpdb);
+
+            // TPDB works carry TPDB movies only.
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetStudioWorks(studio.ForeignId))
+                .Returns((
+                    new List<string>(),
+                    new List<string> { "654321" },
+                    new List<int>()));
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            addedMovies.Should().BeEmpty();
+        }
+
+        [Test]
         public void should_still_discover_and_add_works_when_monitor_new_items_is_false()
         {
             var studio = GivenStudio(false);

@@ -45,7 +45,7 @@ namespace NzbDrone.Core.Test.MovieTests
 
         private static ScenePageItem Item(string id, params string[] performers)
         {
-            return new ScenePageItem { StashId = id, PerformerStashIds = performers.ToList() };
+            return new ScenePageItem { SceneId = id, PerformerIds = performers.ToList() };
         }
 
         private static ScenePage Page(ScenePageStatus status, int total, params ScenePageItem[] items)

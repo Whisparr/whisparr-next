@@ -8,6 +8,9 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Resource
         public string NextCursor { get; set; }
         public List<MovieResource> Items { get; set; }
         public List<string> Pending { get; set; }
+
+        // A 202 while Skyhook first builds an owner's catalogue: no items and no cursor yet.
+        public bool Building { get; set; }
     }
 
     public class PerformerBulkResource

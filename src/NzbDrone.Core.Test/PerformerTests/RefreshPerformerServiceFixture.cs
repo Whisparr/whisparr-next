@@ -368,6 +368,34 @@ namespace NzbDrone.Core.Test.PerformerTests
         }
 
         [Test]
+        public void should_add_no_tmdb_movies_for_a_tpdb_performer()
+        {
+            var performer = GivenPerformer(true);
+            var addedMovies = GivenAddedMoviesAreCaptured();
+
+            GivenGlobalNewItemMonitoring(true);
+
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrMovieMetadataSource)
+                .Returns(MovieMetadataType.TMDB);
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrSceneMetadataSource)
+                .Returns(SceneMetadataType.Tpdb);
+
+            // TPDB works carry TPDB movies only.
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetPerformerWorks(performer.ForeignId))
+                .Returns((
+                    new List<string>(),
+                    new List<string> { "654321" },
+                    new List<int>()));
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            addedMovies.Should().BeEmpty();
+        }
+
+        [Test]
         public void should_still_discover_and_add_works_when_monitor_new_items_is_false()
         {
             var performer = GivenPerformer(false);

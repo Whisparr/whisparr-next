@@ -208,6 +208,12 @@ namespace NzbDrone.Core.Movies.Performers
 
                 if (_configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
                 {
+                    // TPDB works list TPDB movies only, so there are no TMDb ids to add.
+                    if (_configService.WhisparrSceneMetadataSource == SceneMetadataType.Tpdb)
+                    {
+                        _logger.Info("Movie sync for TPDB-sourced studios and performers needs TPDB as the movie source");
+                    }
+
                     var tmbdId = 0;
                     var existingMovies = _movieService.AllMovieTmdbIds();
                     var excludedMovies = _importListExclusionService.GetAllExclusions().Select(e => int.TryParse(e.ForeignId, out tmbdId)).Select(e => tmbdId).Where(e => e != 0).ToList();

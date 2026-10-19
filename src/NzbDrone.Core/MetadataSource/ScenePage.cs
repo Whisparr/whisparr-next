@@ -7,13 +7,15 @@ namespace NzbDrone.Core.MetadataSource
     {
         Complete,
         Pending,
-        Throttled
+        Throttled,
+        Building
     }
 
+    // Ids are in the locked scene source: StashDB ids or TPDB UUIDs.
     public class ScenePageItem
     {
-        public string StashId { get; set; }
-        public List<string> PerformerStashIds { get; set; }
+        public string SceneId { get; set; }
+        public List<string> PerformerIds { get; set; }
     }
 
     public class ScenePage

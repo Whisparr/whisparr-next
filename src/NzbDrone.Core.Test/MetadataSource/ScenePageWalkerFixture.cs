@@ -48,7 +48,7 @@ namespace NzbDrone.Core.Test.MetadataSource
                 NextCursor = next,
                 Pending = pending.ToList(),
                 RetryAfter = TimeSpan.FromSeconds(10),
-                Items = new List<ScenePageItem> { new() { StashId = tag ?? "item" } }
+                Items = new List<ScenePageItem> { new() { SceneId = tag ?? "item" } }
             };
         }
 
@@ -78,7 +78,7 @@ namespace NzbDrone.Core.Test.MetadataSource
                 _ => Page(ScenePageStatus.Complete, null, "p3")
             });
 
-            _handled.Select(p => p.Items[0].StashId).Should().Equal("p1", "p2", "p3");
+            _handled.Select(p => p.Items[0].SceneId).Should().Equal("p1", "p2", "p3");
             result.Pages.Should().Be(3);
             result.GaveUp.Should().BeEmpty();
             _pacer.Sleeps.Should().BeEmpty();
@@ -94,7 +94,7 @@ namespace NzbDrone.Core.Test.MetadataSource
                 _ => Page(ScenePageStatus.Complete, null, "p2")
             });
 
-            _handled.Select(p => p.Items[0].StashId).Should().Equal("p1-202", "p2", "p1-200");
+            _handled.Select(p => p.Items[0].SceneId).Should().Equal("p1-202", "p2", "p1-200");
         }
 
         [Test]
@@ -199,7 +199,7 @@ namespace NzbDrone.Core.Test.MetadataSource
                 _ => Page(ScenePageStatus.Complete, "a", "p2")
             });
 
-            _handled.Select(p => p.Items[0].StashId).Should().Equal("p1-202", "p2", "p1-200");
+            _handled.Select(p => p.Items[0].SceneId).Should().Equal("p1-202", "p2", "p1-200");
             result.GaveUp.Should().BeEmpty();
             ExceptionVerification.ExpectedWarns(1);
         }

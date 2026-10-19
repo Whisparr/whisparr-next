@@ -69,8 +69,8 @@ namespace NzbDrone.Core.Movies
                     }
 
                     var newItems = items
-                        .Where(i => !library.Contains(i.StashId) && !excluded.Contains(i.StashId))
-                        .GroupBy(i => i.StashId)
+                        .Where(i => !library.Contains(i.SceneId) && !excluded.Contains(i.SceneId))
+                        .GroupBy(i => i.SceneId)
                         .Select(g => g.First())
                         .ToList();
 
@@ -81,7 +81,7 @@ namespace NzbDrone.Core.Movies
 
                     var knownPerformers = new HashSet<string>(_performerService.AllPerformerForeignIds());
                     var unknownPerformers = newItems
-                        .SelectMany(i => i.PerformerStashIds ?? new List<string>())
+                        .SelectMany(i => i.PerformerIds ?? new List<string>())
                         .Where(id => !knownPerformers.Contains(id))
                         .Distinct()
                         .ToList();
@@ -92,7 +92,7 @@ namespace NzbDrone.Core.Movies
                         _movieInfo.PrefetchPerformers(unknownPerformers);
                     }
 
-                    var added = _addMovieService.AddMovies(newItems.Select(i => buildStub(i.StashId)).ToList(), true, refreshInline: true);
+                    var added = _addMovieService.AddMovies(newItems.Select(i => buildStub(i.SceneId)).ToList(), true, refreshInline: true);
 
                     foreach (var movie in added)
                     {
@@ -106,7 +106,7 @@ namespace NzbDrone.Core.Movies
                 {
                     // The proxy keeps page items and bulk performers only so the inline refresh can read them;
                     // evict them as soon as the page is done so memory stays at about one page.
-                    _movieInfo.ForgetPrefetched(items.Select(i => i.StashId), prefetchedPerformers);
+                    _movieInfo.ForgetPrefetched(items.Select(i => i.SceneId), prefetchedPerformers);
                 }
             }
 

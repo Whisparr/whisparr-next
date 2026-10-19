@@ -8,6 +8,7 @@ using NUnit.Framework;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Serializer;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook;
@@ -25,6 +26,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
 
         private HttpRequest _pageRequest;
         private List<string> _bulkBodies;
+        private List<HttpRequest> _bulkRequests;
 
         [SetUp]
         public void Setup()
@@ -34,6 +36,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
 
             _pageRequest = null;
             _bulkBodies = new List<string>();
+            _bulkRequests = new List<HttpRequest>();
         }
 
         [Test]
@@ -70,9 +73,9 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             page.Status.Should().Be(ScenePageStatus.Complete);
             page.Total.Should().Be(12);
             page.NextCursor.Should().Be("next");
-            page.Items.Select(i => i.StashId).Should().Equal("a", "b");
-            page.Items[0].PerformerStashIds.Should().Equal("p1", "p2");
-            page.Items[1].PerformerStashIds.Should().Equal("p3");
+            page.Items.Select(i => i.SceneId).Should().Equal("a", "b");
+            page.Items[0].PerformerIds.Should().Equal("p1", "p2");
+            page.Items[1].PerformerIds.Should().Equal("p3");
         }
 
         [Test]
@@ -94,7 +97,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             page.Status.Should().Be(ScenePageStatus.Pending);
             page.RetryAfter.Should().Be(TimeSpan.FromSeconds(7));
             page.Pending.Should().Equal("x");
-            page.Items.Select(i => i.StashId).Should().Equal("a");
+            page.Items.Select(i => i.SceneId).Should().Equal("a");
             page.NextCursor.Should().Be("next");
         }
 
@@ -309,6 +312,80 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void should_page_tpdb_site_scenes_from_tpdb_route()
+        {
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            GivenPage(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource> { TpdbScene("ta", "tp1", "tp2") } });
+
+            var page = Subject.GetStudioScenePage(StudioId, null);
+
+            _pageRequest.Url.Path.Should().EndWith($"tpdb/site/{StudioId}/scenes/full");
+            page.Items.Select(i => i.SceneId).Should().Equal("ta");
+            page.Items[0].PerformerIds.Should().Equal("tp1", "tp2");
+
+            // The page prefetch is keyed by the TPDB UUID too, so the inline refresh finds it.
+            Subject.GetSceneInfo("ta").Item1.ForeignId.Should().Be("ta");
+            Mocker.GetMock<IHttpClient>().Verify(v => v.Get<MovieResource>(It.IsAny<HttpRequest>()), Times.Never());
+        }
+
+        [Test]
+        public void should_page_tpdb_performer_scenes_from_tpdb_route()
+        {
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            GivenPage(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource>() });
+
+            Subject.GetPerformerScenePage("tp1", null);
+
+            _pageRequest.Url.Path.Should().EndWith("tpdb/performer/tp1/scenes/full");
+        }
+
+        [Test]
+        public void should_drop_page_scenes_without_a_locked_source_id()
+        {
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            GivenPage(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource> { Scene("stash-only", "p1"), TpdbScene("ta") } });
+
+            Subject.GetStudioScenePage(StudioId, null).Items.Select(i => i.SceneId).Should().Equal("ta");
+        }
+
+        [Test]
+        public void should_map_building_202_to_building_status()
+        {
+            GivenPage(HttpStatusCode.Accepted, new ScenePageResource { Building = true }, new HttpHeader { { "Retry-After", "12" } });
+
+            var page = Subject.GetStudioScenePage(StudioId, null);
+
+            page.Status.Should().Be(ScenePageStatus.Building);
+            page.RetryAfter.Should().Be(TimeSpan.FromSeconds(12));
+            page.Items.Should().BeEmpty();
+            page.NextCursor.Should().BeNull();
+        }
+
+        [Test]
+        public void should_default_building_retry_after_to_five_seconds()
+        {
+            GivenPage(HttpStatusCode.Accepted, new ScenePageResource { Building = true });
+
+            var page = Subject.GetStudioScenePage(StudioId, null);
+
+            page.Status.Should().Be(ScenePageStatus.Building);
+            page.RetryAfter.Should().Be(TimeSpan.FromSeconds(5));
+        }
+
+        [Test]
+        public void should_prefetch_tpdb_performers_through_tpdb_bulk()
+        {
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            GivenBulk(_ => new PerformerBulkResource { Performers = new List<PerformerResource> { TpdbPerformer("tp1") } });
+
+            Subject.PrefetchPerformers(new[] { "tp1" }).Should().BeEmpty();
+
+            _bulkRequests.Should().ContainSingle().Which.Url.Path.Should().EndWith("tpdb/performer/bulk");
+            Subject.GetPerformerInfo("tp1").ForeignId.Should().Be("tp1");
+            Mocker.GetMock<IHttpClient>().Verify(v => v.Get<PerformerResource>(It.IsAny<HttpRequest>()), Times.Never());
+        }
+
+        [Test]
         public void should_serve_performer_info_from_prefetch_without_http()
         {
             GivenBulk(_ => new PerformerBulkResource { Performers = new List<PerformerResource> { Performer("p1") } });
@@ -337,6 +414,37 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
                 Tattoos = new List<string>(),
                 Piercings = new List<string>()
             };
+        }
+
+        // Both ids are set, so a test proves which one the locked source picked.
+        private static PerformerResource TpdbPerformer(string tpdbId)
+        {
+            var performer = Performer($"stash-{tpdbId}");
+            performer.ForeignIds.TpdbId = tpdbId;
+
+            return performer;
+        }
+
+        private static MovieResource TpdbScene(string tpdbId, params string[] performerTpdbIds)
+        {
+            var scene = Scene($"stash-{tpdbId}");
+            scene.ForeignIds.TpdbId = tpdbId;
+            scene.Studio.ForeignIds.TpdbId = $"tpdb-{StudioId}";
+            scene.Credits = performerTpdbIds.Select((p, i) => new CastResource
+            {
+                Order = i,
+                PersonName = $"Name {p}",
+                Performer = TpdbPerformer(p)
+            }).ToList();
+
+            return scene;
+        }
+
+        private void GivenSceneSource(SceneMetadataType source)
+        {
+            Mocker.GetMock<IConfigService>()
+                .SetupGet(s => s.WhisparrSceneMetadataSource)
+                .Returns(source);
         }
 
         private static MovieResource Scene(string stashId, params string[] performerIds)
@@ -394,6 +502,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
                 {
                     var body = System.Text.Encoding.UTF8.GetString(request.ContentData);
                     _bulkBodies.Add(body);
+                    _bulkRequests.Add(request);
 
                     return Response<PerformerBulkResource>(request, HttpStatusCode.OK, respond(Json.Deserialize<List<string>>(body)).ToJson(), new HttpHeader());
                 });
