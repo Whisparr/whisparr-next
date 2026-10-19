@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 
 using FizzWare.NBuilder;
@@ -7,6 +8,10 @@ using FizzWare.NBuilder;
 using FluentAssertions;
 
 using Moq;
+
+using NLog;
+using NLog.Config;
+using NLog.Targets;
 
 using NUnit.Framework;
 
@@ -305,31 +310,72 @@ namespace NzbDrone.Core.Test.StudioTests
         }
 
         [Test]
-        public void should_add_no_tmdb_movies_for_a_tpdb_studio()
+        public void should_log_the_tpdb_movie_sync_limit_once_per_refresh()
         {
             var studio = GivenStudio(true);
-            var addedMovies = GivenAddedMoviesAreCaptured();
+            var logs = GivenLogsAreCaptured();
 
-            GivenGlobalNewItemMonitoring(true);
+            GivenSources(SceneMetadataType.Tpdb, MovieMetadataType.TMDB);
 
-            Mocker.GetMock<IConfigService>()
-                .Setup(s => s.WhisparrMovieMetadataSource)
-                .Returns(MovieMetadataType.TMDB);
-            Mocker.GetMock<IConfigService>()
-                .Setup(s => s.WhisparrSceneMetadataSource)
-                .Returns(SceneMetadataType.Tpdb);
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { _successfulStudio.Id, studio.Id }));
 
-            // TPDB works carry TPDB movies only.
+            logs.Logs.Count(l => l == TpdbMovieSync.NeedsTpdbMovieSourceMessage).Should().Be(1);
+        }
+
+        [Test]
+        public void should_skip_the_works_call_but_keep_scene_sync_for_tpdb_studios_without_tpdb_movies()
+        {
+            var studio = GivenStudio(true);
+
+            GivenSources(SceneMetadataType.Tpdb, MovieMetadataType.TMDB);
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { _successfulStudio.Id, studio.Id }));
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Verify(s => s.GetStudioWorks(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Exactly(2));
+        }
+
+        [Test]
+        public void should_fetch_works_for_tpdb_studios_with_tpdb_movies()
+        {
+            var studio = GivenStudio(true);
+            var logs = GivenLogsAreCaptured();
+
+            GivenSources(SceneMetadataType.Tpdb, MovieMetadataType.TPDB);
+
             Mocker.GetMock<IProvideMovieInfo>()
                 .Setup(s => s.GetStudioWorks(studio.ForeignId))
-                .Returns((
-                    new List<string>(),
-                    new List<string> { "654321" },
-                    new List<int>()));
+                .Returns((new List<string>(), new List<string>(), new List<int>()));
 
-            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { _successfulStudio.Id, studio.Id }));
 
-            addedMovies.Should().BeEmpty();
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetStudioWorks(_successfulStudio.ForeignId), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetStudioWorks(studio.ForeignId), Times.Once());
+            logs.Logs.Should().NotContain(TpdbMovieSync.NeedsTpdbMovieSourceMessage);
+        }
+
+        private void GivenSources(SceneMetadataType sceneSource, MovieMetadataType movieSource)
+        {
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrSceneMetadataSource)
+                .Returns(sceneSource);
+            Mocker.GetMock<IConfigService>()
+                .Setup(s => s.WhisparrMovieMetadataSource)
+                .Returns(movieSource);
+        }
+
+        // Info lines don't reach ExceptionVerification, so the subject logs to a memory target instead.
+        private MemoryTarget GivenLogsAreCaptured()
+        {
+            var target = new MemoryTarget { Layout = "${message}" };
+            var config = new LoggingConfiguration();
+            config.AddRuleForAllLevels(target);
+
+            Mocker.SetConstant(new LogFactory { Configuration = config }.GetLogger("test"));
+
+            return target;
         }
 
         [Test]

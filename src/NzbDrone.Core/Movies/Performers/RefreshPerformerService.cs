@@ -149,7 +149,7 @@ namespace NzbDrone.Core.Movies.Performers
             return performer;
         }
 
-        private void SyncPerformerItems(Performer performer)
+        private void SyncPerformerItems(Performer performer, bool syncMovies)
         {
             if (!performer.Monitored && !performer.MoviesMonitored)
             {
@@ -185,7 +185,7 @@ namespace NzbDrone.Core.Movies.Performers
                     () => _performerService.FindByForeignId(performer.ForeignId) is { Monitored: true });
             }
 
-            if (performer.MoviesMonitored)
+            if (performer.MoviesMonitored && syncMovies)
             {
                 (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) performerWork;
 
@@ -208,12 +208,6 @@ namespace NzbDrone.Core.Movies.Performers
 
                 if (_configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
                 {
-                    // TPDB works list TPDB movies only, so there are no TMDb ids to add.
-                    if (_configService.WhisparrSceneMetadataSource == SceneMetadataType.Tpdb)
-                    {
-                        _logger.Info("Movie sync for TPDB-sourced studios and performers needs TPDB as the movie source");
-                    }
-
                     var tmbdId = 0;
                     var existingMovies = _movieService.AllMovieTmdbIds();
                     var excludedMovies = _importListExclusionService.GetAllExclusions().Select(e => int.TryParse(e.ForeignId, out tmbdId)).Select(e => tmbdId).Where(e => e != 0).ToList();
@@ -322,6 +316,14 @@ namespace NzbDrone.Core.Movies.Performers
 
         public void Execute(RefreshPerformersCommand message)
         {
+            // Decided once per refresh, so the reason is logged once rather than for every performer.
+            var syncMovies = !TpdbMovieSync.IsBlocked(_configService);
+
+            if (!syncMovies)
+            {
+                _logger.Info(TpdbMovieSync.NeedsTpdbMovieSourceMessage);
+            }
+
             if (message.PerformerIds.Any())
             {
                 foreach (var performerId in message.PerformerIds)
@@ -352,7 +354,7 @@ namespace NzbDrone.Core.Movies.Performers
                     // either one drops every performer the user selected after the one that failed.
                     try
                     {
-                        SyncPerformerItems(performer);
+                        SyncPerformerItems(performer, syncMovies);
                     }
                     catch (Exception e)
                     {
@@ -383,7 +385,7 @@ namespace NzbDrone.Core.Movies.Performers
                                 RefreshPerformerInfo(performer.Id);
                             }
 
-                            SyncPerformerItems(performer);
+                            SyncPerformerItems(performer, syncMovies);
                         }
                         catch (MovieNotFoundException ex)
                         {

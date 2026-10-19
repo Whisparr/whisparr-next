@@ -100,7 +100,7 @@ namespace NzbDrone.Core.Movies.Studios
             return studio;
         }
 
-        private void SyncStudioItems(Studio studio)
+        private void SyncStudioItems(Studio studio, bool syncMovies)
         {
             if (!studio.Monitored && !studio.MoviesMonitored)
             {
@@ -136,7 +136,7 @@ namespace NzbDrone.Core.Movies.Studios
                     () => _studioService.FindByForeignId(studio.ForeignId) is { Monitored: true });
             }
 
-            if (studio.MoviesMonitored)
+            if (studio.MoviesMonitored && syncMovies)
             {
                 (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) studioWork;
 
@@ -157,12 +157,6 @@ namespace NzbDrone.Core.Movies.Studios
 
                 if (_configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
                 {
-                    // TPDB works list TPDB movies only, so there are no TMDb ids to add.
-                    if (_configService.WhisparrSceneMetadataSource == SceneMetadataType.Tpdb)
-                    {
-                        _logger.Info("Movie sync for TPDB-sourced studios and performers needs TPDB as the movie source");
-                    }
-
                     var moviesAdded = 0;
                     var tmbdId = 0;
                     var existingMovies = _movieService.AllMovieTmdbIds();
@@ -278,6 +272,14 @@ namespace NzbDrone.Core.Movies.Studios
 
         public void Execute(RefreshStudiosCommand message)
         {
+            // Decided once per refresh, so the reason is logged once rather than for every studio.
+            var syncMovies = !TpdbMovieSync.IsBlocked(_configService);
+
+            if (!syncMovies)
+            {
+                _logger.Info(TpdbMovieSync.NeedsTpdbMovieSourceMessage);
+            }
+
             if (message.StudioIds.Any())
             {
                 foreach (var studioId in message.StudioIds)
@@ -308,7 +310,7 @@ namespace NzbDrone.Core.Movies.Studios
                     // either one drops every studio the user selected after the one that failed.
                     try
                     {
-                        SyncStudioItems(studio);
+                        SyncStudioItems(studio, syncMovies);
                     }
                     catch (Exception e)
                     {
@@ -340,7 +342,7 @@ namespace NzbDrone.Core.Movies.Studios
                                 RefreshStudioInfo(studio.Id);
                             }
 
-                            SyncStudioItems(studio);
+                            SyncStudioItems(studio, syncMovies);
                         }
                         catch (MovieNotFoundException)
                         {
