@@ -43,6 +43,7 @@ namespace NzbDrone.Core.Movies
         private readonly IImportListExclusionService _importListExclusionService;
         private readonly IRootFolderService _rootFolderService;
         private readonly IConfigService _configService;
+        private readonly IMetadataSourceService _metadataSourceService;
         private readonly ITagRepository _tagRepository;
         private readonly Logger _logger;
 
@@ -56,9 +57,11 @@ namespace NzbDrone.Core.Movies
                                 IImportListExclusionService importListExclusionService,
                                 IRootFolderService rootFolderService,
                                 IConfigService configService,
+                                IMetadataSourceService metadataSourceService,
                                 ITagRepository tagRepository,
                                 Logger logger)
         {
+            _metadataSourceService = metadataSourceService;
             _movieService = movieService;
             _studioService = studioService;
             _performerService = performerService;
@@ -77,6 +80,8 @@ namespace NzbDrone.Core.Movies
         {
             Ensure.That(newMovie, () => newMovie).IsNotNull();
 
+            _metadataSourceService.EnsureLocked();
+
             newMovie = AddSkyhookData(newMovie);
             newMovie = SetPropertiesAndValidate(newMovie);
 
@@ -94,6 +99,8 @@ namespace NzbDrone.Core.Movies
 
         public List<Movie> AddMovies(List<Movie> newMovies, bool ignoreErrors = false, bool refreshInline = false)
         {
+            _metadataSourceService.EnsureLocked();
+
             var httpExceptionCount = 0;
             var added = DateTime.UtcNow;
             var moviesToAdd = new List<Movie>();

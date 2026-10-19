@@ -125,6 +125,9 @@ namespace NzbDrone.Core.Configuration
         int WhisparrFuzzyTitleMatchingThreshold { get; }
         bool WhisparrMonitorNewItems { get; set; }
         MovieMetadataType WhisparrMovieMetadataSource { get; }
+        SceneMetadataType WhisparrSceneMetadataSource { get; }
+        bool MetadataSourcesLocked { get; }
+        void LockMetadataSources(SceneMetadataType scene, MovieMetadataType movie);
         bool WhisparrValidateRuntime { get; }
         int WhisparrValidateRuntimeLimit { get; }
         int WhisparrFolderLimit { get; set; }

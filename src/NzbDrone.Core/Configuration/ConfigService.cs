@@ -21,6 +21,17 @@ namespace NzbDrone.Core.Configuration
 
     public class ConfigService : IConfigService
     {
+        private const string SceneSourceKey = "WhisparrSceneMetadataSource";
+        private const string MovieSourceKey = "WhisparrMovieMetadataSource";
+        private const string SourcesLockedKey = "MetadataSourcesLocked";
+
+        private static readonly HashSet<string> LockedSourceKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            SceneSourceKey,
+            MovieSourceKey,
+            SourcesLockedKey
+        };
+
         private readonly IConfigRepository _repository;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
@@ -54,6 +65,15 @@ namespace NzbDrone.Core.Configuration
         {
             var allWithDefaults = AllWithDefaults();
             var hasUpdated = false;
+
+            // The metadata sources are chosen once through the metadata source service, never through general config saves.
+            var droppedKeys = configValues.Keys.Where(k => LockedSourceKeys.Contains(k)).ToList();
+
+            if (droppedKeys.Any())
+            {
+                _logger.Debug("Ignoring metadata source keys in config save: {0}", string.Join(", ", droppedKeys));
+                configValues = configValues.Where(c => !LockedSourceKeys.Contains(c.Key)).ToDictionary(c => c.Key, c => c.Value);
+            }
 
             foreach (var configValue in configValues)
             {
@@ -609,9 +629,20 @@ namespace NzbDrone.Core.Configuration
 
         public MovieMetadataType WhisparrMovieMetadataSource
         {
-            get { return GetValueEnum("WhisparrMovieMetadataSource", MovieMetadataType.TMDB); }
+            get { return GetValueEnum(MovieSourceKey, MovieMetadataType.TMDB); }
 
-            set { SetValue("WhisparrMovieMetadataSource", value); }
+            set { SetValue(MovieSourceKey, value); }
+        }
+
+        public SceneMetadataType WhisparrSceneMetadataSource => GetValueEnum(SceneSourceKey, SceneMetadataType.StashDb);
+
+        public bool MetadataSourcesLocked => GetValueBoolean(SourcesLockedKey);
+
+        public void LockMetadataSources(SceneMetadataType scene, MovieMetadataType movie)
+        {
+            SetValue(SceneSourceKey, scene);
+            SetValue(MovieSourceKey, movie);
+            SetValue(SourcesLockedKey, true);
         }
 
         private string GetValue(string key)

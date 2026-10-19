@@ -73,6 +73,34 @@ namespace NzbDrone.Core.Test.Configuration
             Subject.WhisparrMonitorNewItems.Should().BeFalse();
         }
 
+        [Test]
+        public void should_not_save_source_keys_through_config_dictionary()
+        {
+            var dict = new Dictionary<string, object>
+            {
+                { "WhisparrSceneMetadataSource", "Tpdb" },
+                { "whisparrmoviemetadatasource", "TPDB" },
+                { "METADATASOURCESLOCKED", "True" }
+            };
+
+            Subject.SaveConfigDictionary(dict);
+
+            foreach (var key in new[] { "whisparrscenemetadatasource", "whisparrmoviemetadatasource", "metadatasourceslocked" })
+            {
+                Mocker.GetMock<IConfigRepository>().Verify(c => c.Upsert(key, It.IsAny<string>()), Times.Never());
+            }
+        }
+
+        [Test]
+        public void should_lock_metadata_sources_together()
+        {
+            Subject.LockMetadataSources(SceneMetadataType.Tpdb, MovieMetadataType.TPDB);
+
+            AssertUpsert("WhisparrSceneMetadataSource", "tpdb");
+            AssertUpsert("WhisparrMovieMetadataSource", "tpdb");
+            AssertUpsert("MetadataSourcesLocked", true);
+        }
+
         private void AssertUpsert(string key, object value)
         {
             Mocker.GetMock<IConfigRepository>().Verify(c => c.Upsert(key.ToLowerInvariant(), value.ToString()));

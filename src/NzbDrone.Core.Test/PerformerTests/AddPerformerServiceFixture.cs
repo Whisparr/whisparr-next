@@ -101,6 +101,26 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IPerformerService>().Verify(v => v.Update(It.IsAny<Performer>()), Times.Never());
         }
 
+        [Test]
+        public void should_lock_metadata_sources_once_when_adding_a_performer()
+        {
+            Subject.AddPerformer(GivenNewPerformer(true));
+
+            Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
+        [Test]
+        public void should_lock_metadata_sources_once_per_batch()
+        {
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.AllPerformerForeignIds())
+                  .Returns(new List<string>());
+
+            Subject.AddPerformers(new List<Performer> { GivenNewPerformer(true), GivenNewPerformer(true) });
+
+            Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
         private static Performer GivenNewPerformer(bool monitored)
         {
             return new Performer

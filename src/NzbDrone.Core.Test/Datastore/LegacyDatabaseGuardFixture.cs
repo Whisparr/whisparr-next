@@ -47,7 +47,7 @@ namespace NzbDrone.Core.Test.Datastore
         {
             using var connection = OpenRawConnection();
 
-            return connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"VersionInfo\" WHERE \"Version\" >= 300");
+            return connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"VersionInfo\" WHERE \"Version\" = 300");
         }
 
         [Test]
@@ -77,7 +77,7 @@ namespace NzbDrone.Core.Test.Datastore
         [Test]
         public void should_flag_a_database_with_later_migrations_but_no_v5_marker()
         {
-            Execute("UPDATE \"VersionInfo\" SET \"Version\" = 301 WHERE \"Version\" = 300");
+            Execute("UPDATE \"VersionInfo\" SET \"Version\" = 399 WHERE \"Version\" = 300");
 
             IsLegacy().Should().BeTrue();
         }

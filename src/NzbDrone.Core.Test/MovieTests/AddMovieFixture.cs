@@ -132,5 +132,45 @@ namespace NzbDrone.Core.Test.MovieTests
 
             ExceptionVerification.ExpectedErrors(1);
         }
+
+        [Test]
+        public void should_lock_metadata_sources_once_when_adding_a_movie()
+        {
+            var newMovie = new Movie
+            {
+                ForeignId = "1",
+                TmdbId = 1,
+                RootFolderPath = @"C:\Test\Movies"
+            };
+
+            GivenValidMovie(newMovie.TmdbId);
+            GivenValidPath();
+
+            Subject.AddMovie(newMovie);
+
+            Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
+        [Test]
+        public void should_lock_metadata_sources_once_per_batch()
+        {
+            var newMovies = new List<Movie>
+            {
+                new Movie { ForeignId = "1", TmdbId = 1, RootFolderPath = @"C:\Test\Movies" },
+                new Movie { ForeignId = "2", TmdbId = 2, RootFolderPath = @"C:\Test\Movies" }
+            };
+
+            GivenValidMovie(1);
+            GivenValidMovie(2);
+            GivenValidPath();
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.AllMovieForeignIds())
+                  .Returns(new List<string>());
+
+            Subject.AddMovies(newMovies);
+
+            Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
     }
 }

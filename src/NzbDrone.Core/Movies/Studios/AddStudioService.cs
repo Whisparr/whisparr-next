@@ -21,12 +21,15 @@ namespace NzbDrone.Core.Movies.Studios
     {
         private readonly IStudioService _studioService;
         private readonly IProvideMovieInfo _studioInfo;
+        private readonly IMetadataSourceService _metadataSourceService;
         private readonly Logger _logger;
 
         public AddStudioService(IStudioService studioService,
                                    IProvideMovieInfo studioInfo,
+                                   IMetadataSourceService metadataSourceService,
                                    Logger logger)
         {
+            _metadataSourceService = metadataSourceService;
             _studioService = studioService;
             _studioInfo = studioInfo;
             _logger = logger;
@@ -35,6 +38,8 @@ namespace NzbDrone.Core.Movies.Studios
         public Studio AddStudio(Studio newStudio, bool ignoreErrors = false)
         {
             Ensure.That(newStudio, () => newStudio).IsNotNull();
+
+            _metadataSourceService.EnsureLocked();
 
             var existingStudio = _studioService.FindByForeignId(newStudio.ForeignId);
 
@@ -67,6 +72,8 @@ namespace NzbDrone.Core.Movies.Studios
 
         public List<Studio> AddStudios(List<Studio> newStudios, bool ignoreErrors = false)
         {
+            _metadataSourceService.EnsureLocked();
+
             var added = DateTime.UtcNow;
             var studiosToAdd = new List<Studio>();
             var existingStudioForeignIds = new HashSet<string>(_studioService.AllStudioForeignIds());

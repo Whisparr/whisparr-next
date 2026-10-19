@@ -24,13 +24,16 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly IPerformerService _performerService;
         private readonly IProvideMovieInfo _performerInfo;
         private readonly IManageCommandQueue _commandQueueManager;
+        private readonly IMetadataSourceService _metadataSourceService;
         private readonly Logger _logger;
 
         public AddPerformerService(IPerformerService performerService,
                                    IProvideMovieInfo performerInfo,
                                    IManageCommandQueue commandQueueManager,
+                                   IMetadataSourceService metadataSourceService,
                                    Logger logger)
         {
+            _metadataSourceService = metadataSourceService;
             _performerService = performerService;
             _performerInfo = performerInfo;
             _commandQueueManager = commandQueueManager;
@@ -40,6 +43,8 @@ namespace NzbDrone.Core.Movies.Performers
         public Performer AddPerformer(Performer newPerformer, bool ignoreErrors = false)
         {
             Ensure.That(newPerformer, () => newPerformer).IsNotNull();
+
+            _metadataSourceService.EnsureLocked();
 
             var existingPerformer = _performerService.FindByForeignId(newPerformer.ForeignId);
 
@@ -72,6 +77,8 @@ namespace NzbDrone.Core.Movies.Performers
 
         public List<Performer> AddPerformers(List<Performer> newPerformers, bool ignoreErrors = false)
         {
+            _metadataSourceService.EnsureLocked();
+
             var added = DateTime.UtcNow;
             var performersToAdd = new List<Performer>();
             var existingPerformerForeignIds = new HashSet<string>(_performerService.AllPerformerForeignIds());
