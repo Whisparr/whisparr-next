@@ -38,7 +38,7 @@ namespace NzbDrone.Core.Notifications
 
         public virtual ProviderMessage Message => null;
 
-        public IEnumerable<ProviderDefinition> DefaultDefinitions => new List<ProviderDefinition>();
+        public virtual IEnumerable<ProviderDefinition> DefaultDefinitions => new List<ProviderDefinition>();
 
         public ProviderDefinition Definition { get; set; }
         public abstract ValidationResult Test();

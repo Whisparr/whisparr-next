@@ -95,6 +95,23 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Xbmc
             }
         }
 
+        [TestCase(Movies.MetadataSource.TpdbScene, "https://theporndb.net/scenes/6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41", "stashdb.org")]
+        [TestCase(Movies.MetadataSource.Stash, "https://stashdb.org/scenes/6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41", "theporndb.net")]
+        public void should_link_tpdb_scene_in_nfo(Movies.MetadataSource source, string expectedUrl, string otherHost)
+        {
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieMetadata = true, MovieMetadataURL = true };
+
+            _movie.MovieMetadata.Value.ItemType = ItemType.Scene;
+            _movie.MovieMetadata.Value.MetadataSource = source;
+            _movie.MovieMetadata.Value.ForeignId = "6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41";
+            _movie.MovieMetadata.Value.StashId = null;
+
+            var result = Subject.MovieMetadata(_movie, _movieFile);
+
+            result.Contents.Should().Contain(expectedUrl);
+            result.Contents.Should().NotContain(otherHost);
+        }
+
         private XElement GetStudioElement()
         {
             var result = Subject.MovieMetadata(_movie, _movieFile);

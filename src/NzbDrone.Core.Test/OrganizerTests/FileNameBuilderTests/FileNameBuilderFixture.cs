@@ -371,6 +371,39 @@ namespace NzbDrone.Core.Test.OrganizerTests.FileNameBuilderTests
         }
 
         [Test]
+        public void should_render_scene_foreign_id_token()
+        {
+            // A TPDB scene: the foreign id is the TPDB UUID and there's no StashDB id.
+            _scene.MovieMetadata.Value.ForeignId = "6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41";
+            _scene.MovieMetadata.Value.StashId = null;
+            _namingConfig.StandardSceneFormat = "{Scene Title} {[Scene ForeignId]}";
+
+            Subject.BuildFileName(_scene, _movieFile)
+                   .Should().Be("The Last Train Home [6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41]");
+        }
+
+        [Test]
+        public void should_use_scene_foreign_id_in_the_default_scene_folder_format()
+        {
+            _scene.MovieMetadata.Value.ForeignId = "6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41";
+            _scene.MovieMetadata.Value.StashId = null;
+
+            NamingConfig.Default.SceneFolderFormat.Should().Contain("{[Scene ForeignId]}");
+
+            Subject.GetMovieFolder(_scene, NamingConfig.Default)
+                   .Should().EndWith("The Last Train Home [6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41]");
+        }
+
+        [Test]
+        public void should_keep_rendering_the_stash_id_token()
+        {
+            _namingConfig.StandardSceneFormat = "{Scene Title} {[StashId]}";
+
+            Subject.BuildFileName(_scene, _movieFile)
+                   .Should().Be("The Last Train Home [019abb52-0557-7c5f-83df-94b828851fd1]");
+        }
+
+        [Test]
         public void should_replace_Movie_space_Title()
         {
             _namingConfig.StandardMovieFormat = "{Movie Title}";

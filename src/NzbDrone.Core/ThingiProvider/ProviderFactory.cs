@@ -39,7 +39,7 @@ namespace NzbDrone.Core.ThingiProvider
             return _providerRepository.All().ToList();
         }
 
-        public IEnumerable<TProviderDefinition> GetDefaultDefinitions()
+        public virtual IEnumerable<TProviderDefinition> GetDefaultDefinitions()
         {
             foreach (var provider in _providers)
             {

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using FluentValidation.Results;
 using NLog;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.ImportLists.StashDB;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.ThingiProvider;
 
@@ -17,6 +19,7 @@ namespace NzbDrone.Core.ImportLists
     public class ImportListFactory : ProviderFactory<IImportList, ImportListDefinition>, IImportListFactory
     {
         private readonly IImportListStatusService _importListStatusService;
+        private readonly IConfigService _configService;
         private readonly Logger _logger;
 
         public ImportListFactory(IImportListStatusService importListStatusService,
@@ -24,16 +27,35 @@ namespace NzbDrone.Core.ImportLists
                               IEnumerable<IImportList> providers,
                               IServiceProvider container,
                               IEventAggregator eventAggregator,
+                              IConfigService configService,
                               Logger logger)
             : base(providerRepository, providers, container, eventAggregator, logger)
         {
             _importListStatusService = importListStatusService;
+            _configService = configService;
             _logger = logger;
         }
 
         protected override List<ImportListDefinition> Active()
         {
-            return base.Active().Where(c => c.Enabled).ToList();
+            return base.Active().Where(c => c.Enabled && !IsHidden(c)).ToList();
+        }
+
+        public override IEnumerable<ImportListDefinition> GetDefaultDefinitions()
+        {
+            return base.GetDefaultDefinitions().Where(d => !IsHidden(d));
+        }
+
+        // StashDB lists stay StashDB-only, so they're left out while scenes come from TPDB.
+        private bool IsHidden(ImportListDefinition definition)
+        {
+            if (_configService.WhisparrSceneMetadataSource != SceneMetadataType.Tpdb)
+            {
+                return false;
+            }
+
+            return _providers.Any(p => p is IStashDbImportList &&
+                                       p.GetType().Name.Equals(definition.Implementation, StringComparison.InvariantCultureIgnoreCase));
         }
 
         public override void SetProviderCharacteristics(IImportList provider, ImportListDefinition definition)

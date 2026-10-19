@@ -393,8 +393,13 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                 xmlResult += "https://www.themoviedb.org/movie/" + movie.MovieMetadata.Value.TmdbId;
                 xmlResult += Environment.NewLine;
 
-                xmlResult += "https://stashdb.org/scenes/" + movie.MovieMetadata.Value.StashId;
-                xmlResult += Environment.NewLine;
+                var sceneUrl = GetSceneUrl(movie.MovieMetadata.Value);
+
+                if (sceneUrl != null)
+                {
+                    xmlResult += sceneUrl;
+                    xmlResult += Environment.NewLine;
+                }
             }
 
             var metadataFileName = GetMovieMetadataFilename(movieFile.RelativePath);
@@ -421,6 +426,16 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
                 yield return new ImageFileResult(destination, source);
             }
+        }
+
+        private static string GetSceneUrl(MovieMetadata metadata)
+        {
+            return metadata.MetadataSource switch
+            {
+                Movies.MetadataSource.Stash => "https://stashdb.org/scenes/" + metadata.ForeignId,
+                Movies.MetadataSource.TpdbScene => "https://theporndb.net/scenes/" + metadata.ForeignId,
+                _ => null
+            };
         }
 
         private string GetMovieMetadataFilename(string movieFilePath)

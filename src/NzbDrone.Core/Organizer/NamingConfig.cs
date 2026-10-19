@@ -12,7 +12,7 @@ namespace NzbDrone.Core.Organizer
             ReplaceIllegalCharacters = true,
             ColonReplacementFormat = ColonReplacementFormat.Smart,
             MovieFolderFormat = OsInfo.IsWindows ? "movies\\{Studio CleanNetwork}\\{Studio CleanTitle}\\{Movie Title} {(Release Year)}" : "movies/{Studio CleanNetwork}/{Studio CleanTitle}/{Movie Title} {(Release Year)}",
-            SceneFolderFormat = OsInfo.IsWindows ? "scenes\\{Studio CleanNetwork}\\{Studio CleanTitle}\\{Release Date} - {Scene CleanTitle} {[StashId]}" : "scenes/{Studio CleanNetwork}/{Studio CleanTitle}/{Release Date} - {Scene CleanTitle} {[StashId]}",
+            SceneFolderFormat = OsInfo.IsWindows ? "scenes\\{Studio CleanNetwork}\\{Studio CleanTitle}\\{Release Date} - {Scene CleanTitle} {[Scene ForeignId]}" : "scenes/{Studio CleanNetwork}/{Studio CleanTitle}/{Release Date} - {Scene CleanTitle} {[Scene ForeignId]}",
             SceneImportFolderFormat = OsInfo.IsWindows ? "import\\" : "import/",
             StandardMovieFormat = "{Movie Title} {(Release Year)} {[Quality Title]}",
             StandardSceneFormat = "{Studio CleanTitleSlug} - {Release-Date} - {Scene CleanTitle} {[Quality Title]}",

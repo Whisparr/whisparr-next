@@ -51,7 +51,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
 
             if (!scenes.Empty())
             {
-                var sceneText = scenes.Select(s => $"[{s.Title}](/movie/{s.Id}) (stashid {s.ForeignId})").Join(", ");
+                var sceneText = scenes.Select(s => $"[{s.Title}](/movie/{s.Id}) ({s.ForeignId})").Join(", ");
 
                 messages.Add(scenes.Count == 1
                     ? _localizationService.GetLocalizedString("RemovedMovieCheckSceneSingleMessage", new Dictionary<string, object>
@@ -64,7 +64,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
                     }));
             }
 
-            // The wiki only documents removal from TMDb; there is no section for StashDB scenes yet.
+            // The wiki only documents removal from TMDb; there is no section for StashDB or TPDB scenes yet.
             var wikiFragment = scenes.Empty() ? "#movie-was-removed-from-tmdb" : null;
 
             return new HealthCheck(GetType(), HealthCheckResult.Error, HealthCheckReason.RemovedMovie, messages.Join("; "), wikiFragment);

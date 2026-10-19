@@ -24,12 +24,15 @@ namespace NzbDrone.Core.Notifications.Stash
 
     public class StashSettings : NotificationSettingsBase<StashSettings>, IProviderConfig
     {
+        public const string StashDbStashBoxEndpoint = "https://stashdb.org/graphql";
+        public const string TpdbStashBoxEndpoint = "https://theporndb.net/graphql";
+
         private static readonly StashSettingsValidator Validator = new StashSettingsValidator();
 
         public StashSettings()
         {
             Port = 9999;
-            StashBoxEndpoint = "https://stashdb.org/graphql";
+            StashBoxEndpoint = StashDbStashBoxEndpoint;
         }
 
         [FieldDefinition(0, Label = "Host")]
@@ -62,7 +65,7 @@ namespace NzbDrone.Core.Notifications.Stash
         [FieldDefinition(9, Label = "Run Identify Task", HelpText = "Run Metadata Identify task on new files", Type = FieldType.Checkbox)]
         public bool MetadataIdentify { get; set; }
 
-        [FieldDefinition(10, Label = "Identify: Stash Box Endpoint", HelpText = "The Url for the Stash Box Endpoint (https://stashdb.org/graphql)", Type = FieldType.Textbox)]
+        [FieldDefinition(10, Label = "Identify: Stash Box Endpoint", HelpText = "The Url for the Stash Box Endpoint (https://stashdb.org/graphql for StashDB, https://theporndb.net/graphql for TPDB)", Type = FieldType.Textbox)]
         public string StashBoxEndpoint { get; set; }
 
         [FieldDefinition(11, Label = "Identify: Builtin Autotag", HelpText = "The Source Builtin Autotag", Type = FieldType.Checkbox)]

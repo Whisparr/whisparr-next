@@ -404,6 +404,9 @@ namespace NzbDrone.Core.Organizer
             tokenHandlers["{ImdbId}"] = m => movie.MovieMetadata.Value.ImdbId ?? string.Empty;
             tokenHandlers["{TmdbId}"] = m => movie.MovieMetadata.Value.TmdbId.ToString();
             tokenHandlers["{StashId}"] = m => movie.MovieMetadata.Value.StashId ?? string.Empty;
+
+            // The locked scene source's native id (StashDB or TPDB UUID); {StashId} stays for existing formats.
+            tokenHandlers["{Scene ForeignId}"] = m => movie.MovieMetadata.Value.ForeignId ?? string.Empty;
         }
 
         private static string GetCustomFormatsToken(List<CustomFormat> customFormats, string filter)

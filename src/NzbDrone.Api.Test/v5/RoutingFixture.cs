@@ -14,6 +14,9 @@ namespace NzbDrone.Api.Test.v5
         // The iCal feed stays at feed/v3, so V5 has no copy of it
         private static readonly string[] V3OnlyControllers = { "CalendarFeedController" };
 
+        // The metadata source picker is new in v5, so V3 has no copy of it
+        private static readonly string[] V5OnlyControllers = { "MetadataSourceController" };
+
         private static readonly Type[] V5Controllers = ControllersIn(typeof(Whisparr.Api.V5.System.SystemController));
         private static readonly Type[] V3Controllers = ControllersIn(typeof(Whisparr.Api.V3.System.SystemController));
 
@@ -49,7 +52,7 @@ namespace NzbDrone.Api.Test.v5
         public void every_v3_controller_has_a_v5_twin()
         {
             var v3Names = V3Controllers.Select(t => t.Name).Where(n => !V3OnlyControllers.Contains(n));
-            var v5Names = V5Controllers.Select(t => t.Name);
+            var v5Names = V5Controllers.Select(t => t.Name).Where(n => !V5OnlyControllers.Contains(n));
 
             v5Names.Should().BeEquivalentTo(v3Names);
         }

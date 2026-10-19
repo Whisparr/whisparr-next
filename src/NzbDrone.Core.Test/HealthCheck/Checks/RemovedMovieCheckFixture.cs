@@ -19,8 +19,8 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
         {
             { "RemovedMovieCheckSingleMessage", "Movie: {movie} was removed from TMDb/TPDb" },
             { "RemovedMovieCheckMultipleMessage", "Movies: {movies} were removed from TMDb/TPDb" },
-            { "RemovedMovieCheckSceneSingleMessage", "Scene: {scene} was removed from StashDB" },
-            { "RemovedMovieCheckSceneMultipleMessage", "Scenes: {scenes} were removed from StashDB" }
+            { "RemovedMovieCheckSceneSingleMessage", "Scene: {scene} was removed from StashDB/TPDb" },
+            { "RemovedMovieCheckSceneMultipleMessage", "Scenes: {scenes} were removed from StashDB/TPDb" }
         };
 
         [SetUp]
@@ -150,7 +150,7 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             var result = Subject.Check();
 
             result.ShouldBeError();
-            result.Message.Should().Be("Scene: [Take Control](/movie/11) (stashid 740d6863-aeff-44d0-be88-949e464f4264) was removed from StashDB");
+            result.Message.Should().Be("Scene: [Take Control](/movie/11) (740d6863-aeff-44d0-be88-949e464f4264) was removed from StashDB/TPDb");
             result.WikiUrl.ToString().Should().NotContain("#movie-was-removed-from-tmdb");
         }
 
@@ -177,7 +177,7 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             var result = Subject.Check();
 
             result.ShouldBeError();
-            result.Message.Should().Be("Scenes: [Gamma](/movie/3) (stashid 12121212-3434-5656-7878-909090909090), [Delta](/movie/4) (stashid abababab-cdcd-efef-0f0f-121212123434) were removed from StashDB");
+            result.Message.Should().Be("Scenes: [Gamma](/movie/3) (12121212-3434-5656-7878-909090909090), [Delta](/movie/4) (abababab-cdcd-efef-0f0f-121212123434) were removed from StashDB/TPDb");
         }
 
         [Test]
@@ -191,7 +191,7 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             var result = Subject.Check();
 
             // Movies come first, then scenes; each group keeps its own source and grammar.
-            result.Message.Should().Be("Movie: [Movie One](/movie/6) (tmdbid 13579246-8024-6810-2468-024680246802) was removed from TMDb/TPDb; Scenes: [Scene One](/movie/5) (stashid fedcba98-7654-3210-fedc-ba9876543210), [Scene Two](/movie/7) (stashid 24680246-8024-6810-2468-024680246803) were removed from StashDB");
+            result.Message.Should().Be("Movie: [Movie One](/movie/6) (tmdbid 13579246-8024-6810-2468-024680246802) was removed from TMDb/TPDb; Scenes: [Scene One](/movie/5) (fedcba98-7654-3210-fedc-ba9876543210), [Scene Two](/movie/7) (24680246-8024-6810-2468-024680246803) were removed from StashDB/TPDb");
             result.WikiUrl.ToString().Should().NotContain("#movie-was-removed-from-tmdb");
         }
     }

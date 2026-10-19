@@ -7,10 +7,15 @@ using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.ImportLists.StashDB
 {
-    public abstract class StashDBImportBase<TSettings> : HttpImportListBase<TSettings>
+    // Marks lists that only work against StashDB, so they can be hidden when scenes come from TPDB.
+    public interface IStashDbImportList : IImportList
+    {
+    }
+
+    public abstract class StashDBImportBase<TSettings> : HttpImportListBase<TSettings>, IStashDbImportList
     where TSettings : StashDBSettingsBase<TSettings>, new()
     {
-        public StashDBImportBase(IHttpClient httpClient,
+        protected StashDBImportBase(IHttpClient httpClient,
                                     IImportListStatusService importListStatusService,
                                     IConfigService configService,
                                     IParsingService parsingService,

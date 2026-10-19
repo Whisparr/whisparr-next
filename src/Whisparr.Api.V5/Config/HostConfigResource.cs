@@ -62,7 +62,9 @@ namespace Whisparr.Api.V5.Config
         public bool WhisparrCorruptFileDetection { get; set; }
         public int WhisparrFuzzyTitleMatchingThreshold { get; set; }
         public bool WhisparrMonitorNewItems { get; set; }
-        public MovieMetadataType WhisparrMovieMetadataSource { get; set; }
+
+        // Read-only once locked; nullable so a client that leaves it out isn't read as asking for a change.
+        public MovieMetadataType? WhisparrMovieMetadataSource { get; set; }
         public bool WhisparrValidateRuntime { get; set; }
         public int WhisparrValidateRuntimeLimit { get; set; }
     }

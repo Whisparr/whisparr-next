@@ -7,6 +7,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Network;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.Update;
 using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
@@ -28,7 +29,8 @@ namespace Whisparr.Api.V5.Config
         public HostConfigController(IConfigFileProvider configFileProvider,
                                     IConfigService configService,
                                     IUserService userService,
-                                    FileExistsValidator<HostConfigResource> fileExistsValidator)
+                                    FileExistsValidator<HostConfigResource> fileExistsValidator,
+                                    ILocalizationService localizationService)
         {
             _configFileProvider = configFileProvider;
             _configService = configService;
@@ -87,6 +89,12 @@ namespace Whisparr.Api.V5.Config
             SharedValidator.RuleFor(c => c.BackupFolder).IsValidPath().When(c => Path.IsPathRooted(c.BackupFolder));
             SharedValidator.RuleFor(c => c.BackupInterval).InclusiveBetween(1, 7);
             SharedValidator.RuleFor(c => c.BackupRetention).InclusiveBetween(1, 90);
+
+            // The sources are chosen once through config/metadatasource; refuse a change here instead of dropping it silently.
+            SharedValidator.RuleFor(c => c.WhisparrMovieMetadataSource)
+                           .Must(source => source == _configService.WhisparrMovieMetadataSource)
+                           .When(c => c.WhisparrMovieMetadataSource.HasValue)
+                           .WithMessage(_ => localizationService.GetLocalizedString("MetadataSourcesLockedValidation"));
         }
 
         private static bool IsMatchingPassword(HostConfigResource resource)
