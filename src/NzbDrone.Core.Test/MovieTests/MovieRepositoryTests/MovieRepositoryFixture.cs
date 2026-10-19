@@ -237,6 +237,18 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
         }
 
         [Test]
+        public void should_return_only_scene_foreign_ids()
+        {
+            var profile = GivenProfile();
+            var scene = GivenTitledMovie(profile.Id, "A Scene", ItemType.Scene);
+            GivenTitledMovie(profile.Id, "A Movie", ItemType.Movie);
+
+            var sceneForeignId = Db.All<MovieMetadata>().Single(m => m.Id == scene.MovieMetadataId).ForeignId;
+
+            Subject.AllSceneForeignIds().Should().Equal(sceneForeignId);
+        }
+
+        [Test]
         public void should_get_only_monitored_movies_between_dates()
         {
             var profile = GivenProfile();

@@ -136,11 +136,25 @@ namespace NzbDrone.Core.Test.MovieTests
         {
             GivenPages(Page(ScenePageStatus.Complete, 1, new ScenePageItem { SceneId = "undated", PerformerIds = new List<string>() }));
 
-            // The page item carries no date; the stub has none either and is added as-is for the inline refresh to fill in.
-            var result = Import();
+            List<Movie> added = null;
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), true, true))
+                  .Callback<List<Movie>, bool, bool>((movies, _, _) => added = movies)
+                  .Returns<List<Movie>, bool, bool>((movies, _, _) => movies);
+
+            // The page item carries no date; the stub is undated and is added as-is for the inline refresh to fill in.
+            var result = Subject.ImportScenes(
+                "Studio",
+                _ => null,
+                id => new Movie { ForeignId = id, MovieMetadata = new MovieMetadata { ForeignId = id, ItemType = ItemType.Scene, ReleaseDate = null, ReleaseDateUtc = null, Year = 0 } },
+                () => true);
 
             result.Should().Be(1);
-            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "undated" })), true, true), Times.Once());
+            added.Should().ContainSingle();
+            added[0].ForeignId.Should().Be("undated");
+            added[0].MovieMetadata.Value.ReleaseDate.Should().BeNull();
+            added[0].MovieMetadata.Value.ReleaseDateUtc.Should().BeNull();
+            added[0].MovieMetadata.Value.Year.Should().Be(0);
         }
 
         [Test]

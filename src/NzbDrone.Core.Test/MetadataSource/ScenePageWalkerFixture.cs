@@ -140,6 +140,24 @@ namespace NzbDrone.Core.Test.MetadataSource
         }
 
         [Test]
+        public void should_not_handle_or_count_building_during_a_revisit_and_sleep_its_own_retry_after()
+        {
+            var result = Walk((_, call) => call switch
+            {
+                1 => Page(ScenePageStatus.Pending, null, "p1-202", "x"),
+                2 => Building(TimeSpan.FromSeconds(7)),
+                _ => Page(ScenePageStatus.Complete, null, "p1-200")
+            });
+
+            _handled.Select(p => p.Items[0].SceneId).Should().Equal("p1-202", "p1-200");
+            result.Pages.Should().Be(1);
+
+            // Pending page's own 10s before the first revisit, then the Building page's 7s before the next.
+            _pacer.Sleeps.Should().Equal(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(7));
+            result.GaveUp.Should().BeEmpty();
+        }
+
+        [Test]
         public void should_give_up_after_build_timeout()
         {
             var result = Walk((cursor, _) => cursor == null

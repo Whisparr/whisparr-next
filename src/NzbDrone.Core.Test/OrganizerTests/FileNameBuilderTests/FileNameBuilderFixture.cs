@@ -229,6 +229,26 @@ namespace NzbDrone.Core.Test.OrganizerTests.FileNameBuilderTests
         }
 
         [Test]
+        public void undated_scene_renders_default_file_and_folder_formats()
+        {
+            _scene.MovieMetadata.Value.Year = 0;
+            _scene.MovieMetadata.Value.ReleaseDate = null;
+            _scene.MovieMetadata.Value.ReleaseDateUtc = null;
+
+            var fileName = Subject.BuildFileName(_scene, _movieFile);
+            var folder = Subject.GetMovieFolder(_scene, _namingConfig);
+
+            fileName.Should().NotBeNullOrWhiteSpace();
+            fileName.Should().Contain("The Last Train Home");
+            fileName.Should().NotContain("  ").And.NotContain("- -").And.NotContain("()").And.NotContain("[]");
+            fileName.Should().NotStartWith("-").And.NotEndWith("-");
+
+            folder.Should().Contain("The Last Train Home");
+            folder.Should().NotContain("  ").And.NotContain("- -").And.NotContain("()").And.NotContain("[]");
+            folder.Split(Path.DirectorySeparatorChar).Should().OnlyContain(s => !s.StartsWith('-') && !s.StartsWith(' ') && !s.EndsWith(' ') && !s.EndsWith('-'));
+        }
+
+        [Test]
         public void scene_folder_release_year_format()
         {
             _namingConfig.SceneFolderFormat = "{Studio Title}/{Release Year}";
