@@ -344,26 +344,100 @@ scene's cast shows on its details page.
     is re-pointed instead of the scene being marked missing.
   - Part of F's research spike; measure how often this happens.
 
-### E. Metadata-source lock and TPDB scenes in the app (item 5)
+### E. Metadata-source lock and TPDB scenes in the app (item 5): built
 
-- **Config:** `WhisparrSceneMetadataSource` (StashDb/Tpdb) plus the existing
-  `WhisparrMovieMetadataSource`.
-  - They're set only by the setup screen. Fresh installs see it too, without the
-    migration step.
-  - Once set, the config API rejects changes and the UI shows them read-only.
-- **Help tip on the locked fields:** to switch, stop Whisparr, rename or move
-  `whisparr5.db` (or point to a new Postgres DB), and start again. That runs first-time
-  setup, which can migrate the old v5 DB with a new source.
-- **TPDB scenes:**
-  - `ForeignId` holds the locked source's native ID: the **TPDB UUID**, just as StashDB
-    uses its UUID.
-  - Add `MetadataSource.TpdbScene`, plus the TPDB studio and performer equivalents.
-  - `SkyHookProxy` routes by the locked source.
-  - Go through every StashId-specific path: `FindScene`, naming tokens (add a
-    source-neutral `{Scene ForeignId}`), and the Stash notification.
-- **Import lists:** rename the StashDB lists to source-neutral names. TPDB has a GraphQL
-  layer that could back the same lists with a TPDB API key; that needs testing first. For
-  alpha, the lists stay StashDB-only and are hidden when scenes are TPDB.
+A v5 install picks its scene source (StashDB or TPDB) and its movie source (TMDB or TPDB)
+once. After that both are locked together, so neither can change and leave orphaned or
+duplicate items behind.
+
+**The lock:**
+- **Config:** `WhisparrSceneMetadataSource` (StashDb/Tpdb), the existing
+  `WhisparrMovieMetadataSource`, and `MetadataSourcesLocked`. `IConfigService` has one
+  write path, `LockMetadataSources(scene, movie)`, which sets all three.
+- **Existing libraries:** migration **301** locks any database that already holds scenes or
+  movies. It records StashDB as the scene source, since that is what an existing library was
+  built from, and leaves the movie source as it is, so an existing `NONE` stays `NONE`. An
+  empty database skips this, so a fresh install sees the picker.
+- **First-run picker:** `MetadataSourceRequiredModal` opens only while the sources are
+  unlocked. It offers StashDB/TPDB for scenes and TMDb/TPDB for movies, and picking TPDB
+  scenes moves the movie choice to TPDB, so studios and performers come from one source. It
+  has no close button, and it warns that the choice is permanent.
+- **Implicit lock on first add:** `AddMovieService`, `AddStudioService` and
+  `AddPerformerService` call `EnsureLocked()` before adding. An add that reaches the API
+  before the picker has run locks the current values (StashDB and TMDB by default), so a
+  scene can never land under one source and have the source changed afterwards.
+- **Settings → General** shows both sources read-only, with the help tip on how to switch:
+  stop Whisparr, rename or move `whisparr5.db` (or point to a new Postgres database), and
+  start again to run first-time setup.
+
+**API:**
+- `GET /api/v5/config/metadatasource` answers `{sceneMetadataSource, movieMetadataSource,
+  locked}`. The wire values are camelCase strings: `stashDb`/`tpdb` and `tmdb`/`tpdb`.
+- `PUT /api/v5/config/metadatasource` locks the pair. It answers **409** once locked (even
+  with the same values) and **400** for an empty body or a `none` movie source.
+- A V5 host-config `PUT` whose `whisparrMovieMetadataSource` differs from the stored value
+  fails validation (**400**). A V3 host-config `PUT` saves everything else and leaves the
+  source keys alone. Both behaviours come from `SaveConfigDictionary` dropping the source
+  keys.
+
+**TPDB scenes:**
+- `ForeignId` holds the locked source's UUID for scenes, studios and performers: the
+  **TPDB UUID** under TPDB, just as StashDB uses its own. Only `MovieMetadata.MetadataSource`
+  gains a value (`TpdbScene` = 3). Studios and performers need no per-row source, because the
+  lock means there is one scene source per database.
+- `SkyHookProxy` routes scene, site and performer calls to Skyhook's `tpdb/...` routes by
+  the locked source (`SceneSourceIds.Route`). A credit or studio with no id in the locked
+  source is skipped, never added with a blank `ForeignId`.
+- **Walker:** a first page that answers 202 with `Building: true` is waited out, then every
+  page is walked. The importer dedupes against `AllSceneForeignIds()`, so re-syncing a TPDB
+  studio adds nothing it already has. Undated TPDB scenes import, name and display.
+- **Source-neutral surfaces:** the `{Scene ForeignId}` naming token; scene, studio and
+  performer links that follow the locked source (stashdb.org vs theporndb.net, where TPDB
+  calls studios "sites"); add-search placeholders; and Stash notification defaults
+  (`https://theporndb.net/graphql` under TPDB).
+- **Measured live** (fresh instance, live `/v5`, Brazzers Exxtra, TPDB scenes and TPDB
+  movies): the add synced 4,036 scenes, matching Skyhook's `Total` of 4,036. A second
+  refresh walked the same 4,036 in 3 s and added 0. The database held 4,036 scene rows with
+  0 duplicate foreign ids. As a regression check, the same add on a fresh StashDB and TMDB
+  instance synced 3,990 scenes (C measured 3,987) with stashdb.org links.
+
+**Skyhook routes added for E** (Eros-Metadata PR #37, on `v5`):
+- **Changed feeds:** `tpdb/scene|site|performer/changed?since=` return a JSON array of TPDB
+  UUIDs from the cache's `lastchange`, with the same 10-minute `Cache-Control` as the StashDB
+  `scene/changed` route. Under TPDB the app's `GetChanged*` calls use them. The v3 Skyhook
+  never exposed such a route, and v2 just refetches on a schedule.
+- **Works:** `tpdb/site|performer/{uuid}/works` return the StashDB works shape with
+  `TpdbMovies` filled. They page through TPDB's `/sites/{id}/movies` and
+  `/performers/{id}/movies`. The performer route takes the **parent** performer UUID, which
+  is what B2 already keys credits by. A TPDB 404 gives 404, and a 429 gives 503 with
+  `Retry-After: 30`.
+- **Performer change feed:** TPDB's `/changes` covers `performers` as well as scenes, so a
+  performer feed loop runs next to B2's scene feed loop, gated by `TpdbScenes`. It refreshes
+  only performers already cached. Sites aren't in TPDB's feed and stay expiry-driven.
+
+**Remaining TPDB limits:**
+- **Search takes `q` only.** Skyhook's `tpdb/*/search` has no structured filters, so the app
+  folds a parsed title into one `q` string.
+- **No movie sync with TPDB scenes and TMDB movies.** TPDB works return TPDB movie UUIDs
+  only. With TMDB as the movie source, studio and performer movie sync stays off, and each
+  refresh logs one Info line: "Movie sync for TPDB-sourced studios and performers needs TPDB
+  as the movie source". The picker steers TPDB-scene users to TPDB movies.
+
+**Import lists are hidden under TPDB, not renamed.** The StashDB lists aren't offered and
+the import-list schema leaves them out. This was tested against TPDB's stash-box GraphQL
+endpoint on 2026-10-19 with the lists' exact query:
+- The query fails as sent. TPDB requires a `direction` field, and it types `studios`,
+  `performers`, `tags` and `date` as plain strings rather than `{modifier, value}` objects.
+- With adapted shapes, `queryScenes` answers `scenes: null`, with `count` equal to
+  `per_page`, for every filter and for no filter at all. It's a stub.
+- `findStudio` and `searchScene` work, which covers Stash's identify task. `queryStudios`
+  doesn't exist, and `queryPerformers` ignores its name filter.
+- A StashDB list under a TPDB library would also add StashDB UUIDs that the TPDB routes
+  can't resolve.
+
+A TPDB-backed list would need TPDB's REST API instead. That's a later feature, and the
+rename waits for it. Stored list items are kept, so the library clean-up doesn't touch
+them.
 
 ### F. Flat studio folders (item 4)
 
