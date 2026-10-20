@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Download;
@@ -79,6 +80,40 @@ namespace NzbDrone.Core.Test.NotificationTests
             Subject.Handle(GivenEvent(remoteMovie));
 
             _notification.Verify(v => v.OnManualInteractionRequired(It.IsAny<ManualInteractionRequiredMessage>()), Times.Once());
+        }
+
+        [TestCase(ItemType.Scene, Movies.MetadataSource.Stash, "https://stashdb.org/scenes/6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41", "theporndb.net")]
+        [TestCase(ItemType.Scene, Movies.MetadataSource.TpdbScene, "https://theporndb.net/scenes/6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41", "stashdb.org")]
+        [TestCase(ItemType.Movie, Movies.MetadataSource.Tmdb, "https://www.imdb.com/title/tt0133093/", "/scenes/")]
+        public void should_link_message_to_the_item_source(ItemType itemType, Movies.MetadataSource source, string expectedUrl, string unexpected)
+        {
+            var remoteMovie = new RemoteMovie
+            {
+                Movie = new Movie
+                {
+                    Id = 1,
+                    Tags = new HashSet<int>(),
+                    MovieMetadata = new MovieMetadata
+                    {
+                        Title = "Title",
+                        ItemType = itemType,
+                        MetadataSource = source,
+                        ForeignId = "6c1d4e2a-9b8f-4c3d-a2e1-7f0b5d9c8e41",
+                        ImdbId = "tt0133093"
+                    }
+                }
+            };
+
+            ManualInteractionRequiredMessage sent = null;
+
+            _notification.Setup(v => v.OnManualInteractionRequired(It.IsAny<ManualInteractionRequiredMessage>()))
+                         .Callback<ManualInteractionRequiredMessage>(m => sent = m);
+
+            Subject.Handle(GivenEvent(remoteMovie));
+
+            sent.Should().NotBeNull();
+            sent.Message.Should().EndWith(expectedUrl);
+            sent.Message.Should().NotContain(unexpected);
         }
     }
 }

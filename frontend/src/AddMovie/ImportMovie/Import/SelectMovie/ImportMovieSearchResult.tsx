@@ -2,6 +2,11 @@ import React, { useCallback } from 'react';
 import Icon from 'Components/Icon';
 import Link from 'Components/Link/Link';
 import { icons } from 'Helpers/Props';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
+import {
+  sceneSourceLink,
+  translateSourceLabel,
+} from 'Utilities/MetadataSource/sourceLinks';
 import { MovieLookupResult } from '../../ImportMovieTypes';
 import ImportMovieTitle from './ImportMovieTitle';
 import styles from './ImportMovieSearchResult.module.css';
@@ -32,7 +37,15 @@ function ImportMovieSearchResult({
     sizeOnDisk,
   } = item;
 
-  const stashId = foreignId && tmdbId === 0 && !tpdbId ? foreignId : '';
+  const sceneSource = useSceneMetadataSource();
+  const isScene = itemType === 'scene';
+
+  // A scene links to the locked scene source its foreign id came from. Its
+  // TPDB id is a scene id, so the TPDB movie link below is for movies only.
+  const sceneLink =
+    isScene && foreignId && sceneSource
+      ? sceneSourceLink('scene', foreignId, sceneSource)
+      : null;
 
   const handlePress = useCallback(() => {
     onPress(foreignId);
@@ -56,7 +69,7 @@ function ImportMovieSearchResult({
         />
       </Link>
 
-      {!!tmdbId && (
+      {!isScene && !!tmdbId && (
         <Link
           className={styles.tmdbLink}
           to={`https://www.themoviedb.org/movie/${tmdbId}`}
@@ -69,7 +82,7 @@ function ImportMovieSearchResult({
         </Link>
       )}
 
-      {!!tpdbId && (
+      {!isScene && !!tpdbId && (
         <Link
           className={styles.tpdbLink}
           to={`https://theporndb.net/movies/${tpdbId}`}
@@ -82,10 +95,11 @@ function ImportMovieSearchResult({
         </Link>
       )}
 
-      {!!stashId && stashId !== tmdbId?.toString() && (
+      {sceneLink ? (
         <Link
           className={styles.stashdbLink}
-          to={`https://stashdb.org/scenes/${stashId}/`}
+          to={sceneLink.url}
+          title={translateSourceLabel(sceneLink.label)}
         >
           <Icon
             className={styles.stashdbLinkIcon}
@@ -93,7 +107,7 @@ function ImportMovieSearchResult({
             size={16}
           />
         </Link>
-      )}
+      ) : null}
     </div>
   );
 }

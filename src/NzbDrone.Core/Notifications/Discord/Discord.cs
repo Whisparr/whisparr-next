@@ -18,6 +18,8 @@ namespace NzbDrone.Core.Notifications.Discord
 {
     public class Discord : NotificationBase<DiscordSettings>
     {
+        private const string LinksFieldName = "Links";
+
         private readonly IDiscordProxy _proxy;
         private readonly ITagRepository _tagRepository;
         private readonly IConfigFileProvider _configFileProvider;
@@ -43,7 +45,7 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(message.Movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(message.Movie),
                 Description = "Movie Grabbed",
                 Title = GetTitle(message.Movie),
                 Color = (int)DiscordColors.Standard,
@@ -105,7 +107,7 @@ namespace NzbDrone.Core.Notifications.Discord
                         discordField.Value = string.Format("```{0}```", message.RemoteMovie.Release.Title);
                         break;
                     case DiscordGrabFieldType.Links:
-                        discordField.Name = "Links";
+                        discordField.Name = LinksFieldName;
                         discordField.Value = GetLinksString(message.Movie);
                         break;
                     case DiscordGrabFieldType.CustomFormats:
@@ -147,7 +149,7 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(message.Movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(message.Movie),
                 Description = isUpgrade ? "Movie Upgraded" : "Movie Imported",
                 Title = GetTitle(message.Movie),
                 Color = isUpgrade ? (int)DiscordColors.Upgrade : (int)DiscordColors.Success,
@@ -225,7 +227,7 @@ namespace NzbDrone.Core.Notifications.Discord
                         discordField.Value = string.Format("```{0}```", message.MovieFile.SceneName);
                         break;
                     case DiscordImportFieldType.Links:
-                        discordField.Name = "Links";
+                        discordField.Name = LinksFieldName;
                         discordField.Value = GetLinksString(message.Movie);
                         break;
                     case DiscordImportFieldType.Tags:
@@ -262,11 +264,11 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(movie),
                 Title = movie.Title,
                 Description = "Movie Added",
                 Color = (int)DiscordColors.Success,
-                Fields = new List<DiscordField> { new () { Name = "Links", Value = GetLinksString(movie) } }
+                Fields = GetLinksFields(movie)
             };
 
             if (Settings.ImportFields.Contains((int)DiscordImportFieldType.Poster))
@@ -319,11 +321,11 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(movie),
                 Title = movie.Title,
                 Description = deleteMessage.DeletedFilesMessage,
                 Color = (int)DiscordColors.Danger,
-                Fields = new List<DiscordField> { new () { Name = "Links", Value = GetLinksString(movie) } }
+                Fields = GetLinksFields(movie)
             };
 
             if (Settings.ImportFields.Contains((int)DiscordImportFieldType.Poster))
@@ -360,7 +362,7 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(movie),
                 Title = GetTitle(movie),
                 Description = "Movie File Deleted",
                 Color = (int)DiscordColors.Danger,
@@ -460,7 +462,7 @@ namespace NzbDrone.Core.Notifications.Discord
                     Name = Settings.Author.IsNullOrWhiteSpace() ? _configFileProvider.InstanceName : Settings.Author,
                     IconUrl = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png"
                 },
-                Url = GetUrl(movie.MovieMetadata.Value.ForeignId),
+                Url = GetUrl(movie),
                 Description = "Manual interaction needed",
                 Title = GetTitle(movie),
                 Color = (int)DiscordColors.Standard,
@@ -522,7 +524,7 @@ namespace NzbDrone.Core.Notifications.Discord
                         discordField.Value = $"```{message.TrackedDownload.DownloadItem.Title}```";
                         break;
                     case DiscordManualInteractionFieldType.Links:
-                        discordField.Name = "Links";
+                        discordField.Name = LinksFieldName;
                         discordField.Value = GetLinksString(message.Movie);
                         break;
                     case DiscordManualInteractionFieldType.Tags:
@@ -608,20 +610,41 @@ namespace NzbDrone.Core.Notifications.Discord
 
         private static string GetLinksString(Movie movie)
         {
-            var links = string.Format("[{0}]({1})", "StashDB", GetUrl(movie.MovieMetadata.Value.ForeignId));
+            var metadata = movie?.MovieMetadata?.Value;
+            var links = new List<string>();
 
-            if (movie?.MovieMetadata?.Value?.TmdbId > 0)
+            // Movies have no scene page; a scene links to the source its ForeignId came from.
+            var sceneUrl = SceneSourceLinks.GetSceneUrl(metadata);
+
+            if (sceneUrl != null)
             {
-                var tmdbLink = string.Format("[{0}]({1})", "TMDb", GetUrl(movie.MovieMetadata.Value.TmdbId));
-                links += $" | {tmdbLink}";
+                links.Add($"[{SceneSourceLinks.GetSceneSiteName(metadata)}]({sceneUrl})");
             }
 
-            return links;
+            if (metadata?.TmdbId > 0)
+            {
+                links.Add($"[TMDb]({GetUrl(metadata.TmdbId)})");
+            }
+
+            return string.Join(" | ", links);
         }
 
-        private static string GetUrl(string foreignId)
+        // Discord rejects an embed field with an empty value, and a movie without a TMDb id has no links.
+        private static List<DiscordField> GetLinksFields(Movie movie)
         {
-            return $"https://stashdb.org/scenes/{foreignId}";
+            var links = GetLinksString(movie);
+
+            return links.IsNullOrWhiteSpace()
+                ? new List<DiscordField>()
+                : new List<DiscordField> { new() { Name = LinksFieldName, Value = links } };
+        }
+
+        // The embed title links to the scene's source page, or to TMDb for a movie.
+        private static string GetUrl(Movie movie)
+        {
+            var metadata = movie?.MovieMetadata?.Value;
+
+            return SceneSourceLinks.GetSceneUrl(metadata) ?? (metadata?.TmdbId > 0 ? GetUrl(metadata.TmdbId) : null);
         }
 
         private static string GetUrl(int tmdbId)

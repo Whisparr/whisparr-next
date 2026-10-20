@@ -133,7 +133,7 @@ function AddNewPerformer() {
             <div className={styles.helpText}>
               {translate('AddNewSceneMessage')}
             </div>
-            <div>{translate('AddNewStashIdMessage')}</div>
+            <div>{translate('AddNewStashIdPerformerMessage')}</div>
           </div>
         )}
 

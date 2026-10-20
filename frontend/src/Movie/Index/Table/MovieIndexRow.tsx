@@ -58,7 +58,6 @@ function MovieIndexRow(props: MovieIndexRowProps) {
 
   const {
     monitored,
-    foreignId,
     titleSlug,
     title,
     website,
@@ -314,7 +313,6 @@ function MovieIndexRow(props: MovieIndexRowProps) {
                   anchor={<Icon name={icons.EXTERNAL_LINK} size={12} />}
                   tooltip={
                     <MovieDetailsLinks
-                      stashId={foreignId}
                       tmdbId={tmdbId}
                       tpdbId={tpdbId}
                       website={website}

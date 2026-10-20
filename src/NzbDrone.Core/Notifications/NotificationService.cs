@@ -48,15 +48,16 @@ namespace NzbDrone.Core.Notifications
         {
             var qualityString = quality?.Quality.ToString();
 
-            var url = "";
+            var metadata = movie?.MovieMetadata?.Value;
+            string url;
 
-            if (movie?.MovieMetadata?.Value?.ItemType == ItemType.Movie)
+            if (metadata?.ItemType == ItemType.Movie)
             {
-                url = "https://www.imdb.com/title/" + movie?.MovieMetadata?.Value?.ImdbId + "/";
+                url = "https://www.imdb.com/title/" + metadata.ImdbId + "/";
             }
             else
             {
-                url = "https://stashdb.org/scenes/" + movie?.MovieMetadata?.Value?.ForeignId;
+                url = SceneSourceLinks.GetSceneUrl(metadata) ?? "";
             }
 
             if (quality?.Revision?.Version > 1)

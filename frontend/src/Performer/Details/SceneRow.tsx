@@ -14,8 +14,10 @@ import Movie, { MovieStatus } from 'Movie/Movie';
 import MovieSearchCell from 'Movie/MovieSearchCell';
 import MovieTitleLink from 'Movie/MovieTitleLink';
 import { useToggleMovieMonitored } from 'Movie/useMovie';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import formatRuntime from 'Utilities/Date/formatRuntime';
+import { sceneSourceLink } from 'Utilities/MetadataSource/sourceLinks';
 import formatBytes from 'Utilities/Number/formatBytes';
 import translate from 'Utilities/String/translate';
 import styles from './SceneRow.module.css';
@@ -31,6 +33,7 @@ interface SceneRowProps {
 export default function SceneRow(props: Readonly<SceneRowProps>) {
   const { movieRuntimeFormat } = useUiSettingsValues();
   const safeForWorkMode = useSafeForWorkMode();
+  const sceneSource = useSceneMetadataSource();
 
   const { isSaving, columns, movie, visiblePerformerNames } = props;
   const {
@@ -58,6 +61,14 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
   const externalLink = () => {
     if (!foreignId) return '';
 
+    // A scene's foreign id is a UUID from the locked scene source. Check it
+    // first: `parseInt` reads a UUID's leading digits as a TMDb id.
+    if (itemType === 'scene') {
+      return sceneSource
+        ? sceneSourceLink('scene', foreignId, sceneSource).url
+        : '';
+    }
+
     if (foreignId.startsWith('tpdbid:')) {
       return `https://www.theporndb.net/movies/${foreignId.replace(
         'tpdbid:',
@@ -72,8 +83,7 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
       )}`;
     }
 
-    // failsafe, though we shouldn't ever need this
-    return `https://stashdb.org/scene/${foreignId}`;
+    return '';
   };
 
   const { mutate: toggleMonitored } = useToggleMovieMonitored();
@@ -143,12 +153,14 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
                   anchor={
                     <span>
                       {studioTitle}
-                      <a href={url} target="_blank">
-                        <Icon
-                          className={styles.externalLink}
-                          name={icons.EXTERNAL_LINK}
-                        />
-                      </a>
+                      {url ? (
+                        <a href={url} target="_blank">
+                          <Icon
+                            className={styles.externalLink}
+                            name={icons.EXTERNAL_LINK}
+                          />
+                        </a>
+                      ) : null}
                     </span>
                   }
                   tooltip={translate('StudioNotInStashDb')}

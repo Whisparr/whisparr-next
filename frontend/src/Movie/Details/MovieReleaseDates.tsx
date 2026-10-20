@@ -2,8 +2,10 @@ import React from 'react';
 import Icon from 'Components/Icon';
 import InlineMarkdown from 'Components/Markdown/InlineMarkdown';
 import { icons } from 'Helpers/Props';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import getRelativeDate from 'Utilities/Date/getRelativeDate';
+import { sceneSourceLink } from 'Utilities/MetadataSource/sourceLinks';
 import translate from 'Utilities/String/translate';
 import Movie from '../Movie';
 import styles from './MovieReleaseDates.module.css';
@@ -17,16 +19,18 @@ function MovieReleaseDates({
   foreignId,
   itemType,
   releaseDate,
-}: MovieReleaseDatesProps) {
+}: Readonly<MovieReleaseDatesProps>) {
   const { showRelativeDates, shortDateFormat, timeFormat } =
     useUiSettingsValues();
+  const sceneSource = useSceneMetadataSource();
 
-  let urlFragment = 'https://stashdb.org/scenes/';
+  let url = `https://www.themoviedb.org/movie/${foreignId}`;
 
-  if (itemType === 'movie') {
-    urlFragment = foreignId.startsWith('tpdb:')
-      ? 'https://theporndb.net/movies/'
-      : 'https://www.themoviedb.org/movie/';
+  if (itemType === 'movie' && foreignId.startsWith('tpdb:')) {
+    url = `https://theporndb.net/movies/${foreignId}`;
+  } else if (itemType !== 'movie') {
+    // A scene's foreign id comes from the locked scene source.
+    url = sceneSourceLink('scene', foreignId, sceneSource ?? 'stashDb').url;
   }
 
   if (!releaseDate) {
@@ -37,9 +41,7 @@ function MovieReleaseDates({
         </div>
 
         <InlineMarkdown
-          data={translate('NoMovieReleaseDatesAvailable', {
-            url: `${urlFragment}${foreignId}`,
-          })}
+          data={translate('NoMovieReleaseDatesAvailable', { url })}
         />
       </div>
     );

@@ -89,7 +89,6 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
     monitored,
     status,
     images,
-    foreignId,
     tmdbId,
     tpdbId,
     website,
@@ -221,7 +220,6 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
               title={translate('Links')}
               body={
                 <MovieDetailsLinks
-                  stashId={foreignId}
                   tmdbId={tmdbId}
                   tpdbId={tpdbId}
                   website={website}
