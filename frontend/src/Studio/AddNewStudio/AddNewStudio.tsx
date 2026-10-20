@@ -8,6 +8,7 @@ import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import { icons, kinds } from 'Helpers/Props';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import translate from 'Utilities/String/translate';
 import AddNewStudioSearchResult from './AddNewStudioSearchResult';
 import useAddNewStudio from './useAddNewStudio';
@@ -23,6 +24,8 @@ function AddNewStudio() {
     onStudioLookupChange,
     onClearStudioLookupPress,
   } = useAddNewStudio();
+
+  const sceneSource = useSceneMetadataSource();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +55,11 @@ function AddNewStudio() {
             className={styles.searchInput}
             name="studioLookup"
             value={term}
-            placeholder="e.g. Blacked, https://stashdb.org/studios/324ea274-1afb-4f80-aa66-c6ddb52b9b56"
+            placeholder={
+              sceneSource === 'tpdb'
+                ? 'e.g. Blacked, tpdb:<TPDB site UUID>'
+                : 'e.g. Blacked, https://stashdb.org/studios/324ea274-1afb-4f80-aa66-c6ddb52b9b56'
+            }
             autoFocus={true}
             onChange={onSearchInputChange}
           />

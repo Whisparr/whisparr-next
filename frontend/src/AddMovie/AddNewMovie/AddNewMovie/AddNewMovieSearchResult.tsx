@@ -12,6 +12,7 @@ import { MovieStatus } from 'Movie/Movie';
 import MovieGenres from 'Movie/MovieGenres';
 import MoviePoster from 'Movie/MoviePoster';
 import ScenePoster from 'Scene/ScenePoster';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import StudioLogo from 'Studio/StudioLogo';
 import formatRuntime from 'Utilities/Date/formatRuntime';
 import getRelativeDate from 'Utilities/Date/getRelativeDate';
@@ -57,7 +58,9 @@ interface AddNewMovieSearchResultProps extends MovieLookupResult {
 }
 
 // TODO: movie props to proper typing, this seems to be a deconstruct of Movie.ts
-function AddNewMovieSearchResult(props: AddNewMovieSearchResultProps) {
+function AddNewMovieSearchResult(
+  props: Readonly<AddNewMovieSearchResultProps>
+) {
   const { colorImpairedMode, ...item } = props;
   const {
     id,
@@ -89,6 +92,7 @@ function AddNewMovieSearchResult(props: AddNewMovieSearchResultProps) {
 
   const { isSmallScreen, safeForWorkMode, shortDateFormat, showRelativeDates } =
     useAddNewMovieSearchResult();
+  const sceneSource = useSceneMetadataSource();
 
   // TODO: For now movieRuntimeFormat isn't part of UiSettings selector; fall back to 'hoursMinutes'
   const movieRuntimeFormat = 'hoursMinutes';
@@ -107,10 +111,16 @@ function AddNewMovieSearchResult(props: AddNewMovieSearchResultProps) {
 
   const linkProps = isExisting ? { to: `/movie/${titleSlug}` } : { onPress };
 
+  // A scene's foreign id comes from the locked scene source; hold its link
+  // back until that source is known.
   const providerProps =
     itemType === 'movie'
       ? { tmdbId, tpdbId, website }
-      : { stashId: foreignId, website };
+      : {
+          stashId: sceneSource ? foreignId : undefined,
+          sceneSource,
+          website,
+        };
 
   let ImageItem: React.ComponentType<Record<string, unknown>> =
     MoviePoster as unknown as React.ComponentType<Record<string, unknown>>;

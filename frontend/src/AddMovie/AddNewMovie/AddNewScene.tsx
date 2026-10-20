@@ -8,6 +8,7 @@ import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import { icons, kinds } from 'Helpers/Props';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import translate from 'Utilities/String/translate';
 import AddNewMovieSearchResult from './AddNewMovie/AddNewMovieSearchResult';
 import { useAddNewMovie } from './useAddNewMovie';
@@ -24,6 +25,8 @@ function AddNewScene() {
     onLookupChange,
     onClearLookup,
   } = useAddNewMovie('scene');
+
+  const sceneSource = useSceneMetadataSource();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +55,11 @@ function AddNewScene() {
             className={styles.searchInput}
             name="movieLookup"
             value={term}
-            placeholder="e.g. The Dark Knight, stash:e7e4f9c0-3d9f-4136-b38b-9b49398c0ade"
+            placeholder={
+              sceneSource === 'tpdb'
+                ? 'e.g. The Dark Knight, tpdb:<TPDB scene UUID>'
+                : 'e.g. The Dark Knight, stash:e7e4f9c0-3d9f-4136-b38b-9b49398c0ade'
+            }
             autoFocus={true}
             onChange={onSearchInputChange}
           />

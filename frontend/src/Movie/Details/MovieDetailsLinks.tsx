@@ -3,6 +3,11 @@ import Label from 'Components/Label';
 import ClipboardButton from 'Components/Link/ClipboardButton';
 import Link from 'Components/Link/Link';
 import { kinds, sizes } from 'Helpers/Props';
+import { MetadataSources } from 'Settings/MetadataSource/useMetadataSources';
+import {
+  sceneSourceLink,
+  translateSourceLabel,
+} from 'Utilities/MetadataSource/sourceLinks';
 import translate from 'Utilities/String/translate';
 import styles from './MovieDetailsLinks.module.css';
 
@@ -10,6 +15,9 @@ interface MovieDetailsLinksProps {
   tmdbId?: number;
   tpdbId?: string;
   stashId?: string;
+  // Set when `stashId` is a scene's foreign id, which comes from the locked
+  // scene source rather than always from StashDB.
+  sceneSource?: MetadataSources['sceneMetadataSource'];
   website?: string;
 }
 
@@ -25,6 +33,7 @@ function MovieDetailsLinks({
   tmdbId,
   tpdbId,
   stashId,
+  sceneSource = 'stashDb',
   website,
 }: Readonly<MovieDetailsLinksProps>) {
   const links = useMemo(() => {
@@ -54,15 +63,17 @@ function MovieDetailsLinks({
     }
 
     if (stashId && stashId !== tmdbId?.toString()) {
+      const { url, label } = sceneSourceLink('scene', stashId, sceneSource);
+
       validLinks.push({
-        name: translate('StashDB'),
-        url: `https://stashdb.org/scenes/${stashId}/`,
+        name: translateSourceLabel(label),
+        url,
         externalId: stashId,
       });
     }
 
     return validLinks;
-  }, [tmdbId, tpdbId, stashId, website]);
+  }, [tmdbId, tpdbId, stashId, sceneSource, website]);
 
   return (
     <div className={styles.links}>

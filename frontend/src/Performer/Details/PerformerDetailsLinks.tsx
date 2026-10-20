@@ -3,6 +3,11 @@ import Label from 'Components/Label';
 import Link from 'Components/Link/Link';
 import { kinds, sizes } from 'Helpers/Props';
 import Performer from 'Performer/Performer';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
+import {
+  sceneSourceLink,
+  translateSourceLabel,
+} from 'Utilities/MetadataSource/sourceLinks';
 import translate from 'Utilities/String/translate';
 import styles from './PerformerDetailsLinks.module.css';
 
@@ -11,22 +16,30 @@ type PerformerDetailsLinksProps = Pick<
   'tmdbId' | 'tpdbId' | 'foreignId'
 >;
 
-function PerformerDetailsLinks(props: PerformerDetailsLinksProps) {
+function PerformerDetailsLinks(props: Readonly<PerformerDetailsLinksProps>) {
   const { tmdbId, tpdbId, foreignId } = props;
+  const sceneSource = useSceneMetadataSource();
+
+  const sourceLink =
+    foreignId && sceneSource
+      ? sceneSourceLink('performer', foreignId, sceneSource)
+      : null;
+
+  // Under TPDB the foreign id is the TPDB id, so the source link already
+  // covers it.
+  const showTpdbLink =
+    !!tpdbId && !(sceneSource === 'tpdb' && tpdbId === foreignId);
 
   return (
     <div className={styles.links}>
-      {foreignId ? (
-        <Link
-          className={styles.link}
-          to={`https://stashdb.org/performers/${foreignId}`}
-        >
+      {sourceLink ? (
+        <Link className={styles.link} to={sourceLink.url}>
           <Label
             className={styles.linkLabel}
             kind={kinds.INFO}
             size={sizes.LARGE}
           >
-            {translate('StashDB')}
+            {translateSourceLabel(sourceLink.label)}
           </Label>
         </Link>
       ) : null}
@@ -46,7 +59,7 @@ function PerformerDetailsLinks(props: PerformerDetailsLinksProps) {
         </Link>
       ) : null}
 
-      {tpdbId ? (
+      {showTpdbLink ? (
         <Link
           className={styles.link}
           to={`https://theporndb.net/performers/${tpdbId}`}

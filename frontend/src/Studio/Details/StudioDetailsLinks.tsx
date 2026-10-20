@@ -2,6 +2,11 @@ import React from 'react';
 import Label from 'Components/Label';
 import Link from 'Components/Link/Link';
 import { kinds, sizes } from 'Helpers/Props';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
+import {
+  sceneSourceLink,
+  translateSourceLabel,
+} from 'Utilities/MetadataSource/sourceLinks';
 import translate from 'Utilities/String/translate';
 import styles from './StudioDetailsLinks.module.css';
 
@@ -17,7 +22,18 @@ function StudioDetailsLinks({
   tmdbId,
   tpdbId,
   website,
-}: StudioDetailsLinksProps) {
+}: Readonly<StudioDetailsLinksProps>) {
+  const sceneSource = useSceneMetadataSource();
+
+  const sourceLink = sceneSource
+    ? sceneSourceLink('studio', foreignId, sceneSource)
+    : null;
+
+  // Under TPDB the foreign id is the TPDB id, so the source link already
+  // covers it.
+  const showTpdbLink =
+    !!tpdbId && !(sceneSource === 'tpdb' && tpdbId === foreignId);
+
   return (
     <div className={styles.links}>
       {website && (
@@ -31,18 +47,17 @@ function StudioDetailsLinks({
           </Label>
         </Link>
       )}
-      <Link
-        className={styles.link}
-        to={`https://stashdb.org/studios/${foreignId}`}
-      >
-        <Label
-          className={styles.linkLabel}
-          kind={kinds.INFO}
-          size={sizes.LARGE}
-        >
-          {translate('StashDB')}
-        </Label>
-      </Link>
+      {sourceLink ? (
+        <Link className={styles.link} to={sourceLink.url}>
+          <Label
+            className={styles.linkLabel}
+            kind={kinds.INFO}
+            size={sizes.LARGE}
+          >
+            {translateSourceLabel(sourceLink.label)}
+          </Label>
+        </Link>
+      ) : null}
 
       {!!tmdbId && (
         <Link
@@ -59,7 +74,7 @@ function StudioDetailsLinks({
         </Link>
       )}
 
-      {!!tpdbId && (
+      {showTpdbLink && (
         <Link
           className={styles.link}
           to={`https://theporndb.net/sites/${tpdbId}`}

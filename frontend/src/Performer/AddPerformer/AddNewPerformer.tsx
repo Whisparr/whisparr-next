@@ -9,6 +9,7 @@ import PageContent from 'Components/Page/PageContent';
 import PageContentBody from 'Components/Page/PageContentBody';
 import { icons, kinds } from 'Helpers/Props';
 import Performer from 'Performer/Performer';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
 import AddNewPerformerSearchResult from './AddNewPerformerSearchResult';
@@ -24,6 +25,8 @@ function AddNewPerformer() {
     onPerformerLookupChange,
     onClearPerformerLookupPress,
   } = useAddNewPerformer();
+
+  const sceneSource = useSceneMetadataSource();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +55,11 @@ function AddNewPerformer() {
             className={styles.searchInput}
             name="movieLookup"
             value={term}
-            placeholder="e.g. Angela White, https://stashdb.org/performers/155f2559-d1f1-42b1-8cbe-9008542df5ce"
+            placeholder={
+              sceneSource === 'tpdb'
+                ? 'e.g. Angela White, tpdb:<TPDB performer UUID>'
+                : 'e.g. Angela White, https://stashdb.org/performers/155f2559-d1f1-42b1-8cbe-9008542df5ce'
+            }
             autoFocus={true}
             onChange={handleInputChange}
           />

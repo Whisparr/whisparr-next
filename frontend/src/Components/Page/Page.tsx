@@ -5,7 +5,9 @@ import ColorImpairedContext from 'App/ColorImpairedContext';
 import ConnectionLostModal from 'App/ConnectionLostModal';
 import SignalRListener from 'Components/SignalRListener';
 import AuthenticationRequiredModal from 'FirstRun/AuthenticationRequiredModal';
+import MetadataSourceRequiredModal from 'FirstRun/MetadataSourceRequiredModal';
 import useAppPage from 'Helpers/Hooks/useAppPage';
+import useMetadataSources from 'Settings/MetadataSource/useMetadataSources';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import { useSystemStatusData } from 'System/Status/useSystemStatus';
 import ErrorPage from './ErrorPage';
@@ -29,6 +31,9 @@ function Page({ children }: Readonly<PageProps>) {
   const isSmallScreen = useAppDimension('isSmallScreen');
   const { authentication } = useSystemStatusData();
   const authenticationEnabled = authentication !== 'none';
+  // Undefined until fetched; the picker waits for a definite `locked: false`.
+  const { data: metadataSources } = useMetadataSources();
+  const sourcesUnlocked = metadataSources?.locked === false;
   const { isSidebarVisible, isUpdated, isDisconnected, version } = useAppValues(
     'isSidebarVisible',
     'isUpdated',
@@ -105,6 +110,11 @@ function Page({ children }: Readonly<PageProps>) {
         <ConnectionLostModal isOpen={isConnectionLostModalOpen} />
 
         <AuthenticationRequiredModal isOpen={!authenticationEnabled} />
+
+        {/* After the auth modal: sources are chosen once auth is set up. */}
+        <MetadataSourceRequiredModal
+          isOpen={authenticationEnabled && sourcesUnlocked}
+        />
       </div>
     </ColorImpairedContext.Provider>
   );
