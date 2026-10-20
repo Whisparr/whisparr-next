@@ -15,8 +15,12 @@ interface MovieDetailsLinksProps {
   tmdbId?: number;
   tpdbId?: string;
   stashId?: string;
-  // Set when `stashId` is a scene's foreign id, which comes from the locked
-  // scene source rather than always from StashDB.
+  // A TPDB scene carries its own key in `tpdbId` (the scene UUID), not a movie id —
+  // only link it as /movies/ when this is actually a movie.
+  foreignId?: string;
+  itemType?: string;
+  // Set when the scene's foreign id comes from the locked scene source rather than
+  // always from StashDB.
   sceneSource?: MetadataSources['sceneMetadataSource'];
   website?: string;
 }
@@ -33,6 +37,8 @@ function MovieDetailsLinks({
   tmdbId,
   tpdbId,
   stashId,
+  foreignId,
+  itemType,
   sceneSource = 'stashDb',
   website,
 }: Readonly<MovieDetailsLinksProps>) {
@@ -54,7 +60,8 @@ function MovieDetailsLinks({
       });
     }
 
-    if (tpdbId) {
+    // A TPDB scene's `tpdbId` is its own key, not a movie id — never link it as /movies/.
+    if (tpdbId && itemType !== 'scene') {
       validLinks.push({
         name: translate('TPDb'),
         url: `https://theporndb.net/movies/${tpdbId}`,
@@ -62,18 +69,27 @@ function MovieDetailsLinks({
       });
     }
 
-    if (stashId && stashId !== tmdbId?.toString()) {
-      const { url, label } = sceneSourceLink('scene', stashId, sceneSource);
+    // Scenes are linked from the locked scene source's foreign id — for TPDB scenes that is
+    // `foreignId` (their UUID), while StashDB scenes carry it in `stashId`.
+    const sceneForeignId =
+      itemType === 'scene' ? (stashId ?? foreignId) : stashId;
+
+    if (sceneForeignId && sceneForeignId !== tmdbId?.toString()) {
+      const { url, label } = sceneSourceLink(
+        'scene',
+        sceneForeignId,
+        sceneSource
+      );
 
       validLinks.push({
         name: translateSourceLabel(label),
         url,
-        externalId: stashId,
+        externalId: sceneForeignId,
       });
     }
 
     return validLinks;
-  }, [tmdbId, tpdbId, stashId, sceneSource, website]);
+  }, [tmdbId, tpdbId, stashId, foreignId, itemType, sceneSource, website]);
 
   return (
     <div className={styles.links}>

@@ -47,6 +47,7 @@ import { useMovie, useToggleMovieMonitored } from 'Movie/useMovie';
 import MovieFileEditorTable from 'MovieFile/Editor/MovieFileEditorTable';
 import ExtraFileTable from 'MovieFile/Extras/ExtraFileTable';
 import OrganizePreviewModal from 'Organize/OrganizePreviewModal';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import QualityProfileName from 'Settings/Profiles/Quality/QualityProfileName';
 import fonts from 'Styles/Variables/fonts';
 import formatRuntime from 'Utilities/Date/formatRuntime';
@@ -120,6 +121,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
     handleDeleteMoviePress,
     handleDeleteMovieModalClose,
   } = useMovieDetailsModals();
+  const sceneSource = useSceneMetadataSource();
 
   // Error handling for movie fetch
   if (isError) {
@@ -149,6 +151,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
     tmdbId,
     tpdbId,
     stashId,
+    foreignId,
     title,
     code,
     year,
@@ -356,6 +359,9 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
                           tmdbId={tmdbId}
                           tpdbId={tpdbId}
                           stashId={stashId ?? undefined}
+                          foreignId={foreignId}
+                          itemType={itemType}
+                          sceneSource={sceneSource}
                           website={website}
                         />
                       }
