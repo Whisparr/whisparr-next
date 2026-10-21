@@ -29,6 +29,7 @@ namespace NzbDrone.Common.EnvironmentInfo
         public static string AppName { get; } = "Whisparr";
 
         public static Version Version { get; }
+        public static int MajorVersion => Version?.Major ?? 0;
         public static string Branch { get; }
         public static string Release { get; }
 

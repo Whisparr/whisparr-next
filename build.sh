@@ -23,6 +23,12 @@ UpdateVersionNumber()
         sed -i'' -e "s/<AssemblyConfiguration>[\$()A-Za-z-]\+<\/AssemblyConfiguration>/<AssemblyConfiguration>${BUILD_SOURCEBRANCHNAME}<\/AssemblyConfiguration>/g" src/Directory.Build.props
         sed -i'' -e "s/<string>10.0.0.0<\/string>/<string>$WHISPARRVERSION<\/string>/g" distribution/osx/Whisparr.app/Contents/Info.plist
     fi
+
+    # Set the major version from env var (default 5 for the v5 line)
+    MAJOR_VERSION="${WHISPARR_MAJOR_VERSION:-5}"
+    echo "Setting WHISPARR_MAJOR_VERSION=$MAJOR_VERSION"
+    sed -i'' -e "s/<AssemblyVersion>[0-9]*\.[0-9.]*\*<\/AssemblyVersion>/<AssemblyVersion>${MAJOR_VERSION}.0.0.*<\/AssemblyVersion>/g" src/Directory.Build.props
+    sed -i'' -e "s/<string>[0-9]*\.[0-9.]*<\/string>/<string>${MAJOR_VERSION}.0.0<\/string>/g" distribution/osx/Whisparr.app/Contents/Info.plist
 }
 
 EnableExtraPlatformsInSDK()
