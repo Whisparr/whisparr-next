@@ -5,8 +5,9 @@ namespace Whisparr.Api.V5.Config
 {
     public class MetadataSourceResource
     {
-        public SceneMetadataType SceneMetadataSource { get; set; }
-        public MovieMetadataType MovieMetadataSource { get; set; }
+        // Nullable so a PUT that omits a source is rejected instead of locking the enum default.
+        public SceneMetadataType? SceneMetadataSource { get; set; }
+        public MovieMetadataType? MovieMetadataSource { get; set; }
         public bool Locked { get; set; }
     }
 

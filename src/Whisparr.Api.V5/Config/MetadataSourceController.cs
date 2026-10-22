@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Core.Configuration;
@@ -35,14 +36,20 @@ namespace Whisparr.Api.V5.Config
                 throw new BadRequestException("Request body can't be empty");
             }
 
-            if (resource.MovieMetadataSource == MovieMetadataType.NONE)
+            // The choice locks permanently, so anything missing or out of range is refused up front.
+            if (resource.SceneMetadataSource is not { } scene || !Enum.IsDefined(scene))
+            {
+                throw new BadRequestException("A valid scene metadata source is required");
+            }
+
+            if (resource.MovieMetadataSource is not { } movie || !Enum.IsDefined(movie) || movie == MovieMetadataType.NONE)
             {
                 throw new BadRequestException("A movie metadata source is required");
             }
 
             try
             {
-                _metadataSourceService.Choose(resource.SceneMetadataSource, resource.MovieMetadataSource);
+                _metadataSourceService.Choose(scene, movie);
             }
             catch (MetadataSourcesLockedException ex)
             {

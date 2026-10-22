@@ -112,5 +112,22 @@ namespace NzbDrone.Api.Test.v5.Config
         {
             Assert.Throws<BadRequestException>(() => Subject.ChooseMetadataSources(null));
         }
+
+        [TestCase("{ \"movieMetadataSource\": \"tmdb\" }")]
+        [TestCase("{ \"sceneMetadataSource\": \"tpdb\" }")]
+        [TestCase("{ }")]
+        [TestCase("{ \"sceneMetadataSource\": 7, \"movieMetadataSource\": \"tmdb\" }")]
+        [TestCase("{ \"sceneMetadataSource\": \"stashDb\", \"movieMetadataSource\": 7 }")]
+        public void should_answer_400_and_not_lock_for_a_missing_or_out_of_range_source(string body)
+        {
+            var resource = STJson.Deserialize<MetadataSourceResource>(body);
+
+            var ex = Assert.Throws<BadRequestException>(() => Subject.ChooseMetadataSources(resource));
+
+            ex.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            Mocker.GetMock<IMetadataSourceService>()
+                  .Verify(s => s.Choose(It.IsAny<SceneMetadataType>(), It.IsAny<MovieMetadataType>()), Times.Never());
+        }
     }
 }
