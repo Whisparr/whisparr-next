@@ -7,6 +7,7 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
 import { EnhancedSelectInputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
@@ -105,6 +106,7 @@ function EditStudiosModalContent(
   props: Readonly<EditStudiosModalContentProps>
 ) {
   const { studioIds, onSavePress, onModalClose } = props;
+  const movieMonitorHelpText = useMovieMonitorHelpText('studio');
 
   const [monitored, setMonitored] = useState<string | number>(NO_CHANGE);
 
@@ -254,7 +256,7 @@ function EditStudiosModalContent(
           <FormInputGroup
             type={inputTypes.SELECT}
             name="moviesMonitored"
-            helpText={translate('MonitoredStudioMovieHelpText')}
+            helpText={movieMonitorHelpText}
             value={moviesMonitored}
             values={monitoredOptions}
             onChange={onInputChange}

@@ -9,6 +9,7 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes, kinds } from 'Helpers/Props';
 import MovieHeadshot from 'Movie/MovieHeadshot';
 import Performer from 'Performer/Performer';
@@ -27,6 +28,7 @@ function AddNewPerformerModalContent({
   onModalClose,
 }: Readonly<AddNewPerformerModalContentProps>) {
   const { fullName, images } = performer;
+  const movieMonitorHelpText = useMovieMonitorHelpText('performer');
 
   const {
     isAdding,
@@ -121,7 +123,7 @@ function AddNewPerformerModalContent({
                 <FormInputGroup
                   type={inputTypes.CHECK}
                   name="moviesMonitored"
-                  helpText={translate('MonitoredPerformerMovieHelpText')}
+                  helpText={movieMonitorHelpText}
                   {...moviesMonitored}
                   onChange={onInputChange}
                 />

@@ -1,17 +1,15 @@
-import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
-import {
-  getLinkedMovieMetadataSource,
-  isMovieMetadataLinked,
-} from './useMovieMonitorAvailability';
+import { useMovieMonitorAvailability } from './useMovieMonitorAvailability';
 
 export function useShowMovieMonitorToggleButton(
   tmdbid?: number,
   tpdbid?: string
 ) {
-  const { data: generalSettings } = useGeneralSettings();
-  const linkedSource = getLinkedMovieMetadataSource(
-    generalSettings?.whisparrMovieMetadataSource
+  // The entity kind only picks the warning text, which isn't used here.
+  const { isSupported, isLinked } = useMovieMonitorAvailability(
+    'studio',
+    tmdbid,
+    tpdbid
   );
 
-  return !!linkedSource && isMovieMetadataLinked(linkedSource, tmdbid, tpdbid);
+  return isSupported && isLinked;
 }

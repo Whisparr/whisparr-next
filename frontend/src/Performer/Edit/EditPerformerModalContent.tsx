@@ -11,7 +11,10 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
-import { useMovieMonitorAvailability } from 'Helpers/Hooks/useMovieMonitorAvailability';
+import {
+  useMovieMonitorAvailability,
+  useMovieMonitorHelpText,
+} from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
 import MovieHeadshot from 'Movie/MovieHeadshot';
@@ -131,6 +134,8 @@ function EditPerformerModalContent({
   // movies at all, so the toggle follows the configured source. When the
   // source is set but this performer isn't linked to it on stashdb.org the
   // toggle stays visible and disabled, with the reason underneath it.
+  const movieMonitorHelpText = useMovieMonitorHelpText('performer');
+
   const {
     isSupported: isMovieMonitorSupported,
     isLinked: isMovieMonitorLinked,
@@ -274,7 +279,7 @@ function EditPerformerModalContent({
                   <FormInputGroup
                     type={inputTypes.CHECK}
                     name="moviesMonitored"
-                    helpText={translate('MonitoredPerformerMovieHelpText')}
+                    helpText={movieMonitorHelpText}
                     helpTextWarning={movieMonitorUnavailableMessage}
                     isDisabled={isMovieMonitorDisabled}
                     {...settings.moviesMonitored}

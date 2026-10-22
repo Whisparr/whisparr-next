@@ -144,28 +144,40 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
 
         // Fully populated Studio will link to it, otherwise just show name
         if (name === 'studioTitle') {
+          const studioAnchor = (
+            <span>
+              {studioTitle}
+              {url ? (
+                <a href={url} target="_blank">
+                  <Icon
+                    className={styles.externalLink}
+                    name={icons.EXTERNAL_LINK}
+                  />
+                </a>
+              ) : null}
+            </span>
+          );
+
+          let studioCell = studioAnchor;
+
+          if (studioForeignId) {
+            studioCell = (
+              <Link to={`/studio/${studioForeignId}`}>{studioTitle}</Link>
+            );
+          } else if (sceneSource !== 'tpdb') {
+            // The "add a link on stashdb.org" tip only applies to StashDB
+            // scenes; ThePornDB scenes have no such step, so show no tip.
+            studioCell = (
+              <Tooltip
+                anchor={studioAnchor}
+                tooltip={translate('StudioNotInStashDb')}
+              />
+            );
+          }
+
           return (
             <TableRowCell key={name} className={styles.studio}>
-              {studioForeignId ? (
-                <Link to={`/studio/${studioForeignId}`}>{studioTitle}</Link>
-              ) : (
-                <Tooltip
-                  anchor={
-                    <span>
-                      {studioTitle}
-                      {url ? (
-                        <a href={url} target="_blank">
-                          <Icon
-                            className={styles.externalLink}
-                            name={icons.EXTERNAL_LINK}
-                          />
-                        </a>
-                      ) : null}
-                    </span>
-                  }
-                  tooltip={translate('StudioNotInStashDb')}
-                />
-              )}
+              {studioCell}
             </TableRowCell>
           );
         }

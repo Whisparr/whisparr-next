@@ -8,6 +8,7 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes, kinds } from 'Helpers/Props';
 import { PerformerVisibility } from 'Performer/Performer';
 import { EnhancedSelectInputChanged } from 'typings/inputs';
@@ -82,6 +83,7 @@ function EditPerformersModalContent(
   props: Readonly<EditPerformersModalContentProps>
 ) {
   const { performerIds, onSavePress, onModalClose } = props;
+  const movieMonitorHelpText = useMovieMonitorHelpText('performer');
 
   const [monitored, setMonitored] = useState<string | number>(NO_CHANGE);
 
@@ -259,7 +261,7 @@ function EditPerformersModalContent(
           <FormInputGroup
             type={inputTypes.SELECT}
             name="moviesMonitored"
-            helpText={translate('MonitoredPerformerMovieHelpText')}
+            helpText={movieMonitorHelpText}
             value={moviesMonitored}
             values={monitoredOptions}
             onChange={onInputChange}

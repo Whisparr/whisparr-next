@@ -10,7 +10,10 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
-import { useMovieMonitorAvailability } from 'Helpers/Hooks/useMovieMonitorAvailability';
+import {
+  useMovieMonitorAvailability,
+  useMovieMonitorHelpText,
+} from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
 import Studio from 'Studio/Studio';
@@ -126,6 +129,8 @@ function EditStudioModalContent({
   // movies at all, so the toggle follows the configured source. When the
   // source is set but this studio isn't linked to it on stashdb.org the toggle
   // stays visible and disabled, with the reason underneath it.
+  const movieMonitorHelpText = useMovieMonitorHelpText('studio');
+
   const {
     isSupported: isMovieMonitorSupported,
     isLinked: isMovieMonitorLinked,
@@ -222,7 +227,7 @@ function EditStudioModalContent({
                   <FormInputGroup
                     type={inputTypes.CHECK}
                     name="moviesMonitored"
-                    helpText={translate('MonitoredStudioMovieHelpText')}
+                    helpText={movieMonitorHelpText}
                     helpTextWarning={movieMonitorUnavailableMessage}
                     isDisabled={isMovieMonitorDisabled}
                     {...settings.moviesMonitored}

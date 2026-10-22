@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
+import { useSceneMetadataSource } from 'Settings/MetadataSource/useMetadataSources';
 import translate from 'Utilities/String/translate';
 
 export type MovieMonitorEntity = 'performer' | 'studio';
@@ -68,9 +69,24 @@ export function useMovieMonitorAvailability(
 ): MovieMonitorAvailability {
   const { data: generalSettings } = useGeneralSettings();
   const source = generalSettings?.whisparrMovieMetadataSource;
+  const sceneSource = useSceneMetadataSource();
 
   return useMemo(() => {
     const linkedSource = getLinkedMovieMetadataSource(source);
+
+    // ThePornDB scenes list a studio's or performer's movies straight from
+    // ThePornDB, so no link is needed, but only with ThePornDB movies too.
+    if (sceneSource === 'tpdb') {
+      return linkedSource === 'tpdb'
+        ? { isSupported: true, isLinked: true, unavailableMessage: '' }
+        : {
+            isSupported: false,
+            isLinked: false,
+            unavailableMessage: translate(
+              'MovieMonitoringRequiresTpdbMovieSource'
+            ),
+          };
+    }
 
     if (!linkedSource) {
       return { isSupported: false, isLinked: false, unavailableMessage: '' };
@@ -88,5 +104,42 @@ export function useMovieMonitorAvailability(
             example: exampleUrls[linkedSource][entity],
           }),
     };
-  }, [entity, source, tmdbId, tpdbId]);
+  }, [entity, source, sceneSource, tmdbId, tpdbId]);
+}
+
+// Which "monitor movies" help text applies to this entity under the locked
+// sources. StashDB scenes keep the link-based text; ThePornDB scenes with
+// ThePornDB movies need no link; ThePornDB scenes with anything else can't
+// monitor movies at all.
+export function getMovieMonitorHelpTextKey(
+  entity: MovieMonitorEntity,
+  sceneSource?: string,
+  movieSource?: string
+) {
+  if (sceneSource === 'tpdb') {
+    if (getLinkedMovieMetadataSource(movieSource) !== 'tpdb') {
+      return 'MovieMonitoringRequiresTpdbMovieSource';
+    }
+
+    return entity === 'studio'
+      ? 'MonitoredStudioMovieHelpTextTpdb'
+      : 'MonitoredPerformerMovieHelpTextTpdb';
+  }
+
+  return entity === 'studio'
+    ? 'MonitoredStudioMovieHelpText'
+    : 'MonitoredPerformerMovieHelpText';
+}
+
+export function useMovieMonitorHelpText(entity: MovieMonitorEntity) {
+  const { data: generalSettings } = useGeneralSettings();
+  const sceneSource = useSceneMetadataSource();
+
+  return translate(
+    getMovieMonitorHelpTextKey(
+      entity,
+      sceneSource,
+      generalSettings?.whisparrMovieMetadataSource
+    )
+  );
 }

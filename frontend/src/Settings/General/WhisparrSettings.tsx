@@ -194,7 +194,11 @@ function WhisparrSettings({
               value={getMovieSourceLabel(metadataSources.movieMetadataSource)}
               readOnly={true}
               helpTexts={[
-                translate('WhisparrMovieMetadataSourceHelpText'),
+                translate(
+                  metadataSources.sceneMetadataSource === 'tpdb'
+                    ? 'WhisparrMovieMetadataSourceHelpTextTpdbScenes'
+                    : 'WhisparrMovieMetadataSourceHelpText'
+                ),
                 translate('MetadataSourcesLockedHelpText'),
               ]}
               onChange={noop}

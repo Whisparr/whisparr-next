@@ -9,6 +9,7 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes, kinds } from 'Helpers/Props';
 import Studio, { Image } from 'Studio/Studio';
 import StudioLogo from 'Studio/StudioLogo';
@@ -25,8 +26,11 @@ interface AddNewStudioModalContentProps {
   onModalClose: () => void;
 }
 
-function AddNewStudioModalContent(props: AddNewStudioModalContentProps) {
+function AddNewStudioModalContent(
+  props: Readonly<AddNewStudioModalContentProps>
+) {
   const { title, images, onModalClose, studio } = props;
+  const movieMonitorHelpText = useMovieMonitorHelpText('studio');
 
   const {
     isAdding,
@@ -101,7 +105,7 @@ function AddNewStudioModalContent(props: AddNewStudioModalContentProps) {
                 <FormInputGroup
                   type={inputTypes.CHECK}
                   name="moviesMonitored"
-                  helpText={translate('MonitoredStudioMovieHelpText')}
+                  helpText={movieMonitorHelpText}
                   {...settings.moviesMonitored}
                   errors={settings.moviesMonitored?.errors}
                   onChange={onInputChange}
