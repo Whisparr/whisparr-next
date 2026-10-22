@@ -39,7 +39,7 @@ function MovieDetailsLinks({
   stashId,
   foreignId,
   itemType,
-  sceneSource = 'stashDb',
+  sceneSource,
   website,
 }: Readonly<MovieDetailsLinksProps>) {
   const links = useMemo(() => {
@@ -69,12 +69,15 @@ function MovieDetailsLinks({
       });
     }
 
-    // Scenes are linked from the locked scene source's foreign id — for TPDB scenes that is
-    // `foreignId` (their UUID), while StashDB scenes carry it in `stashId`.
-    const sceneForeignId =
-      itemType === 'scene' ? (stashId ?? foreignId) : stashId;
+    // Scenes are linked from their foreign id, which is always the locked scene source's key.
+    // No source link until that source is known, as SceneDetailsLinks does.
+    const sceneForeignId = itemType === 'scene' ? foreignId : stashId;
 
-    if (sceneForeignId && sceneForeignId !== tmdbId?.toString()) {
+    if (
+      sceneSource &&
+      sceneForeignId &&
+      sceneForeignId !== tmdbId?.toString()
+    ) {
       const { url, label } = sceneSourceLink(
         'scene',
         sceneForeignId,
