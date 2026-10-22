@@ -216,8 +216,8 @@ namespace Whisparr.Api.V5.Movies
             }
             catch (MovieNotFoundException ex)
             {
-                var source = string.IsNullOrEmpty(newMovie.ForeignId) ? "TMDb" : "StashDB";
-                _logger.Error(ex, "{ForeignId} was not found, it may have been removed from {Source}. Path: {Path}", newMovie.ForeignId, source, newMovie.Path);
+                var source = string.IsNullOrEmpty(newMovie.ForeignId) ? "TMDb" : "MetadataSource";
+                _logger.Error(ex, "{ForeignId} was not found, it may have been removed from the metadata source. Path: {Path}", newMovie.ForeignId, newMovie.Path);
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {
@@ -232,6 +232,13 @@ namespace Whisparr.Api.V5.Movies
 
         private (MovieMetadata Metadata, List<Credit> Credits) GetMetadata(Movie movie)
         {
+            // A TPDB scene's TpdbId is the scene UUID, not a TPDB movie id: resolve scenes first.
+            if (movie.IsSceneLookup())
+            {
+                var result = _movieInfo.GetSceneInfo(movie.ForeignId);
+                return (result.Item1, result.Item4);
+            }
+
             if (int.TryParse(movie.ForeignId, out var tmdbId))
             {
                 var result = _movieInfo.GetMovieInfo(tmdbId);

@@ -7,7 +7,9 @@ using FluentValidation.Results;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.MetadataSource.SkyHook.Resource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Credits;
 using NzbDrone.Core.Movies.Performers;
@@ -171,6 +173,140 @@ namespace NzbDrone.Core.Test.MovieTests
             Subject.AddMovies(newMovies);
 
             Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
+        private void GivenValidScene(string foreignId)
+        {
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(foreignId))
+                  .Returns(new System.Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(_fakeMovie, new Studio(), new List<Performer>(), new List<Credit>()));
+        }
+
+        private void GivenTpdbSceneFromStudio(string studioForeignId)
+        {
+            _fakeMovie.ItemType = ItemType.Scene;
+            _fakeMovie.MetadataSource = NzbDrone.Core.Movies.MetadataSource.TpdbScene;
+            _fakeMovie.ReleaseDateUtc = new System.DateTime(2020, 1, 1, 0, 0, 0, System.DateTimeKind.Utc);
+            _fakeMovie.StudioForeignId = studioForeignId;
+            _fakeMovie.Studio = new StudioResource
+            {
+                Title = "TPDB Studio",
+                ForeignIds = new ExternalIdResource { TpdbId = studioForeignId }
+            };
+        }
+
+        private static Movie TpdbSceneRequest(string sceneUuid)
+        {
+            // A TPDB scene lookup result carries TpdbId = the scene UUID (MapMovie copies ForeignIds.TpdbId).
+            return new Movie
+            {
+                MovieMetadata = new MovieMetadata
+                {
+                    ForeignId = sceneUuid,
+                    TpdbId = sceneUuid,
+                    ItemType = ItemType.Scene
+                },
+                RootFolderPath = @"C:\Test\Movies"
+            };
+        }
+
+        [Test]
+        public void should_look_up_tpdb_scene_by_foreign_id_not_as_tpdb_movie()
+        {
+            const string sceneUuid = "0b5e7c2a-1f4d-4e6a-9c3b-2d8f7a6e5c41";
+
+            GivenValidScene(sceneUuid);
+            GivenValidPath();
+
+            var movie = Subject.AddMovie(TpdbSceneRequest(sceneUuid));
+
+            movie.Title.Should().Be(_fakeMovie.Title);
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(sceneUuid), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetTpdbMovieInfo(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_look_up_tpdb_scene_by_foreign_id_when_resolved_metadata_source_is_tpdb_scene()
+        {
+            const string sceneUuid = "0b5e7c2a-1f4d-4e6a-9c3b-2d8f7a6e5c41";
+
+            GivenValidScene(sceneUuid);
+            GivenValidPath();
+
+            var request = TpdbSceneRequest(sceneUuid);
+            request.MovieMetadata.Value.ItemType = ItemType.Movie;
+            request.MovieMetadata.Value.MetadataSource = NzbDrone.Core.Movies.MetadataSource.TpdbScene;
+
+            Subject.AddMovie(request);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(sceneUuid), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetTpdbMovieInfo(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_look_up_stashdb_scene_by_foreign_id()
+        {
+            const string stashId = "5c1f2a3e-7d4b-4c9a-8e6f-1a2b3c4d5e6f";
+
+            GivenValidScene(stashId);
+            GivenValidPath();
+
+            var request = new Movie
+            {
+                MovieMetadata = new MovieMetadata
+                {
+                    ForeignId = stashId,
+                    StashId = stashId,
+                    ItemType = ItemType.Scene
+                },
+                RootFolderPath = @"C:\Test\Movies"
+            };
+
+            Subject.AddMovie(request);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(stashId), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetTpdbMovieInfo(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetMovieInfo(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void should_exclude_tpdb_scene_from_excluded_studio()
+        {
+            const string sceneUuid = "0b5e7c2a-1f4d-4e6a-9c3b-2d8f7a6e5c41";
+            const string studioUuid = "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d";
+
+            GivenTpdbSceneFromStudio(studioUuid);
+            GivenValidScene(sceneUuid);
+            GivenValidPath();
+
+            Mocker.GetMock<IImportListExclusionService>()
+                  .Setup(s => s.IsExcluded(studioUuid, ImportExclusionType.Studio))
+                  .Returns(true);
+
+            Assert.Throws<ExcludedException>(() => Subject.AddMovie(TpdbSceneRequest(sceneUuid)));
+
+            Mocker.GetMock<IImportListExclusionService>()
+                  .Verify(v => v.AddExclusion(It.Is<ImportListExclusion>(e => e.Reason == ImportExclusionReason.StudioExclusion)), Times.Once());
+        }
+
+        [Test]
+        public void should_apply_studio_after_date_to_tpdb_scene()
+        {
+            const string sceneUuid = "0b5e7c2a-1f4d-4e6a-9c3b-2d8f7a6e5c41";
+            const string studioUuid = "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d";
+
+            GivenTpdbSceneFromStudio(studioUuid);
+            GivenValidScene(sceneUuid);
+            GivenValidPath();
+
+            Mocker.GetMock<IStudioService>()
+                  .Setup(s => s.FindByForeignId(studioUuid))
+                  .Returns(new Studio { ForeignId = studioUuid, AfterDate = new System.DateTime(2021, 1, 1, 0, 0, 0, System.DateTimeKind.Utc) });
+
+            Assert.Throws<ExcludedException>(() => Subject.AddMovie(TpdbSceneRequest(sceneUuid)));
+
+            Mocker.GetMock<IImportListExclusionService>()
+                  .Verify(v => v.AddExclusion(It.Is<ImportListExclusion>(e => e.Reason == ImportExclusionReason.StudioAfterDate)), Times.Once());
         }
     }
 }

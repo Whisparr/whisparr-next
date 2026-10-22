@@ -110,7 +110,7 @@ namespace NzbDrone.Core.Movies.Studios
                         throw;
                     }
 
-                    _logger.Error("StashId {0} was not added due to validation failures. {1}", m.ForeignId, ex.Message);
+                    _logger.Error(ex, "Studio {0} was not added due to validation failures. {1}", m.ForeignId, ex.Message);
                 }
                 catch (Exception ex)
                 {
@@ -119,7 +119,7 @@ namespace NzbDrone.Core.Movies.Studios
                         throw;
                     }
 
-                    _logger.Error("StashId {0} was not added due to an exception. {1}", m.ForeignId, ex.Message);
+                    _logger.Error(ex, "Studio {0} was not added due to an exception. {1}", m.ForeignId, ex.Message);
                 }
             }
 
@@ -134,9 +134,9 @@ namespace NzbDrone.Core.Movies.Studios
             {
                 studio = _studioInfo.GetStudioInfo(newStudio.ForeignId);
             }
-            catch (MovieNotFoundException)
+            catch (MovieNotFoundException ex)
             {
-                _logger.Error("StashID {0} was not found, it may have been removed from StashDb.", newStudio.ForeignId);
+                _logger.Error(ex, "Studio {0} was not found in the metadata source.", newStudio.ForeignId);
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {

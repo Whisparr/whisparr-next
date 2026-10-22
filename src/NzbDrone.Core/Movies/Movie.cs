@@ -98,6 +98,17 @@ namespace NzbDrone.Core.Movies
             return MovieMetadata.Value.Status == MovieStatusType.Released;
         }
 
+        // True for a StashDB or TPDB scene, either flagged by item type (an add/import request)
+        // or already resolved from a scene source. Scenes are always looked up by foreign id.
+        public bool IsSceneLookup()
+        {
+            var metadata = MovieMetadata?.Value;
+
+            return metadata != null &&
+                   (metadata.ItemType == ItemType.Scene ||
+                    metadata.MetadataSource is Movies.MetadataSource.Stash or Movies.MetadataSource.TpdbScene);
+        }
+
         public DateTime? GetReleaseDate()
         {
             return MovieMetadata.Value.ReleaseDateUtc;

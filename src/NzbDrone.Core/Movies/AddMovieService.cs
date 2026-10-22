@@ -211,10 +211,10 @@ namespace NzbDrone.Core.Movies
             {
                 movie.MovieMetadata = GetMetadata(newMovie);
             }
-            catch (MovieNotFoundException)
+            catch (MovieNotFoundException ex)
             {
-                var source = string.IsNullOrEmpty(newMovie.ForeignId) ? "TMDb" : "StashDB";
-                _logger.Error("{1} was not found, it may have been removed from {0}. Path: {2}", source, newMovie.ForeignId, newMovie.Path);
+                var source = string.IsNullOrEmpty(newMovie.ForeignId) ? "TMDb" : "MetadataSource";
+                _logger.Error(ex, "{0} was not found, it may have been removed from the metadata source. Path: {1}", newMovie.ForeignId, newMovie.Path);
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {
@@ -229,6 +229,13 @@ namespace NzbDrone.Core.Movies
 
         private MovieMetadata GetMetadata(Movie movie)
         {
+            // A scene's TpdbId (TPDB scenes) is the scene UUID, not a TPDB movie id, so
+            // scenes must be resolved by foreign id before the movie-id fallbacks below.
+            if (movie.IsSceneLookup())
+            {
+                return _movieInfo.GetSceneInfo(movie.ForeignId).Item1;
+            }
+
             if (int.TryParse(movie.ForeignId, out var tmdbId))
             {
                 return _movieInfo.GetMovieInfo(tmdbId).Item1;
@@ -277,8 +284,9 @@ namespace NzbDrone.Core.Movies
                 var newExclusion = new ImportListExclusion { ForeignId = newMovie.ForeignId, Type = type, MovieTitle = newMovie.ToFormattedString() };
                 if (newMovie.MovieMetadata?.Value?.Studio != null)
                 {
-                    var stashId = newMovie.MovieMetadata.Value.Studio.ForeignIds.StashId;
-                    var excludedStudio = _importListExclusionService.IsExcluded(stashId, ImportExclusionType.Studio);
+                    // StudioForeignId is the active scene source's studio id (StashId under StashDB).
+                    var studioForeignId = newMovie.MovieMetadata.Value.StudioForeignId;
+                    var excludedStudio = _importListExclusionService.IsExcluded(studioForeignId, ImportExclusionType.Studio);
                     if (excludedStudio)
                     {
                         if (_configService.WhisparrAlwaysExcludeStudiosTag.IsNullOrWhiteSpace())
@@ -301,7 +309,7 @@ namespace NzbDrone.Core.Movies
                     }
                     else
                     {
-                        var studio = _studioService.FindByForeignId(stashId);
+                        var studio = _studioService.FindByForeignId(studioForeignId);
                         if (studio?.AfterDate != null)
                         {
                             var dateTime = (DateTime)studio.AfterDate;

@@ -69,7 +69,7 @@ namespace NzbDrone.Core.Movies.Performers
                     throw;
                 }
 
-                _logger.Debug("StashId {0} was not added due to Exception. {1}", newPerformer.ForeignId, ex.Message);
+                _logger.Debug(ex, "Performer {0} was not added due to an exception. {1}", newPerformer.ForeignId, ex.Message);
             }
 
             return newPerformer;
@@ -115,7 +115,8 @@ namespace NzbDrone.Core.Movies.Performers
                         throw;
                     }
 
-                    _logger.Error("StashId {0} was not added due to validation failures. {1}", m.ForeignId, ex.Message);
+                    // Batches are a scene's credits: one missing performer skips that credit, not the scene.
+                    _logger.Warn(ex, "Performer {0} was not added due to validation failures. {1}", m.ForeignId, ex.Message);
                 }
                 catch (Exception ex)
                 {
@@ -124,7 +125,7 @@ namespace NzbDrone.Core.Movies.Performers
                         throw;
                     }
 
-                    _logger.Error("StashId {0} was not added due to Exception. {1}", m.ForeignId, ex.Message);
+                    _logger.Warn(ex, "Performer {0} was not added due to an exception. {1}", m.ForeignId, ex.Message);
                 }
             }
 
@@ -157,9 +158,9 @@ namespace NzbDrone.Core.Movies.Performers
             {
                 performer = _performerInfo.GetPerformerInfo(newPerformer.ForeignId);
             }
-            catch (MovieNotFoundException)
+            catch (MovieNotFoundException ex)
             {
-                _logger.Error("StashID {0} was not found, it may have been removed from StashDb.", newPerformer.ForeignId);
+                _logger.Warn(ex, "Performer {0} was not found in the metadata source.", newPerformer.ForeignId);
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {
