@@ -46,6 +46,66 @@ namespace NzbDrone.Core.Test.Datastore.Migration
         }
 
         [Test]
+        public void should_lock_when_library_has_only_studios()
+        {
+            var db = WithMigrationTestDb(c =>
+            {
+                c.Insert.IntoTable("Studios").Row(new
+                {
+                    ForeignId = "studio-1",
+                    QualityProfileId = 1,
+                    RootFolderPath = "/library",
+                    SearchOnAdd = false,
+                    Title = "Studio",
+                    CleanTitle = "studio",
+                    Images = "[]",
+                    Monitored = false,
+                    MoviesMonitored = false,
+                    Status = 0,
+                    TmdbId = 0,
+                    MovieCount = 0,
+                    SceneCount = 0,
+                    TotalMovieCount = 0,
+                    TotalSceneCount = 0,
+                    SizeOnDisk = 0,
+                    Tags = "[]"
+                });
+            });
+
+            var config = db.Query<Config301>("SELECT \"Key\" || '' AS \"Key\", \"Value\" || '' AS \"Value\" FROM \"Config\"")
+                           .ToDictionary(x => x.Key, x => x.Value);
+
+            config.Should().ContainKey("whisparrscenemetadatasource").WhoseValue.Should().Be("stashdb");
+            config.Should().ContainKey("metadatasourceslocked").WhoseValue.Should().Be("true");
+        }
+
+        [Test]
+        public void should_lock_when_library_has_only_performers()
+        {
+            var db = WithMigrationTestDb(c =>
+            {
+                c.Insert.IntoTable("Performers").Row(new
+                {
+                    ForeignId = "performer-1",
+                    QualityProfileId = 1,
+                    RootFolderPath = "/library",
+                    SearchOnAdd = false,
+                    Name = "Performer",
+                    CleanName = "performer",
+                    Gender = 0,
+                    Status = 0,
+                    Tags = "[]"
+                });
+            });
+
+            var config = db.Query<Config301>("SELECT \"Key\" || '' AS \"Key\", \"Value\" || '' AS \"Value\" FROM \"Config\"")
+                           .ToDictionary(x => x.Key, x => x.Value);
+
+            config.Should().ContainKey("whisparrscenemetadatasource").WhoseValue.Should().Be("stashdb");
+            config.Should().ContainKey("metadatasourceslocked").WhoseValue.Should().Be("true");
+        }
+
+        [Test]
         public void should_leave_unlocked_when_library_empty()
         {
             var db = WithMigrationTestDb();
