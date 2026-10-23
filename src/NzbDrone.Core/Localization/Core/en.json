@@ -790,6 +790,7 @@
   "FavoriteFolderRemove": "Remove Favorite Folder",
   "FavoriteFolders": "Favorite Folders",
   "FeatureRequests": "Feature Requests",
+  "FFmpegUnavailableHealthCheckMessage": "The bundled ffmpeg needed for perceptual hashing was not found or can't run. Perceptual hashing is paused; oshash and imports are unaffected.",
   "Figure": "Figure",
   "File": "File",
   "FileBrowser": "File Browser",

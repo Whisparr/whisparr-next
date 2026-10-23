@@ -70,6 +70,7 @@ namespace NzbDrone.Core.HealthCheck
         DownloadClientSorting,
         DownloadClientStatusAllClients,
         DownloadClientStatusSingleClient,
+        FFmpegUnavailable,
         ImportListRootFolderMissing,
         ImportListRootFolderMultipleMissing,
         ImportListStatusAllUnavailable,
