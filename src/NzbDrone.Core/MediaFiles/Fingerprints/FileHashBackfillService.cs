@@ -158,7 +158,11 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 f => _importFileService.SavePHashes(new List<ImportFile> { f }),
                 run);
 
-            if (run.Processed > 0)
+            if (run.TurnedOff)
+            {
+                _logger.ProgressInfo("Perceptual hashing turned off, stopping after {0} files", run.Processed);
+            }
+            else if (run.Processed > 0)
             {
                 _logger.ProgressInfo("Computed perceptual hashes for {0} of {1} files{2}", run.Hashed, run.Processed, finished ? string.Empty : " (time budget reached)");
             }
@@ -187,6 +191,14 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
                 foreach (var file in chunk)
                 {
+                    // Read live each time: turning the setting off is how a user stops a running task
+                    if (!_configService.EnablePerceptualHashing)
+                    {
+                        run.TurnedOff = true;
+
+                        return false;
+                    }
+
                     if (UtcNow() >= run.Deadline)
                     {
                         return false;
@@ -233,6 +245,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             public DateTime Deadline { get; }
             public int Processed { get; set; }
             public int Hashed { get; set; }
+            public bool TurnedOff { get; set; }
         }
 
         // Writes the pending rows once there are at least `threshold` of them; returns the list to keep filling

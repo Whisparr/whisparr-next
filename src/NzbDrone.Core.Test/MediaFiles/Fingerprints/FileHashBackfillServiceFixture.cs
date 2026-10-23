@@ -526,6 +526,31 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         }
 
         [Test]
+        public void phash_should_stop_cleanly_when_the_setting_is_turned_off_mid_run()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(3);
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(files);
+
+            // On for the up-front check and the first file, off from the second file's check on
+            Mocker.GetMock<IConfigService>()
+                .SetupSequence(s => s.EnablePerceptualHashing)
+                .Returns(true)
+                .Returns(true)
+                .Returns(false);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files.Count(f => f.PHashAttemptedAt != null).Should().Be(1);
+            files[0].PHash.Should().Be("ph-file1.mp4");
+            _pHashMovieFileSaves.Should().ContainSingle();
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
         public void phash_command_should_send_updates_to_client()
         {
             new GenerateVideoHashesCommand().SendUpdatesToClient.Should().BeTrue();
