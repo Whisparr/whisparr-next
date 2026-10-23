@@ -24,6 +24,10 @@
   text-align: start;
 }
 
+.candidates {
+  margin-left: 8px;
+}
+
 .customFormatTooltip {
   max-width: 250px;
 }

@@ -21,11 +21,13 @@ import MovieLanguages from 'Movie/MovieLanguages';
 import MovieQuality from 'Movie/MovieQuality';
 import { QualityModel } from 'Quality/Quality';
 import CustomFormat from 'typings/CustomFormat';
+import FingerprintCandidate from 'typings/FingerprintCandidate';
 import { SelectStateInputProps } from 'typings/props';
 import Rejection from 'typings/Rejection';
 import formatBytes from 'Utilities/Number/formatBytes';
 import formatCustomFormatScore from 'Utilities/Number/formatCustomFormatScore';
 import translate from 'Utilities/String/translate';
+import FingerprintCandidates from './FingerprintCandidates';
 import InteractiveImportRowCellPlaceholder from './InteractiveImportRowCellPlaceholder';
 import styles from './InteractiveImportRow.module.css';
 
@@ -49,6 +51,7 @@ interface InteractiveImportRowProps {
   customFormatScore?: number;
   indexerFlags: number;
   rejections: Rejection[];
+  fingerprintCandidates?: FingerprintCandidate[];
   columns: Column[];
   movieFileId?: number;
   isSelected?: boolean;
@@ -58,7 +61,11 @@ interface InteractiveImportRowProps {
   onValidRowChange(id: number, isValid: boolean): void;
 }
 
-function InteractiveImportRow(props: InteractiveImportRowProps) {
+function stopPropagation(event: React.MouseEvent) {
+  event.stopPropagation();
+}
+
+function InteractiveImportRow(props: Readonly<InteractiveImportRowProps>) {
   const {
     id,
     allowMovieChange,
@@ -72,6 +79,7 @@ function InteractiveImportRow(props: InteractiveImportRowProps) {
     customFormatScore,
     indexerFlags,
     rejections,
+    fingerprintCandidates,
     isSelected,
     modalTitle,
     movieFileId,
@@ -245,6 +253,17 @@ function InteractiveImportRow(props: InteractiveImportRowProps) {
           ) : (
             movieTitle
           )}
+
+          {fingerprintCandidates?.length ? (
+            // Keeps clicks inside the popover (React bubbles them through the
+            // portal) from also opening the scene selector.
+            <span className={styles.candidates} onClick={stopPropagation}>
+              <FingerprintCandidates
+                candidates={fingerprintCandidates}
+                onMovieSelect={onMovieSelect}
+              />
+            </span>
+          ) : null}
         </TableRowCellButton>
       ) : null}
 

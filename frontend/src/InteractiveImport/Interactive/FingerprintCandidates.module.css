@@ -1,0 +1,35 @@
+.list {
+  min-width: 300px;
+  max-width: 400px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.info {
+  min-width: 0;
+}
+
+.title {
+  font-weight: bold;
+}
+
+.details {
+  color: var(--darkGray);
+  font-size: 12px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}

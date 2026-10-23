@@ -3,6 +3,7 @@ import Language from 'Language/Language';
 import Movie from 'Movie/Movie';
 import { QualityModel } from 'Quality/Quality';
 import CustomFormat from 'typings/CustomFormat';
+import FingerprintCandidate from 'typings/FingerprintCandidate';
 import Rejection from 'typings/Rejection';
 
 export interface InteractiveImportCommandOptions {
@@ -32,6 +33,7 @@ interface InteractiveImport extends ModelBase {
   customFormatScore: number;
   indexerFlags: number;
   rejections: Rejection[];
+  fingerprintCandidates?: FingerprintCandidate[];
   movieFileId?: number;
   downloadId?: string;
 }

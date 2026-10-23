@@ -294,6 +294,7 @@ function MovieFileEditorRow(props: MovieFileEditorRowProps) {
       <FileDetailsModal
         isOpen={isFileDetailsModalOpen}
         mediaInfo={mediaInfo as MediaInfoType}
+        matchTier={movieFile.matchTier}
         onModalClose={handleFileDetailsModalClose}
       />
 
