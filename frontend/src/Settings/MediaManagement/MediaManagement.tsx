@@ -429,6 +429,22 @@ function MediaManagement() {
                 isAdvanced={true}
                 size={sizes.MEDIUM}
               >
+                <FormLabel>{translate('PerceptualHashing')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="enablePerceptualHashing"
+                  helpText={translate('PerceptualHashingHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.enablePerceptualHashing}
+                />
+              </FormGroup>
+
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
                 <FormLabel>{translate('AutoRenameFolders')}</FormLabel>
 
                 <FormInputGroup

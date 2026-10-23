@@ -155,6 +155,13 @@ namespace NzbDrone.Core.Jobs
 
                     new ScheduledTask
                     {
+                        Interval = 60,
+                        TypeName = typeof(GenerateVideoHashesCommand).FullName,
+                        Priority = CommandPriority.Low
+                    },
+
+                    new ScheduledTask
+                    {
                         Interval = GetRefreshMonitoredInterval(),
                         TypeName = typeof(RefreshMonitoredDownloadsCommand).FullName,
                         Priority = CommandPriority.High

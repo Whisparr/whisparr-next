@@ -19,6 +19,7 @@ export default interface MediaManagement {
   importExtraFiles: boolean;
   extraFileExtensions: string;
   enableMediaInfo: boolean;
+  enablePerceptualHashing: boolean;
   whisparrFolderLimit: number;
   autoRenameFolders: boolean;
 }

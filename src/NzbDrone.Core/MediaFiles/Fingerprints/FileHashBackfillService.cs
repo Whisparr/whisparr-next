@@ -5,6 +5,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Instrumentation.Extensions;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
@@ -12,14 +13,21 @@ using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles.Fingerprints
 {
-    public class FileHashBackfillService : IExecute<GenerateOsHashesCommand>
+    public class FileHashBackfillService : IExecute<GenerateOsHashesCommand>, IExecute<GenerateVideoHashesCommand>
     {
+        // Files fetched per query during a phash run
+        internal const int PHashChunkSize = 50;
+
         // Upper bound on files hashed by a single run; the next scheduled run picks up the rest
         internal const int MaxFilesPerRun = 2000;
 
         // Results are persisted in batches this size, so a restart mid-run keeps progress
         internal const int FlushSize = 100;
 
+        // A phash run stops starting new files after this much wall time; the next run continues
+        internal static readonly TimeSpan PHashRunBudget = TimeSpan.FromMinutes(15);
+
+        private readonly IConfigService _configService;
         private readonly IMediaFileService _mediaFileService;
         private readonly IImportlFileService _importFileService;
         private readonly IMovieService _movieService;
@@ -32,13 +40,16 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private int _movieFileWatermark;
         private int _importFileWatermark;
 
-        public FileHashBackfillService(IMediaFileService mediaFileService,
+        public FileHashBackfillService(IConfigService configService,
+                                       IMediaFileService mediaFileService,
                                        IImportlFileService importFileService,
                                        IMovieService movieService,
                                        IVideoHashService videoHashService,
                                        IDiskProvider diskProvider,
                                        Logger logger)
         {
+            UtcNow = () => DateTime.UtcNow;
+            _configService = configService;
             _mediaFileService = mediaFileService;
             _importFileService = importFileService;
             _movieService = movieService;
@@ -46,6 +57,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             _diskProvider = diskProvider;
             _logger = logger;
         }
+
+        // Replaceable so tests can drive the run budget
+        internal Func<DateTime> UtcNow { get; set; }
 
         public void Execute(GenerateOsHashesCommand message)
         {
@@ -111,6 +125,114 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             Flush(pendingImportFiles, _importFileService.UpdateMany, 1);
 
             _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
+        }
+
+        public void Execute(GenerateVideoHashesCommand message)
+        {
+            if (!_configService.EnablePerceptualHashing || !_videoHashService.CanComputePHash)
+            {
+                return;
+            }
+
+            var run = new PHashRun(UtcNow() + PHashRunBudget);
+
+            // Movie files first, then import files, all inside one time budget
+            var finished = HashChunks(
+                () => _mediaFileService.GetFilesNeedingPHash(PHashChunkSize),
+                chunk =>
+                {
+                    var movies = LoadMovies(chunk);
+
+                    return f => ResolvePath(f, movies);
+                },
+                (f, hash) => f.PHash = hash,
+                (f, at) => f.PHashAttemptedAt = at,
+                f => _mediaFileService.UpdateMany(new List<MovieFile> { f }),
+                run);
+
+            finished = finished && HashChunks(
+                () => _importFileService.GetFilesNeedingPHash(PHashChunkSize),
+                _ => f => f.Path,
+                (f, hash) => f.PHash = hash,
+                (f, at) => f.PHashAttemptedAt = at,
+                f => _importFileService.UpdateMany(new List<ImportFile> { f }),
+                run);
+
+            if (run.Processed > 0)
+            {
+                _logger.Info("Computed perceptual hashes for {0} of {1} files{2}", run.Hashed, run.Processed, finished ? string.Empty : " (time budget reached)");
+            }
+        }
+
+        // Hashes chunk after chunk until nothing is left (true) or the deadline passes (false).
+        // Every processed row gets an attempted stamp and is saved on its own, so it leaves the
+        // "needing phash" query and a long run keeps its work across a shutdown.
+        private bool HashChunks<T>(Func<List<T>> fetch,
+                                   Func<List<T>, Func<T, string>> pathResolverFor,
+                                   Action<T, string> setHash,
+                                   Action<T, DateTime> setAttemptedAt,
+                                   Action<T> save,
+                                   PHashRun run)
+        {
+            while (true)
+            {
+                var chunk = fetch();
+
+                if (chunk.Count == 0)
+                {
+                    return true;
+                }
+
+                var resolvePath = pathResolverFor(chunk);
+
+                foreach (var file in chunk)
+                {
+                    if (UtcNow() >= run.Deadline)
+                    {
+                        return false;
+                    }
+
+                    run.Processed++;
+
+                    if (TryComputePHash(resolvePath(file), out var pHash))
+                    {
+                        setHash(file, pHash);
+                        run.Hashed++;
+                    }
+
+                    setAttemptedAt(file, UtcNow());
+                    save(file);
+                }
+            }
+        }
+
+        // A missing file or a failed hash returns false; the caller still marks the row as attempted
+        private bool TryComputePHash(string path, out string pHash)
+        {
+            pHash = null;
+
+            if (path == null || !_diskProvider.FileExists(path))
+            {
+                _logger.Debug("Skipping phash for missing file {0}", path);
+
+                return false;
+            }
+
+            pHash = _videoHashService.ComputePHash(path);
+
+            return pHash != null;
+        }
+
+        private sealed class PHashRun
+        {
+            public PHashRun(DateTime deadline)
+            {
+                Deadline = deadline;
+            }
+
+            public DateTime Deadline { get; }
+            public int Processed { get; set; }
+            public int Hashed { get; set; }
         }
 
         // Writes the pending rows once there are at least `threshold` of them; returns the list to keep filling

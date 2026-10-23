@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FizzWare.NBuilder;
@@ -105,6 +106,36 @@ namespace NzbDrone.Core.Test.MediaFiles
             afterFirst.Should().HaveCount(3);
             afterFirst.Should().OnlyContain(c => c.Id > all[0].Id);
             afterFirst.Select(c => c.Id).Should().BeInAscendingOrder();
+        }
+
+        [Test]
+        public void should_get_only_files_needing_phash_up_to_limit()
+        {
+            var items = Builder<MovieFile>.CreateListOfSize(6)
+                .All()
+                .With(c => c.Id = 0)
+                .With(c => c.MovieId = _movie1.Id)
+                .With(c => c.Quality = new QualityModel(Quality.Bluray1080p))
+                .With(c => c.Languages = new List<Language> { Language.English })
+                .With(c => c.PHash = null)
+                .With(c => c.PHashAttemptedAt = null)
+                .TheFirst(1)
+                .With(c => c.PHash = "abcdef")
+                .TheNext(1)
+                .With(c => c.PHashAttemptedAt = DateTime.UtcNow)
+                .TheNext(1)
+                .With(c => c.MovieId = 0)
+                .BuildListOfNew();
+
+            Db.InsertMany(items);
+
+            var all = Subject.GetFilesNeedingPHash(100);
+
+            all.Should().HaveCount(4);
+            all.Should().OnlyContain(c => c.PHash == null && c.PHashAttemptedAt == null);
+            all.Should().Contain(c => c.MovieId == 0);
+            all.Select(c => c.Id).Should().BeInAscendingOrder();
+            Subject.GetFilesNeedingPHash(3).Should().HaveCount(3);
         }
     }
 }

@@ -6,6 +6,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
@@ -50,6 +51,14 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             Mocker.GetMock<IImportlFileService>()
                 .Setup(s => s.UpdateMany(It.IsAny<List<ImportFile>>()))
                 .Callback<List<ImportFile>>(l => _importFileSaves.Add(l.ToList()));
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(new List<MovieFile>());
+
+            Mocker.GetMock<IImportlFileService>()
+                .Setup(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(new List<ImportFile>());
 
             Mocker.GetMock<IDiskProvider>()
                 .Setup(s => s.FileExists(It.IsAny<string>()))
@@ -320,6 +329,177 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         public void command_should_send_updates_to_client()
         {
             new GenerateOsHashesCommand().SendUpdatesToClient.Should().BeTrue();
+        }
+
+        private void GivenPHashEnabled(bool enabled = true, bool canCompute = true)
+        {
+            Mocker.GetMock<IConfigService>().SetupGet(s => s.EnablePerceptualHashing).Returns(enabled);
+            Mocker.GetMock<IVideoHashService>().SetupGet(s => s.CanComputePHash).Returns(canCompute);
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(It.IsAny<string>()))
+                .Returns<string>(p => "ph-" + Path.GetFileName(p));
+        }
+
+        // The query returns the chunk once, then nothing, like rows leaving it after being stamped
+        private void GivenPHashMovieFiles(List<MovieFile> files)
+        {
+            Mocker.GetMock<IMediaFileService>()
+                .SetupSequence(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(files)
+                .Returns(new List<MovieFile>());
+        }
+
+        private void GivenPHashImportFiles(List<ImportFile> files)
+        {
+            Mocker.GetMock<IImportlFileService>()
+                .SetupSequence(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(files)
+                .Returns(new List<ImportFile>());
+        }
+
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        public void phash_should_not_touch_repositories_when_disabled_or_unavailable(bool enabled, bool canCompute)
+        {
+            GivenPHashEnabled(enabled, canCompute);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.UpdateMany(It.IsAny<List<MovieFile>>()), Times.Never());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.UpdateMany(It.IsAny<List<ImportFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_should_store_hash_and_stamp_and_save_each_file_on_its_own()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(2);
+            GivenPHashMovieFiles(files);
+            var now = new DateTime(2026, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+            Subject.UtcNow = () => now;
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files.Select(f => f.PHash).Should().Equal("ph-file1.mp4", "ph-file2.mp4");
+            files.Should().OnlyContain(f => f.PHashAttemptedAt == now);
+            _movieFileSaves.Should().HaveCount(2);
+            _movieFileSaves.Should().OnlyContain(s => s.Count == 1);
+        }
+
+        [Test]
+        public void phash_should_stamp_attempt_when_hashing_fails()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(2);
+            GivenPHashMovieFiles(files);
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(Path.Combine(_movie.Path, "file1.mp4")))
+                .Returns((string)null);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].PHash.Should().BeNull();
+            files[0].PHashAttemptedAt.Should().NotBeNull();
+            files[1].PHash.Should().Be("ph-file2.mp4");
+            _movieFileSaves.Should().HaveCount(2);
+        }
+
+        [Test]
+        public void phash_should_stamp_and_skip_file_missing_on_disk()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(1);
+            GivenPHashMovieFiles(files);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(It.IsAny<string>())).Returns(false);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].PHash.Should().BeNull();
+            files[0].PHashAttemptedAt.Should().NotBeNull();
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Never());
+            _movieFileSaves.Should().ContainSingle();
+        }
+
+        [Test]
+        public void phash_should_stamp_mapped_file_whose_movie_is_missing()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(1, movieId: 99);
+            GivenPHashMovieFiles(files);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].PHashAttemptedAt.Should().NotBeNull();
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_should_process_import_files_after_movie_files()
+        {
+            GivenPHashEnabled();
+            var movieFiles = MovieFiles(1);
+            var importFiles = ImportFiles(2);
+            GivenPHashMovieFiles(movieFiles);
+            GivenPHashImportFiles(importFiles);
+            var order = new List<string>();
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(It.IsAny<string>()))
+                .Callback<string>(p => order.Add(Path.GetFileName(p)))
+                .Returns<string>(p => "ph-" + Path.GetFileName(p));
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            order.Should().Equal("file1.mp4", "import1.mp4", "import2.mp4");
+            importFiles.Select(f => f.PHash).Should().Equal("ph-import1.mp4", "ph-import2.mp4");
+            importFiles.Should().OnlyContain(f => f.PHashAttemptedAt != null);
+            _importFileSaves.Should().HaveCount(2);
+        }
+
+        [Test]
+        public void phash_should_keep_fetching_chunks_until_no_work_is_left()
+        {
+            GivenPHashEnabled();
+            Mocker.GetMock<IMediaFileService>()
+                .SetupSequence(s => s.GetFilesNeedingPHash(FileHashBackfillService.PHashChunkSize))
+                .Returns(MovieFiles(2))
+                .Returns(MovieFiles(1, firstId: 3))
+                .Returns(new List<MovieFile>());
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Exactly(3));
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesNeedingPHash(FileHashBackfillService.PHashChunkSize), Times.Exactly(3));
+        }
+
+        [Test]
+        public void phash_should_stop_starting_files_after_15_minutes_of_wall_time()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(5);
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
+                .Returns(files);
+            var now = new DateTime(2026, 5, 6, 7, 0, 0, DateTimeKind.Utc);
+            Subject.UtcNow = () => now;
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(It.IsAny<string>()))
+                .Callback<string>(_ => now = now.AddMinutes(6))
+                .Returns("ph");
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            // Files start at minutes 0, 6 and 12; the one due at minute 18 is past the budget
+            files.Count(f => f.PHashAttemptedAt != null).Should().Be(3);
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Exactly(3));
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_command_should_send_updates_to_client()
+        {
+            new GenerateVideoHashesCommand().SendUpdatesToClient.Should().BeTrue();
         }
     }
 }

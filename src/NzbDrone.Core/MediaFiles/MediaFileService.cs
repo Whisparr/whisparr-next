@@ -24,6 +24,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
+        List<MovieFile> GetFilesNeedingPHash(int limit);
         void UpdateMany(List<MovieFile> movieFiles);
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
@@ -140,6 +141,11 @@ namespace NzbDrone.Core.MediaFiles
         public List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit)
         {
             return _mediaFileRepository.GetFilesWithoutOsHash(afterId, limit);
+        }
+
+        public List<MovieFile> GetFilesNeedingPHash(int limit)
+        {
+            return _mediaFileRepository.GetFilesNeedingPHash(limit);
         }
 
         // Batch write straight to the repository: no per-file events or cache clears

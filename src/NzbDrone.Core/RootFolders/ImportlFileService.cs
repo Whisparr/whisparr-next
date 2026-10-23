@@ -16,6 +16,7 @@ namespace NzbDrone.Core.RootFolders
 
         List<ImportFile> FindByRootFolderId(int rootFolderId);
         List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit);
+        List<ImportFile> GetFilesNeedingPHash(int limit);
         void UpdateMany(List<ImportFile> importFiles);
     }
 
@@ -85,6 +86,11 @@ namespace NzbDrone.Core.RootFolders
         public List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit)
         {
             return _importFileRepository.GetFilesWithoutOsHash(afterId, limit);
+        }
+
+        public List<ImportFile> GetFilesNeedingPHash(int limit)
+        {
+            return _importFileRepository.GetFilesNeedingPHash(limit);
         }
 
         public void UpdateMany(List<ImportFile> importFiles)

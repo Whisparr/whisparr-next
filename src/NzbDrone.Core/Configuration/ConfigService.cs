@@ -333,6 +333,13 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("EnableMediaInfo", value); }
         }
 
+        public bool EnablePerceptualHashing
+        {
+            get { return GetValueBoolean("EnablePerceptualHashing", true); }
+
+            set { SetValue("EnablePerceptualHashing", value); }
+        }
+
         public bool UseScriptImport
         {
             get { return GetValueBoolean("UseScriptImport", false); }

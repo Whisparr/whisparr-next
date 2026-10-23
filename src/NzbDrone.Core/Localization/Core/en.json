@@ -1737,6 +1737,8 @@
   "PendingChangesMessage": "You have unsaved changes, are you sure you want to leave this page?",
   "PendingChangesStayReview": "Stay and review changes",
   "PendingDownloadClientUnavailable": "Pending - Download client is unavailable",
+  "PerceptualHashing": "Perceptual Hashing",
+  "PerceptualHashingHelpText": "Compute a perceptual hash of each video file in the background, once per file, to help identify scenes whose names don't parse",
   "Performer": "Performer",
   "PerformerCount": "Performer Count",
   "PerformerName": "Name",

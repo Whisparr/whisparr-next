@@ -31,6 +31,7 @@ namespace Whisparr.Api.V5.Config
         public bool ImportExtraFiles { get; set; }
         public string ExtraFileExtensions { get; set; }
         public bool EnableMediaInfo { get; set; }
+        public bool EnablePerceptualHashing { get; set; }
         public int WhisparrFolderLimit { get; set; }
     }
 
@@ -64,6 +65,7 @@ namespace Whisparr.Api.V5.Config
                 ImportExtraFiles = model.ImportExtraFiles,
                 ExtraFileExtensions = model.ExtraFileExtensions,
                 EnableMediaInfo = model.EnableMediaInfo,
+                EnablePerceptualHashing = model.EnablePerceptualHashing,
                 WhisparrFolderLimit = model.WhisparrFolderLimit
             };
         }

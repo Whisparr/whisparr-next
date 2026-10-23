@@ -12,6 +12,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
+        List<MovieFile> GetFilesNeedingPHash(int limit);
         List<MovieFile> GetAllFiles();
         List<MovieFile> GetUnmappedFiles();
         void DeleteForMovies(List<int> movieIds);
@@ -46,6 +47,14 @@ namespace NzbDrone.Core.MediaFiles
             // ORDER BY is the last clause of the select template, so the limit rides along with it
             return Query(Builder()
                 .Where<MovieFile>(x => x.OsHash == null && x.Id > afterId)
+                .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
+        }
+
+        public List<MovieFile> GetFilesNeedingPHash(int limit)
+        {
+            // Every processed row gets PHashAttemptedAt, so it leaves this query and no watermark is needed
+            return Query(Builder()
+                .Where<MovieFile>(x => x.PHash == null && x.PHashAttemptedAt == null)
                 .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 
