@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,7 +46,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         {
             Mocker.GetMock<IVideoFileInfoReader>()
                 .Setup(s => s.GetContainerDuration(Path))
-                .Returns(1234.57);
+                .Returns(1234.5678);
 
             Mocker.GetMock<IFingerprintCalculator>()
                 .Setup(s => s.PHashAsync(Path, 1234.57, It.IsAny<CancellationToken>()))
@@ -103,7 +104,14 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
 
             Subject.PHashTimeout = TimeSpan.FromMilliseconds(100);
 
+            var stopwatch = Stopwatch.StartNew();
+
             Subject.ComputePHash(Path).Should().BeNull();
+
+            stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+
+            Mocker.GetMock<IFingerprintCalculator>()
+                .Verify(s => s.PHashAsync(Path, 60.0, It.IsAny<CancellationToken>()), Times.Once());
         }
 
         [Test]

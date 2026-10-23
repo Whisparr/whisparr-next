@@ -29,6 +29,16 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
                   .Returns<string>(s => new FileStream(s, FileMode.Open, FileAccess.Read));
         }
 
+        [TestCase(1234.565, 1234.57)]
+        [TestCase(0.005, 0.01)]
+        [TestCase(1234.5678, 1234.57)]
+        [TestCase(1234.564, 1234.56)]
+        [TestCase(60.0, 60.0)]
+        public void RoundDuration_rounds_to_two_places_half_away_from_zero(double seconds, double expected)
+        {
+            VideoFileInfoReader.RoundDuration(System.TimeSpan.FromSeconds(seconds)).Should().Be(expected);
+        }
+
         [Test]
         public void get_runtime()
         {

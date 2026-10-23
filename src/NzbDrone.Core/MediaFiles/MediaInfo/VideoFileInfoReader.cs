@@ -158,13 +158,23 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             {
                 var analysis = FFProbe.Analyse(filename);
 
-                return Math.Round(analysis.Format.Duration.TotalSeconds, 2, MidpointRounding.AwayFromZero);
+                return RoundDuration(analysis.Format.Duration);
             }
             catch (Exception ex)
             {
                 _logger.Debug(ex, "Unable to read container duration from {0}", filename);
                 return null;
             }
+        }
+
+        internal static double RoundDuration(TimeSpan duration)
+        {
+            return RoundDuration(duration.TotalSeconds);
+        }
+
+        internal static double RoundDuration(double seconds)
+        {
+            return Math.Round(seconds, 2, MidpointRounding.AwayFromZero);
         }
 
         private static TimeSpan GetBestRuntime(TimeSpan? audio, TimeSpan? video, TimeSpan general)

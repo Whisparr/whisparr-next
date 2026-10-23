@@ -44,6 +44,8 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public string ComputePHash(string path)
         {
+            using var cts = new CancellationTokenSource(PHashTimeout);
+
             try
             {
                 var duration = _videoFileInfoReader.GetContainerDuration(path);
@@ -54,11 +56,11 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     return null;
                 }
 
-                using var cts = new CancellationTokenSource(PHashTimeout);
+                var rounded = VideoFileInfoReader.RoundDuration(duration.Value);
 
-                return _calculator.PHashAsync(path, duration.Value, cts.Token).GetAwaiter().GetResult();
+                return _calculator.PHashAsync(path, rounded, cts.Token).GetAwaiter().GetResult();
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 _logger.Warn("phash timed out for {0}", path);
                 return null;
