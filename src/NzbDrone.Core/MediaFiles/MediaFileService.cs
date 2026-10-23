@@ -25,6 +25,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovie(int movieId);
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
+        List<MovieFile> GetFilesWithoutOsHash(int limit);
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
@@ -135,6 +136,11 @@ namespace NzbDrone.Core.MediaFiles
         public List<MovieFile> GetFilesWithoutMediaInfo()
         {
             return _mediaFileRepository.GetFilesWithoutMediaInfo();
+        }
+
+        public List<MovieFile> GetFilesWithoutOsHash(int limit)
+        {
+            return _mediaFileRepository.GetFilesWithoutOsHash(limit);
         }
 
         public List<string> FilterExistingFiles(List<string> files, Movie movie)

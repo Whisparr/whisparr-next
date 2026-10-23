@@ -72,5 +72,32 @@ namespace NzbDrone.Core.Test.MediaFiles
             removedItems.Should().HaveCount(0);
             nonRemovedItems.Should().HaveCount(1);
         }
+
+        [Test]
+        public void should_get_only_files_without_oshash_up_to_limit_including_unmapped()
+        {
+            var items = Builder<MovieFile>.CreateListOfSize(6)
+                .All()
+                .With(c => c.Id = 0)
+                .With(c => c.MovieId = _movie1.Id)
+                .With(c => c.Quality = new QualityModel(Quality.Bluray1080p))
+                .With(c => c.Languages = new List<Language> { Language.English })
+                .With(c => c.OsHash = null)
+                .TheFirst(2)
+                .With(c => c.OsHash = "0123456789abcdef")
+                .TheNext(1)
+                .With(c => c.MovieId = 0)
+                .BuildListOfNew();
+
+            Db.InsertMany(items);
+
+            var all = Subject.GetFilesWithoutOsHash(100);
+
+            all.Should().HaveCount(4);
+            all.Should().OnlyContain(c => c.OsHash == null);
+            all.Should().Contain(c => c.MovieId == 0);
+
+            Subject.GetFilesWithoutOsHash(3).Should().HaveCount(3);
+        }
     }
 }

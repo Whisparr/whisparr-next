@@ -14,6 +14,7 @@ using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.MediaFiles.Commands;
+using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Commands;
@@ -144,6 +145,12 @@ namespace NzbDrone.Core.Jobs
                     {
                         Interval = 5,
                         TypeName = typeof(ImportListSyncCommand).FullName
+                    },
+
+                    new ScheduledTask
+                    {
+                        Interval = 30,
+                        TypeName = typeof(GenerateOsHashesCommand).FullName
                     },
 
                     new ScheduledTask
