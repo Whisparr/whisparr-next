@@ -6,6 +6,7 @@ namespace NzbDrone.Core.MediaFiles
         Name = 1,
         Confirmed = 2,
         Hash = 3,
-        Manual = 4
+        Manual = 4,
+        Conflict = 5
     }
 }
