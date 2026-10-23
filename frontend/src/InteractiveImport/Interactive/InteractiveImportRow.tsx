@@ -61,10 +61,6 @@ interface InteractiveImportRowProps {
   onValidRowChange(id: number, isValid: boolean): void;
 }
 
-function stopPropagation(event: React.MouseEvent) {
-  event.stopPropagation();
-}
-
 function InteractiveImportRow(props: Readonly<InteractiveImportRowProps>) {
   const {
     id,
@@ -246,6 +242,15 @@ function InteractiveImportRow(props: Readonly<InteractiveImportRowProps>) {
         <TableRowCellButton
           isDisabled={!allowMovieChange}
           title={allowMovieChange ? translate('ClickToChangeMovie') : undefined}
+          after={
+            fingerprintCandidates?.length ? (
+              <FingerprintCandidates
+                candidates={fingerprintCandidates}
+                isUseDisabled={!allowMovieChange}
+                onMovieSelect={onMovieSelect}
+              />
+            ) : null
+          }
           onPress={onSelectMoviePress}
         >
           {showMoviePlaceholder ? (
@@ -253,17 +258,6 @@ function InteractiveImportRow(props: Readonly<InteractiveImportRowProps>) {
           ) : (
             movieTitle
           )}
-
-          {fingerprintCandidates?.length ? (
-            // Keeps clicks inside the popover (React bubbles them through the
-            // portal) from also opening the scene selector.
-            <span className={styles.candidates} onClick={stopPropagation}>
-              <FingerprintCandidates
-                candidates={fingerprintCandidates}
-                onMovieSelect={onMovieSelect}
-              />
-            </span>
-          ) : null}
         </TableRowCellButton>
       ) : null}
 

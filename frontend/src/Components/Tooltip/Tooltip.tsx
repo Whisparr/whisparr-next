@@ -39,6 +39,9 @@ export interface TooltipProps {
   kind?: Extract<Kind, 'default' | 'inverse'>;
   position?: Placement;
   canFlip?: boolean;
+  // Optional control; when `isOpen` is omitted the tooltip manages its own state.
+  isOpen?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 function Tooltip(props: Readonly<TooltipProps>) {
@@ -53,6 +56,8 @@ function Tooltip(props: Readonly<TooltipProps>) {
     kind = kinds.DEFAULT,
     position,
     canFlip = true,
+    isOpen: isOpenProp,
+    onOpenChange,
   } = props;
 
   const arrowColor = useThemeColor(
@@ -60,7 +65,14 @@ function Tooltip(props: Readonly<TooltipProps>) {
       ? 'popoverArrowBorderInverseColor'
       : 'popoverArrowBorderColor'
   );
-  const [isOpen, setIsOpen] = useState(false);
+
+  const [isOpenState, setIsOpenState] = useState(false);
+  const isOpen = isOpenProp ?? isOpenState;
+
+  const setIsOpen = (open: boolean) => {
+    setIsOpenState(open);
+    onOpenChange?.(open);
+  };
 
   const arrowRef = useRef(null);
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import Icon from 'Components/Icon';
 import Label from 'Components/Label';
 import Button from 'Components/Link/Button';
@@ -13,12 +13,14 @@ import styles from './FingerprintCandidates.module.css';
 interface FingerprintCandidateItemProps {
   candidate: FingerprintCandidate;
   movie?: Movie;
+  isUseDisabled: boolean;
   onUsePress(movie: Movie): void;
 }
 
 function FingerprintCandidateItem({
   candidate,
   movie,
+  isUseDisabled,
   onUsePress,
 }: Readonly<FingerprintCandidateItemProps>) {
   const handleUsePress = useCallback(() => {
@@ -42,15 +44,23 @@ function FingerprintCandidateItem({
 
         <div className={styles.meta}>
           <Label size={sizes.SMALL}>{candidate.algorithm}</Label>
-          <span>{`d${candidate.distance}`}</span>
-          <span>{`x${candidate.submissions}`}</span>
+          <span>
+            {translate('FingerprintDistance', {
+              distance: candidate.distance,
+            })}
+          </span>
+          <span>
+            {translate('FingerprintSubmissions', {
+              submissions: candidate.submissions,
+            })}
+          </span>
         </div>
       </div>
 
       {candidate.movieId == null ? (
         <Label kind={kinds.WARNING}>{translate('NotInLibrary')}</Label>
       ) : (
-        <Button isDisabled={!movie} onPress={handleUsePress}>
+        <Button isDisabled={!movie || isUseDisabled} onPress={handleUsePress}>
           {translate('UseScene')}
         </Button>
       )}
@@ -60,6 +70,7 @@ function FingerprintCandidateItem({
 
 interface FingerprintCandidatesProps {
   candidates: FingerprintCandidate[];
+  isUseDisabled: boolean;
   onMovieSelect(movie: Movie): void;
 }
 
@@ -72,6 +83,7 @@ interface FingerprintCandidateListProps extends FingerprintCandidatesProps {
 function FingerprintCandidateList({
   candidates,
   libraryIds,
+  isUseDisabled,
   onMovieSelect,
 }: Readonly<FingerprintCandidateListProps>) {
   const { movies } = useMoviesByIds(libraryIds);
@@ -83,6 +95,7 @@ function FingerprintCandidateList({
           key={`${candidate.algorithm}-${candidate.sceneId}`}
           candidate={candidate}
           movie={movies.find((m) => m.id === candidate.movieId)}
+          isUseDisabled={isUseDisabled}
           onUsePress={onMovieSelect}
         />
       ))}
@@ -92,8 +105,19 @@ function FingerprintCandidateList({
 
 function FingerprintCandidates({
   candidates,
+  isUseDisabled,
   onMovieSelect,
 }: Readonly<FingerprintCandidatesProps>) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleMovieSelect = useCallback(
+    (movie: Movie) => {
+      setIsOpen(false);
+      onMovieSelect(movie);
+    },
+    [onMovieSelect]
+  );
+
   const libraryIds = useMemo(
     () =>
       candidates
@@ -105,17 +129,21 @@ function FingerprintCandidates({
   return (
     <Popover
       anchor={<Icon name={icons.SEARCH} kind={kinds.INFO} />}
-      isAnchorFocusable={false}
+      accessibleLabel={translate('FingerprintCandidates')}
+      contentRole="dialog"
+      isOpen={isOpen}
       title={translate('FingerprintCandidates')}
       body={
         <FingerprintCandidateList
           candidates={candidates}
           libraryIds={libraryIds}
-          onMovieSelect={onMovieSelect}
+          isUseDisabled={isUseDisabled}
+          onMovieSelect={handleMovieSelect}
         />
       }
       position={tooltipPositions.LEFT}
       canFlip={false}
+      onOpenChange={setIsOpen}
     />
   );
 }

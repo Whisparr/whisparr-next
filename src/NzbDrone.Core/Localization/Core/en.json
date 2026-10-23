@@ -830,6 +830,8 @@
   "FilterStartsWith": "starts with",
   "FingerprintCandidates": "Fingerprint candidates",
   "FingerprintConflictRejection": "Fingerprint matches a different scene: {title}",
+  "FingerprintDistance": "Distance {distance}",
+  "FingerprintSubmissions": "{submissions} submissions",
   "FirstDayOfWeek": "First Day of Week",
   "Fixed": "Fixed",
   "Folder": "Folder",

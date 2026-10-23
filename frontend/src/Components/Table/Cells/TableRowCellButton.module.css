@@ -4,6 +4,14 @@
   position: relative;
 }
 
+.after {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
 .button {
   composes: link from 'Components/Link/Link.module.css';
 

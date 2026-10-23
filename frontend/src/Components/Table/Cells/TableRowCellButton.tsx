@@ -6,10 +6,19 @@ import styles from './TableRowCellButton.module.css';
 interface TableRowCellButtonProps extends LinkProps {
   className?: string;
   children: ReactNode;
+  // Rendered beside the button (not inside it), above the button's
+  // cell-covering hit area, for controls that must stay independent of it.
+  after?: ReactNode;
 }
 
-function TableRowCellButton(props: TableRowCellButtonProps) {
-  const { className = styles.cell, children, title, ...otherProps } = props;
+function TableRowCellButton(props: Readonly<TableRowCellButtonProps>) {
+  const {
+    className = styles.cell,
+    children,
+    title,
+    after,
+    ...otherProps
+  } = props;
 
   return (
     <TableRowCell className={className}>
@@ -21,6 +30,8 @@ function TableRowCellButton(props: TableRowCellButtonProps) {
       >
         {children}
       </Link>
+
+      {after ? <span className={styles.after}>{after}</span> : null}
     </TableRowCell>
   );
 }
