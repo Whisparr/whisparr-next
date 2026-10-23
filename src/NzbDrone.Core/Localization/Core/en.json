@@ -828,6 +828,7 @@
   "FilterReleasesPlaceholder": "Filter releases by title",
   "Filters": "Filters",
   "FilterStartsWith": "starts with",
+  "FingerprintConflictRejection": "Fingerprint matches a different scene: {title}",
   "FirstDayOfWeek": "First Day of Week",
   "Fixed": "Fixed",
   "Folder": "Folder",

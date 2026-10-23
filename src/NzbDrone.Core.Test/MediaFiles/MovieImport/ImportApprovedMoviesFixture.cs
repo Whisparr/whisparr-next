@@ -400,6 +400,33 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
         }
 
         [Test]
+        public void should_reuse_the_hash_the_decision_maker_computed()
+        {
+            GivenExistingFileOnDisk();
+
+            var lastWrite = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+            _approvedDecisions[0].LocalMovie.OsHash = "fedcba9876543210";
+            _approvedDecisions[0].LocalMovie.HashedFileModifiedAt = lastWrite;
+
+            Subject.Import(_approvedDecisions, false);
+
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.OsHash == "fedcba9876543210" && f.HashedFileModifiedAt == lastWrite)), Times.Once());
+        }
+
+        [Test]
+        public void should_persist_the_match_tier()
+        {
+            GivenExistingFileOnDisk();
+
+            _approvedDecisions[0].LocalMovie.MatchTier = MatchTier.Confirmed;
+
+            Subject.Import(_approvedDecisions, false);
+
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.MatchTier == MatchTier.Confirmed)), Times.Once());
+        }
+
+        [Test]
         public void should_still_import_when_hashing_returns_null()
         {
             GivenExistingFileOnDisk();

@@ -5,6 +5,7 @@ using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Qualities;
@@ -40,6 +41,10 @@ namespace NzbDrone.Core.Parser.Model
         public string FileNameBeforeRename { get; set; }
         public bool ShouldImportExtras { get; set; }
         public List<string> PossibleExtraFiles { get; set; }
+        public string OsHash { get; set; }
+        public DateTime? HashedFileModifiedAt { get; set; }
+        public MatchTier MatchTier { get; set; }
+        public List<FingerprintCandidate> FingerprintCandidates { get; set; } = new();
 
         public override string ToString()
         {
@@ -61,7 +66,8 @@ namespace NzbDrone.Core.Parser.Model
                 Edition = Edition,
                 IndexerFlags = IndexerFlags,
                 SceneName = SceneName,
-                OriginalFilePath = GetOriginalFilePath()
+                OriginalFilePath = GetOriginalFilePath(),
+                MatchTier = MatchTier
             };
 
             if (Movie.Path.IsNotNullOrWhiteSpace() && Movie.Path.IsParentPath(movieFile.Path))

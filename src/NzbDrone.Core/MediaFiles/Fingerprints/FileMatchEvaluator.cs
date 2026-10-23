@@ -41,11 +41,28 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             var library = new Dictionary<string, Movie>(StringComparer.OrdinalIgnoreCase);
             var candidates = Build(usable, library);
 
+            FileMatchOutcome outcome;
+
             if (parserMatch != null)
             {
-                return EvaluateWithParser(parserMatch, usable, candidates);
+                outcome = EvaluateWithParser(parserMatch, usable, candidates);
+            }
+            else
+            {
+                outcome = EvaluateWithoutParser(usable, library, candidates, fileDurationSeconds);
             }
 
+            // Display info from the remote source is only worth a call when someone has to review the outcome
+            if (outcome.NeedsReview)
+            {
+                EnrichRemote(candidates);
+            }
+
+            return outcome;
+        }
+
+        private static FileMatchOutcome EvaluateWithoutParser(List<FingerprintCandidateResult> usable, Dictionary<string, Movie> library, List<FingerprintCandidate> candidates, double? fileDurationSeconds)
+        {
             var outcome = new FileMatchOutcome { Tier = MatchTier.Unknown, NeedsReview = true, Candidates = candidates };
 
             var osHashScenes = usable
@@ -55,6 +72,12 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 .ToList();
 
             if (osHashScenes.Count != 1 || !fileDurationSeconds.HasValue)
+            {
+                return outcome;
+            }
+
+            // A perceptual match for a different scene contradicts the exact hash: leave it to a person
+            if (usable.Any(c => !IsOsHash(c) && !string.Equals(c.SceneId, osHashScenes[0], StringComparison.OrdinalIgnoreCase)))
             {
                 return outcome;
             }
@@ -80,7 +103,32 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public List<FingerprintCandidate> BuildCandidates(FingerprintLookupResult lookup)
         {
-            return Build(UsableCandidates(lookup), new Dictionary<string, Movie>(StringComparer.OrdinalIgnoreCase));
+            var candidates = Build(UsableCandidates(lookup), new Dictionary<string, Movie>(StringComparer.OrdinalIgnoreCase));
+
+            EnrichRemote(candidates);
+
+            return candidates;
+        }
+
+        private void EnrichRemote(List<FingerprintCandidate> candidates)
+        {
+            var remoteLookups = 0;
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.MovieId.HasValue)
+                {
+                    continue;
+                }
+
+                if (remoteLookups >= MaxRemoteLookups)
+                {
+                    break;
+                }
+
+                remoteLookups++;
+                Enrich(candidate);
+            }
         }
 
         private static FileMatchOutcome EvaluateWithParser(Movie parserMatch, List<FingerprintCandidateResult> usable, List<FingerprintCandidate> candidates)
@@ -135,8 +183,6 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 .ToList();
 
             var result = new List<FingerprintCandidate>(ordered.Count);
-            var remoteLookups = 0;
-
             foreach (var source in ordered)
             {
                 var candidate = new FingerprintCandidate
@@ -159,11 +205,6 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     candidate.Title = metadata?.Title;
                     candidate.StudioTitle = metadata?.StudioTitle;
                     candidate.ReleaseDate = metadata?.ReleaseDate;
-                }
-                else if (remoteLookups < MaxRemoteLookups)
-                {
-                    remoteLookups++;
-                    Enrich(candidate);
                 }
 
                 result.Add(candidate);

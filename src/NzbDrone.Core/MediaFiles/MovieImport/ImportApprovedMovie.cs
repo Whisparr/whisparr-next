@@ -91,10 +91,21 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     var movieFile = localMovie.ToMovieFile();
                     movieFile.Size = _diskProvider.GetFileSize(localMovie.Path);
 
-                    // Hash the source, before any move/copy; a hashing problem never fails the import
-                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
-                    movieFile.OsHash = osHash;
-                    movieFile.HashedFileModifiedAt = hashedAt;
+                    if (localMovie.OsHash.IsNotNullOrWhiteSpace())
+                    {
+                        // The decision maker already hashed the source
+                        movieFile.OsHash = localMovie.OsHash;
+                        movieFile.HashedFileModifiedAt = localMovie.HashedFileModifiedAt;
+                    }
+                    else
+                    {
+                        // Hash the source, before any move/copy; a hashing problem never fails the import
+                        var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
+                        movieFile.OsHash = osHash;
+                        movieFile.HashedFileModifiedAt = hashedAt;
+                    }
+
+                    movieFile.MatchTier = localMovie.MatchTier;
 
                     if (downloadClientItem?.DownloadId.IsNotNullOrWhiteSpace() == true)
                     {

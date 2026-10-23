@@ -8,9 +8,11 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
+using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
 
@@ -40,6 +42,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         private readonly IVideoFileInfoReader _videoFileInfoReader;
         private readonly IVideoHashService _videoHashService;
         private readonly IConfigService _configService;
+        private readonly IFingerprintLookupClient _fingerprintLookupClient;
+        private readonly IFileMatchEvaluator _fileMatchEvaluator;
+        private readonly ILocalizationService _localizationService;
         private readonly Logger _logger;
 
         public ImportDecisionMaker(IEnumerable<IImportDecisionEngineSpecification> specifications,
@@ -54,6 +59,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                                    IVideoFileInfoReader videoFileInfoReader,
                                    IVideoHashService videoHashService,
                                    IConfigService configService,
+                                   IFingerprintLookupClient fingerprintLookupClient,
+                                   IFileMatchEvaluator fileMatchEvaluator,
+                                   ILocalizationService localizationService,
                                    Logger logger)
         {
             _specifications = specifications;
@@ -68,6 +76,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             _videoFileInfoReader = videoFileInfoReader;
             _videoHashService = videoHashService;
             _configService = configService;
+            _fingerprintLookupClient = fingerprintLookupClient;
+            _fileMatchEvaluator = fileMatchEvaluator;
+            _localizationService = localizationService;
             _logger = logger;
         }
 
@@ -108,24 +119,120 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
             var decisions = new List<ImportDecision>();
 
-            foreach (var file in newFiles)
+            var localMovies = newFiles.Select(file => new LocalMovie
             {
-                var localMovie = new LocalMovie
-                {
-                    Movie = movie,
-                    DownloadClientMovieInfo = downloadClientItemInfo,
-                    DownloadItem = downloadClientItem,
-                    FolderMovieInfo = folderInfo,
-                    Path = file,
-                    SceneSource = sceneSource,
-                    ExistingFile = movie.Path.IsParentPath(file),
-                    OtherVideoFiles = nonSampleVideoFileCount > 1
-                };
+                Movie = movie,
+                DownloadClientMovieInfo = downloadClientItemInfo,
+                DownloadItem = downloadClientItem,
+                FolderMovieInfo = folderInfo,
+                Path = file,
+                SceneSource = sceneSource,
+                ExistingFile = movie.Path.IsParentPath(file),
+                OtherVideoFiles = nonSampleVideoFileCount > 1
+            }).ToList();
 
-                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, nonSampleVideoFileCount > 1));
+            // One local-only lookup for the whole batch, before the per-file decisions
+            var lookups = LookupFingerprints(localMovies, movie);
+
+            foreach (var localMovie in localMovies)
+            {
+                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, nonSampleVideoFileCount > 1, lookups));
             }
 
             return decisions;
+        }
+
+        // Null (not an empty dictionary) when fingerprinting doesn't apply, which is how movies skip it entirely.
+        private Dictionary<string, FingerprintLookupResult> LookupFingerprints(List<LocalMovie> localMovies, Movie movie)
+        {
+            if (localMovies.Count == 0 || movie.MovieMetadata?.Value?.ItemType != ItemType.Scene)
+            {
+#pragma warning disable S1168
+                return null;
+#pragma warning restore S1168
+            }
+
+            var files = new List<FileFingerprint>();
+            var keys = new HashSet<string>();
+
+            foreach (var localMovie in localMovies)
+            {
+                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
+
+                localMovie.OsHash = osHash;
+                localMovie.HashedFileModifiedAt = hashedAt;
+
+                if (osHash.IsNotNullOrWhiteSpace() && keys.Add(localMovie.Path))
+                {
+                    files.Add(new FileFingerprint { Key = localMovie.Path, OsHash = osHash });
+                }
+            }
+
+            if (files.Count == 0)
+            {
+                return new Dictionary<string, FingerprintLookupResult>();
+            }
+
+            try
+            {
+                return _fingerprintLookupClient.Lookup(files, true) ?? new Dictionary<string, FingerprintLookupResult>();
+            }
+            catch (Exception ex)
+            {
+                // A lookup problem never fails or delays an import
+                _logger.Debug(ex, "Fingerprint lookup failed for {0} files", files.Count);
+
+                return new Dictionary<string, FingerprintLookupResult>();
+            }
+        }
+
+        private FileMatchOutcome EvaluateMatch(LocalMovie localMovie, FingerprintLookupResult lookup, double? duration)
+        {
+            try
+            {
+                return _fileMatchEvaluator.Evaluate(localMovie.Movie, lookup, duration);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Unable to verify fingerprint match for {0}", localMovie.Path);
+
+                return null;
+            }
+        }
+
+        // Records the match tier on the file; returns a rejection when the hash points at a different scene.
+        private ImportRejection VerifyFingerprint(LocalMovie localMovie, Dictionary<string, FingerprintLookupResult> lookups)
+        {
+            lookups.TryGetValue(localMovie.Path, out var lookup);
+
+            var seconds = localMovie.MediaInfo?.RunTime.TotalSeconds;
+            var duration = seconds > 0 ? seconds : null;
+
+            var outcome = EvaluateMatch(localMovie, lookup, duration);
+
+            if (outcome == null)
+            {
+                localMovie.MatchTier = MatchTier.Name;
+
+                return null;
+            }
+
+            localMovie.MatchTier = outcome.Tier;
+            localMovie.FingerprintCandidates = outcome.Candidates ?? new List<FingerprintCandidate>();
+
+            if (!outcome.Conflict)
+            {
+                return null;
+            }
+
+            var parserId = localMovie.Movie.ForeignId;
+            var other = localMovie.FingerprintCandidates.FirstOrDefault(c => !string.Equals(c.SceneId, parserId, StringComparison.OrdinalIgnoreCase))
+                        ?? localMovie.FingerprintCandidates.FirstOrDefault();
+            var title = other?.Title.IsNotNullOrWhiteSpace() == true ? other.Title : other?.SceneId;
+
+            var message = _localizationService.GetLocalizedString("FingerprintConflictRejection", new Dictionary<string, object> { { "title", title } });
+
+            return new ImportRejection(ImportRejectionReason.FingerprintConflict, message);
         }
 
         public (List<Movie> MoviesToAdd, List<MovieFile> UnmappedFiles, List<ImportDecision> Decisions) GetSceneImportDecisions(List<string> videoFiles, DownloadClientItem downloadClientItem, ParsedMovieInfo folderInfo, bool sceneSource, bool filterExistingFiles)
@@ -198,7 +305,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     continue;
                 }
 
-                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, false));
+                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, false, null));
             }
 
             return (moviesToAdd, unmappedFiles, decisions);
@@ -228,9 +335,20 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             return scene;
         }
 
-        private ImportDecision GetDecision(LocalMovie localMovie, DownloadClientItem downloadClientItem, bool otherFiles)
+        private static ImportDecision WithFingerprintRejection(ImportDecision decision, ImportRejection fingerprintRejection)
+        {
+            if (fingerprintRejection == null || decision == null)
+            {
+                return decision;
+            }
+
+            return new ImportDecision(decision.LocalMovie, decision.Rejections.Append(fingerprintRejection).ToArray());
+        }
+
+        private ImportDecision GetDecision(LocalMovie localMovie, DownloadClientItem downloadClientItem, bool otherFiles, Dictionary<string, FingerprintLookupResult> lookups)
         {
             ImportDecision decision = null;
+            ImportRejection fingerprintRejection = null;
 
             try
             {
@@ -262,6 +380,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     // Switch the movie so that the QualityProfile is populated
                     localMovie.Movie = _movieService.GetMovie(localMovie.Movie.Id);
 
+                    if (lookups != null)
+                    {
+                        fingerprintRejection = VerifyFingerprint(localMovie, lookups);
+                    }
+
                     _formatCalculator.UpdateMovieCustomFormats(localMovie);
 
                     decision = GetDecision(localMovie, downloadClientItem);
@@ -287,6 +410,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                         }
                     }
                 }
+
+                decision = WithFingerprintRejection(decision, fingerprintRejection);
             }
             catch (AugmentingFailedException)
             {

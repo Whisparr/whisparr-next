@@ -449,6 +449,64 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             Subject.BuildCandidates(Lookup(Cand(SceneA))).Single().StudioTitle.Should().Be("Entity Studio");
         }
 
+        [Test]
+        public void confirmed_outcome_makes_no_remote_calls()
+        {
+            var a = AddToLibrary(1, SceneA);
+            GivenAnySceneInfo();
+
+            var outcome = Subject.Evaluate(a, Lookup(Cand(SceneA), Cand("x1", "PHASH", 1), Cand("x2", "PHASH", 2)), 944);
+
+            outcome.Tier.Should().Be(MatchTier.Confirmed);
+            outcome.Candidates.Should().HaveCount(3);
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetSceneInfo(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void conflict_outcome_still_enriches_at_most_five()
+        {
+            var a = AddToLibrary(1, SceneA);
+            GivenAnySceneInfo();
+
+            var lookup = Lookup(
+                Cand("s1", "PHASH", 1),
+                Cand("s2", "PHASH", 2),
+                Cand("s3", "PHASH", 3),
+                Cand("s4", "PHASH", 4),
+                Cand("s5", "PHASH", 5),
+                Cand("s6", "PHASH", 6),
+                Cand("s7", "PHASH", 7));
+
+            var outcome = Subject.Evaluate(a, lookup, 944);
+
+            outcome.Conflict.Should().BeTrue();
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetSceneInfo(It.IsAny<string>()), Times.Exactly(5));
+        }
+
+        [Test]
+        public void oshash_candidate_with_phash_for_another_scene_needs_review()
+        {
+            AddToLibrary(1, SceneA);
+            AddToLibrary(2, SceneB);
+
+            var outcome = Subject.Evaluate(null, Lookup(Cand(SceneA, duration: 944), Cand(SceneB, "PHASH", 2)), 944);
+
+            outcome.Tier.Should().Be(MatchTier.Unknown);
+            outcome.NeedsReview.Should().BeTrue();
+            outcome.Target.Should().BeNull();
+            outcome.Candidates.Should().HaveCount(2);
+        }
+
+        [Test]
+        public void oshash_candidate_with_phash_for_same_scene_is_hash()
+        {
+            AddToLibrary(1, SceneA);
+
+            var outcome = Subject.Evaluate(null, Lookup(Cand(SceneA, duration: 944), Cand(SceneA, "PHASH", 2)), 944);
+
+            outcome.Tier.Should().Be(MatchTier.Hash);
+        }
+
         private void GivenAnySceneInfo()
         {
             Mocker.GetMock<IProvideMovieInfo>()
