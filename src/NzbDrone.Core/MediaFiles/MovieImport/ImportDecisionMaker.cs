@@ -145,44 +145,147 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         // Null (not an empty dictionary) when fingerprinting doesn't apply, which is how movies skip it entirely.
         private Dictionary<string, FingerprintLookupResult> LookupFingerprints(List<LocalMovie> localMovies, Movie movie)
         {
-            if (localMovies.Count == 0 || movie.MovieMetadata?.Value?.ItemType != ItemType.Scene)
-            {
-#pragma warning disable S1168
-                return null;
-#pragma warning restore S1168
-            }
-
-            var files = new List<FileFingerprint>();
-            var keys = new HashSet<string>();
-
-            foreach (var localMovie in localMovies)
-            {
-                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
-
-                localMovie.OsHash = osHash;
-                localMovie.HashedFileModifiedAt = hashedAt;
-
-                if (osHash.IsNotNullOrWhiteSpace() && keys.Add(localMovie.Path))
-                {
-                    files.Add(new FileFingerprint { Key = localMovie.Path, OsHash = osHash });
-                }
-            }
-
-            if (files.Count == 0)
-            {
-                return new Dictionary<string, FingerprintLookupResult>();
-            }
-
             try
             {
+                if (localMovies.Count == 0 || movie.MovieMetadata?.Value?.ItemType != ItemType.Scene)
+                {
+#pragma warning disable S1168
+                    return null;
+#pragma warning restore S1168
+                }
+
+                var files = new List<FileFingerprint>();
+                var keys = new HashSet<string>();
+
+                foreach (var localMovie in localMovies)
+                {
+                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
+
+                    localMovie.OsHash = osHash;
+                    localMovie.HashedFileModifiedAt = hashedAt;
+
+                    if (osHash.IsNotNullOrWhiteSpace() && keys.Add(localMovie.Path))
+                    {
+                        files.Add(new FileFingerprint { Key = localMovie.Path, OsHash = osHash });
+                    }
+                }
+
+                if (files.Count == 0)
+                {
+                    return new Dictionary<string, FingerprintLookupResult>();
+                }
+
                 return _fingerprintLookupClient.Lookup(files, true) ?? new Dictionary<string, FingerprintLookupResult>();
             }
             catch (Exception ex)
             {
-                // A lookup problem never fails or delays an import
-                _logger.Debug(ex, "Fingerprint lookup failed for {0} files", files.Count);
+                // Nothing in the fingerprint phase fails or delays an import; no map means "no fingerprint data"
+                _logger.Debug(ex, "Fingerprint lookup failed for {0} files", localMovies.Count);
 
-                return new Dictionary<string, FingerprintLookupResult>();
+#pragma warning disable S1168
+                return null;
+#pragma warning restore S1168
+            }
+        }
+
+        // One upstream lookup for the files left unmapped; a Hash-tier outcome swaps the unmapped file for a normal decision on the in-library scene.
+        private void LinkUnmappedByHash(List<(string Path, MovieFile File)> pending,
+                                        List<MovieFile> unmappedFiles,
+                                        List<ImportDecision> decisions,
+                                        DownloadClientItem downloadClientItem,
+                                        ParsedMovieInfo folderInfo,
+                                        ParsedMovieInfo downloadClientItemInfo,
+                                        bool sceneSource)
+        {
+            if (pending.Count == 0)
+            {
+                return;
+            }
+
+            var lookups = LookupUnmappedUpstream(pending);
+
+            foreach (var (path, unmappedFile) in pending)
+            {
+                var target = FindHashTarget(path, unmappedFile, lookups);
+
+                if (target == null)
+                {
+                    continue;
+                }
+
+                var localMovie = new LocalMovie
+                {
+                    Movie = target,
+                    DownloadClientMovieInfo = downloadClientItemInfo,
+                    DownloadItem = downloadClientItem,
+                    FolderMovieInfo = folderInfo,
+                    Path = path,
+                    SceneSource = sceneSource,
+                    MatchTier = MatchTier.Hash,
+                    OsHash = unmappedFile.OsHash,
+                    HashedFileModifiedAt = unmappedFile.HashedFileModifiedAt
+                };
+
+                var decision = GetDecision(localMovie, downloadClientItem, false, null);
+
+                if (decision == null)
+                {
+                    continue;
+                }
+
+                unmappedFiles.Remove(unmappedFile);
+                decisions.Add(decision);
+                _logger.Info("Linked {0} to {1} by oshash", path, target);
+            }
+        }
+
+        private Dictionary<string, FingerprintLookupResult> LookupUnmappedUpstream(List<(string Path, MovieFile File)> pending)
+        {
+            var empty = new Dictionary<string, FingerprintLookupResult>();
+
+            try
+            {
+                var files = pending.Where(p => p.File.OsHash.IsNotNullOrWhiteSpace())
+                                   .GroupBy(p => p.Path)
+                                   .Select(g => new FileFingerprint { Key = g.Key, OsHash = g.First().File.OsHash })
+                                   .ToList();
+
+                if (files.Count == 0)
+                {
+                    return empty;
+                }
+
+                return _fingerprintLookupClient.Lookup(files, false) ?? empty;
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Upstream fingerprint lookup failed for {0} unmapped files", pending.Count);
+
+                return empty;
+            }
+        }
+
+        private Movie FindHashTarget(string path, MovieFile unmappedFile, Dictionary<string, FingerprintLookupResult> lookups)
+        {
+            if (!lookups.TryGetValue(path, out var lookup))
+            {
+                return null;
+            }
+
+            var seconds = unmappedFile.MediaInfo?.RunTime.TotalSeconds;
+
+            try
+            {
+                var outcome = _fileMatchEvaluator.Evaluate(null, lookup, seconds > 0 ? seconds : null);
+
+                // Hits never add scenes: only a scene already in the library qualifies
+                return outcome is { Tier: MatchTier.Hash, Target.Id: > 0 } ? outcome.Target : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Unable to verify fingerprint match for {0}", path);
+
+                return null;
             }
         }
 
@@ -251,6 +354,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             var moviesToAdd = new List<Movie>();
             var unmappedFiles = new List<MovieFile>();
             var decisions = new List<ImportDecision>();
+            var pendingHashes = new List<(string Path, MovieFile File)>();
 
             var i = 0;
             foreach (var file in newFiles)
@@ -295,6 +399,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     unmappedFile.Quality = localMovie.Quality;
 
                     unmappedFiles.Add(unmappedFile);
+                    pendingHashes.Add((file.ToString(), unmappedFile));
                     _logger.Info("Added unmapped decision.  No matching movie found for file: {0}", file);
                     continue;
                 }
@@ -307,6 +412,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                 decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, false, null));
             }
+
+            LinkUnmappedByHash(pendingHashes, unmappedFiles, decisions, downloadClientItem, folderInfo, downloadClientItemInfo, sceneSource);
 
             return (moviesToAdd, unmappedFiles, decisions);
         }

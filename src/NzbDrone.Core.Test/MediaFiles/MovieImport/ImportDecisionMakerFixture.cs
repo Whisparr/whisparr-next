@@ -6,10 +6,12 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
@@ -135,6 +137,201 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             var unmapped = result.UnmappedFiles.Should().ContainSingle().Subject;
             unmapped.OsHash.Should().Be("0123456789abcdef");
             unmapped.HashedFileModifiedAt.Should().Be(lastWrite);
+        }
+
+        private void GivenUnparsedSceneFile(string file, string osHash, double durationSeconds = 600)
+        {
+            Mocker.GetMock<ISceneIdentificationService>()
+                  .Setup(s => s.Identify(It.IsAny<string>(), It.IsAny<ParsedMovieInfo>()))
+                  .Returns(new Movie());
+
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns((LocalMovie localMovie, DownloadClientItem _) => localMovie);
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(file)).Returns(osHash);
+
+            Mocker.GetMock<IVideoFileInfoReader>()
+                  .Setup(s => s.GetMediaInfo(file))
+                  .Returns(new MediaInfoModel { RunTime = TimeSpan.FromSeconds(durationSeconds) });
+        }
+
+        private void GivenUpstreamLookup(Dictionary<string, FingerprintLookupResult> results)
+        {
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), false))
+                  .Returns(results);
+        }
+
+        [Test]
+        public void should_link_unparsed_scene_file_with_hash_tier_outcome_as_a_decision()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+            var target = GivenSceneInDatabase();
+            var lookup = new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched };
+
+            GivenUnparsedSceneFile(file, "0123456789abcdef", 600);
+            GivenUpstreamLookup(new Dictionary<string, FingerprintLookupResult> { { file, lookup } });
+
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(null, lookup, 600d))
+                  .Returns(new FileMatchOutcome { Tier = MatchTier.Hash, Target = target });
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.UnmappedFiles.Should().BeEmpty();
+            result.MoviesToAdd.Should().BeEmpty();
+
+            var decision = result.Decisions.Should().ContainSingle().Subject;
+            decision.Approved.Should().BeTrue();
+            decision.LocalMovie.Path.Should().Be(file);
+            decision.LocalMovie.Movie.Should().BeSameAs(target);
+            decision.LocalMovie.MatchTier.Should().Be(MatchTier.Hash);
+            decision.LocalMovie.OsHash.Should().Be("0123456789abcdef");
+            decision.LocalMovie.HashedFileModifiedAt.Should().NotBeNull();
+        }
+
+        [Test]
+        public void should_look_up_all_unparsed_scene_files_upstream_in_one_call()
+        {
+            var files = new List<string>
+            {
+                @"C:\Test\Unsorted\Unknown.A.mp4".AsOsAgnostic(),
+                @"C:\Test\Unsorted\Unknown.B.mp4".AsOsAgnostic()
+            };
+
+            GivenUnparsedSceneFile(files[0], "0123456789abcdef");
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(files[1])).Returns("fedcba9876543210");
+            Mocker.GetMock<IVideoFileInfoReader>().Setup(s => s.GetMediaInfo(files[1])).Returns(new MediaInfoModel());
+            GivenUpstreamLookup(new Dictionary<string, FingerprintLookupResult>());
+
+            var result = Subject.GetSceneImportDecisions(files, null, null, false, false);
+
+            result.UnmappedFiles.Should().HaveCount(2);
+            Mocker.GetMock<IFingerprintLookupClient>().Verify(
+                s => s.Lookup(It.Is<IReadOnlyCollection<FileFingerprint>>(f => f.Count == 2 && f.Select(x => x.Key).SequenceEqual(files)), false),
+                Times.Once());
+            Mocker.GetMock<IFingerprintLookupClient>().Verify(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Once());
+        }
+
+        [TestCase(MatchTier.Unknown)]
+        [TestCase(MatchTier.Name)]
+        [TestCase(MatchTier.Confirmed)]
+        public void should_leave_unparsed_scene_file_unmapped_for_other_tiers(MatchTier tier)
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+            var lookup = new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched };
+
+            GivenUnparsedSceneFile(file, "0123456789abcdef");
+            GivenUpstreamLookup(new Dictionary<string, FingerprintLookupResult> { { file, lookup } });
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Returns(new FileMatchOutcome { Tier = tier, NeedsReview = true });
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.Decisions.Should().BeEmpty();
+            result.MoviesToAdd.Should().BeEmpty();
+            result.UnmappedFiles.Should().ContainSingle().Which.OsHash.Should().Be("0123456789abcdef");
+        }
+
+        [Test]
+        public void should_leave_unparsed_scene_file_unmapped_when_hash_target_is_not_in_the_library()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+            var lookup = new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched };
+
+            GivenUnparsedSceneFile(file, "0123456789abcdef");
+            GivenUpstreamLookup(new Dictionary<string, FingerprintLookupResult> { { file, lookup } });
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Returns(new FileMatchOutcome { Tier = MatchTier.Hash, Target = new Movie { Id = 0 } });
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.Decisions.Should().BeEmpty();
+            result.MoviesToAdd.Should().BeEmpty();
+            result.UnmappedFiles.Should().ContainSingle();
+        }
+
+        [Test]
+        public void should_leave_unparsed_scene_files_unmapped_when_upstream_lookup_throws()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+
+            GivenUnparsedSceneFile(file, "0123456789abcdef");
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()))
+                  .Throws(new InvalidOperationException("boom"));
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.Decisions.Should().BeEmpty();
+            result.UnmappedFiles.Should().ContainSingle().Which.OsHash.Should().Be("0123456789abcdef");
+        }
+
+        [Test]
+        public void should_leave_unparsed_scene_files_unmapped_when_evaluator_throws()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+
+            GivenUnparsedSceneFile(file, "0123456789abcdef");
+            GivenUpstreamLookup(new Dictionary<string, FingerprintLookupResult> { { file, new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched } } });
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Throws(new InvalidOperationException("boom"));
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.Decisions.Should().BeEmpty();
+            result.UnmappedFiles.Should().ContainSingle();
+        }
+
+        [Test]
+        public void should_not_look_up_when_no_scene_file_could_be_hashed()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+
+            GivenUnparsedSceneFile(file, null);
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            result.UnmappedFiles.Should().ContainSingle();
+            Mocker.GetMock<IFingerprintLookupClient>().Verify(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        private class ThrowOnceLazyMetadata : LazyLoaded<MovieMetadata>
+        {
+            private readonly int _throwOnAccess;
+            private int _accesses;
+
+            public ThrowOnceLazyMetadata(MovieMetadata value, int throwOnAccess)
+                : base(value)
+            {
+                _throwOnAccess = throwOnAccess;
+            }
+
+            public override void LazyLoad()
+            {
+                if (++_accesses == _throwOnAccess)
+                {
+                    throw new InvalidOperationException("lazy load failed");
+                }
+            }
+        }
+
+        [Test]
+        public void should_still_make_decisions_when_the_lookup_phase_throws()
+        {
+            var dbMovie = GivenSceneInDatabase();
+
+            // First access is the sample count, the second is the fingerprint lookup setup
+            _movie.MovieMetadata = new ThrowOnceLazyMetadata(_movie.MovieMetadata.Value, 2);
+
+            var result = Subject.GetImportDecisions(_videoFiles, _movie);
+
+            result.Should().ContainSingle().Which.LocalMovie.Movie.Should().BeSameAs(dbMovie);
+            Mocker.GetMock<IFingerprintLookupClient>().Verify(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]
