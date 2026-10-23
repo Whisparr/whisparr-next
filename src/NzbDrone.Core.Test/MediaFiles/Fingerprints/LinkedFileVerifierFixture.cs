@@ -28,6 +28,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
                 new() { Id = 5, ForeignId = "Scene-A" },
                 new() { Id = 6, ForeignId = "scene-b" }
             };
+            _movies.ForEach(m => m.MovieMetadata.Value.ItemType = ItemType.Scene);
             _results = new Dictionary<string, FingerprintLookupResult>();
             _lookups = new List<IReadOnlyCollection<FileFingerprint>>();
             _localOnlyFlags = new List<bool>();
@@ -49,6 +50,87 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             Mocker.GetMock<IMediaFileService>()
                 .Setup(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()))
                 .Callback<List<MovieFile>>(l => _saves.Add(l.ToList()));
+
+            // The current rows; the same instances the test passes in unless it swaps them
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
+                .Returns<IEnumerable<int>>(ids => _stored.Where(f => ids.Contains(f.Id)).ToList());
+        }
+
+        private List<MovieFile> _stored = new();
+
+        private void RunVerify(List<MovieFile> files)
+        {
+            _stored = files;
+
+            Subject.Verify(files);
+        }
+
+        [Test]
+        public void should_classify_the_current_row_so_a_concurrent_change_is_not_overwritten()
+        {
+            var snapshot = File(1, tier: MatchTier.Name);
+            var current = File(1, tier: MatchTier.Manual);
+            _stored = new List<MovieFile> { current };
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
+
+            Subject.Verify(new List<MovieFile> { snapshot });
+
+            current.MatchTier.Should().Be(MatchTier.Manual);
+            snapshot.MatchTier.Should().Be(MatchTier.Name);
+            _saves.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_apply_the_tier_to_the_current_row_not_the_snapshot()
+        {
+            var snapshot = File(1, tier: MatchTier.Name);
+            var current = File(1, tier: MatchTier.Unknown);
+            _stored = new List<MovieFile> { current };
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-a", 1));
+
+            Subject.Verify(new List<MovieFile> { snapshot });
+
+            current.MatchTier.Should().Be(MatchTier.Confirmed);
+            _saves.Should().ContainSingle().Which.Should().Equal(current);
+        }
+
+        [Test]
+        public void should_skip_a_file_that_moved_to_another_movie_meanwhile()
+        {
+            var snapshot = File(1, movieId: 5);
+            var current = File(1, movieId: 6);
+            _stored = new List<MovieFile> { current };
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-a", 1));
+
+            Subject.Verify(new List<MovieFile> { snapshot });
+
+            current.MatchTier.Should().Be(MatchTier.Name);
+            _saves.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_re_read_the_files_in_one_call()
+        {
+            RunVerify(Enumerable.Range(1, 250).Select(i => File(i)).ToList());
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
+        }
+
+        [Test]
+        public void should_only_verify_files_of_scenes()
+        {
+            _movies[0].MovieMetadata.Value.ItemType = ItemType.Movie;
+            var movieFile = File(1, movieId: 5);
+            var sceneFile = File(2, movieId: 6);
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
+            GivenResult(2, FingerprintLookupStatus.Matched, ("scene-b", 1));
+
+            RunVerify(new List<MovieFile> { movieFile, sceneFile });
+
+            _lookups.Should().ContainSingle().Which.Select(f => f.Key).Should().Equal("2");
+            movieFile.MatchTier.Should().Be(MatchTier.Name);
+            sceneFile.MatchTier.Should().Be(MatchTier.Confirmed);
         }
 
         private static MovieFile File(int id, int movieId = 5, MatchTier tier = MatchTier.Name)
@@ -71,7 +153,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         [Test]
         public void should_look_up_local_only_with_the_phash_only_keyed_by_id()
         {
-            Subject.Verify(new List<MovieFile> { File(1), File(2) });
+            RunVerify(new List<MovieFile> { File(1), File(2) });
 
             _localOnlyFlags.Should().Equal(true);
             _lookups.Should().ContainSingle().Which
@@ -82,7 +164,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         [Test]
         public void should_look_up_in_batches_of_100()
         {
-            Subject.Verify(Enumerable.Range(1, 250).Select(i => File(i)).ToList());
+            RunVerify(Enumerable.Range(1, 250).Select(i => File(i)).ToList());
 
             _lookups.Select(l => l.Count).Should().Equal(100, 100, 50);
         }
@@ -90,7 +172,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         [Test]
         public void should_load_the_movies_in_one_call()
         {
-            Subject.Verify(Enumerable.Range(1, 250).Select(i => File(i, i % 2 == 0 ? 5 : 6)).ToList());
+            RunVerify(Enumerable.Range(1, 250).Select(i => File(i, i % 2 == 0 ? 5 : 6)).ToList());
 
             Mocker.GetMock<IMovieService>().Verify(s => s.GetMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
         }
@@ -102,7 +184,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1, tier: from);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-a", 2));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Confirmed);
             _saves.Should().ContainSingle().Which.Should().Equal(file);
@@ -114,7 +196,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Conflict);
             file.MovieId.Should().Be(5);
@@ -127,7 +209,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1), ("scene-a", 3));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Confirmed);
         }
@@ -138,7 +220,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 9));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Name);
             _saves.Should().BeEmpty();
@@ -151,7 +233,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1);
             GivenResult(1, status);
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Name);
             _saves.Should().BeEmpty();
@@ -162,7 +244,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         {
             var file = File(1);
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Name);
             _saves.Should().BeEmpty();
@@ -174,7 +256,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1, tier: MatchTier.Hash);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Conflict);
             _saves.Should().ContainSingle().Which.Should().Equal(file);
@@ -186,7 +268,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1, tier: MatchTier.Hash);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-a", 1));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Hash);
             _saves.Should().BeEmpty();
@@ -198,7 +280,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1, tier: MatchTier.Hash);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1), ("scene-a", 2));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(MatchTier.Hash);
         }
@@ -211,7 +293,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var file = File(1, tier: tier);
             GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
 
-            Subject.Verify(new List<MovieFile> { file });
+            RunVerify(new List<MovieFile> { file });
 
             file.MatchTier.Should().Be(tier);
             Mocker.GetMock<IFingerprintLookupClient>()
@@ -225,7 +307,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var noHash = File(2);
             noHash.PHash = null;
 
-            Subject.Verify(new List<MovieFile> { unlinked, noHash });
+            RunVerify(new List<MovieFile> { unlinked, noHash });
 
             Mocker.GetMock<IFingerprintLookupClient>()
                 .Verify(c => c.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
@@ -241,7 +323,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             GivenResult(2, FingerprintLookupStatus.Matched, ("scene-b", 0));
             GivenResult(3, FingerprintLookupStatus.NotFound);
 
-            Subject.Verify(new List<MovieFile> { confirmed, conflict, unchanged });
+            RunVerify(new List<MovieFile> { confirmed, conflict, unchanged });
 
             _saves.Should().ContainSingle().Which.Should().Equal(confirmed, conflict);
         }

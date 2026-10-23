@@ -43,10 +43,34 @@ namespace NzbDrone.Core.Test.RootFolderTests
                 .Returns(() => _results);
 
             Mocker.GetMock<IFileMatchEvaluator>()
-                .Setup(e => e.BuildCandidates(It.IsAny<FingerprintLookupResult>()))
-                .Returns<FingerprintLookupResult>(r => r.Candidates
+                .Setup(e => e.BuildCandidates(It.IsAny<FingerprintLookupResult>(), false))
+                .Returns<FingerprintLookupResult, bool>((r, _) => r.Candidates
                     .Select(c => new FingerprintCandidate { SceneId = c.SceneId, Algorithm = c.Algorithm })
                     .ToList());
+        }
+
+        [Test]
+        public void should_cap_remote_enrichment_at_100_calls_per_run()
+        {
+            var budgets = new List<int>();
+
+            Mocker.GetMock<IFileMatchEvaluator>()
+                .Setup(e => e.EnrichCandidates(It.IsAny<List<FingerprintCandidate>>(), It.IsAny<int>()))
+                .Returns<List<FingerprintCandidate>, int>((_, max) =>
+                {
+                    budgets.Add(max);
+                    return Math.Min(max, 60);
+                });
+
+            GivenResult(1, FingerprintLookupStatus.Matched, "scene-a");
+            GivenResult(2, FingerprintLookupStatus.Matched, "scene-b");
+            GivenResult(3, FingerprintLookupStatus.Matched, "scene-c");
+
+            Subject.MatchPending();
+
+            budgets.Should().Equal(100, 40);
+            _saves.Should().ContainSingle().Which.Should().HaveCount(3);
+            _files.Should().OnlyContain(f => f.Candidates.Count == 1);
         }
 
         private void GivenResult(int id, FingerprintLookupStatus status, params string[] sceneIds)
@@ -136,7 +160,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             _files[0].Candidates.Should().NotBeNull().And.BeEmpty();
             _files[0].CandidatesCheckedAt.Should().Be(Now);
-            Mocker.GetMock<IFileMatchEvaluator>().Verify(e => e.BuildCandidates(It.IsAny<FingerprintLookupResult>()), Times.Never());
+            Mocker.GetMock<IFileMatchEvaluator>().Verify(e => e.BuildCandidates(It.IsAny<FingerprintLookupResult>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]

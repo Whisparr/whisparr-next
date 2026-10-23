@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles.Fingerprints;
@@ -25,5 +26,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         public int IndexerFlags { get; set; }
         public IEnumerable<ImportRejection> Rejections { get; set; } = new List<ImportRejection>();
         public List<FingerprintCandidate> FingerprintCandidates { get; set; } = new();
+
+        // The movie the file's hash contradicts, so a reprocess can tell whether the user has since picked another one.
+        public int? FingerprintConflictMovieId =>
+            Movie != null && Rejections.Any(r => r.Reason == ImportRejectionReason.FingerprintConflict) ? Movie.Id : null;
     }
 }

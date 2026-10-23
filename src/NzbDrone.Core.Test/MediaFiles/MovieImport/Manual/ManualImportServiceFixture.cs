@@ -9,6 +9,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
@@ -195,6 +196,94 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
             items[0].Rejections.Should().Contain(r => r.Reason == ImportRejectionReason.FingerprintConflict);
             Mocker.GetMock<IFingerprintLookupClient>()
                   .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        private (Movie Movie, string Path) GivenReprocessableConflict()
+        {
+            var movie = new Movie { Id = 3, Path = @"C:\Test\Movies\Scene".AsOsAgnostic() };
+            movie.MovieMetadata.Value.OriginalLanguage = Language.English;
+
+            var path = System.IO.Path.Combine(Folder, "a.mp4");
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(movie.Id)).Returns(movie);
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns<LocalMovie, DownloadClientItem>((lm, _) => lm);
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetDecision(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns<LocalMovie, DownloadClientItem>((lm, _) => new ImportDecision(lm));
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(path)).Returns("0123456789abcdef");
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), true))
+                  .Returns(new Dictionary<string, FingerprintLookupResult> { { path, new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched } } });
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Returns(new FileMatchOutcome
+                  {
+                      Tier = MatchTier.Conflict,
+                      Conflict = true,
+                      NeedsReview = true,
+                      Candidates = new List<FingerprintCandidate> { new() { SceneId = "other" } }
+                  });
+            Mocker.GetMock<ILocalizationService>()
+                  .Setup(s => s.GetLocalizedString("FingerprintConflictRejection", It.IsAny<Dictionary<string, object>>()))
+                  .Returns("conflict");
+
+            return (movie, path);
+        }
+
+        private ManualImportItem Reprocess(Movie movie, string path, int? conflictMovieId)
+        {
+            return Subject.ReprocessItem(path, null, movie.Id, null, new QualityModel(Quality.Unknown), new List<Language> { Language.English }, 0, conflictMovieId);
+        }
+
+        [Test]
+        public void should_keep_the_fingerprint_conflict_when_reprocessing_the_same_scene()
+        {
+            var (movie, path) = GivenReprocessableConflict();
+
+            var item = Reprocess(movie, path, movie.Id);
+
+            item.Rejections.Should().ContainSingle(r => r.Reason == ImportRejectionReason.FingerprintConflict && r.Message == "conflict");
+            item.FingerprintCandidates.Should().ContainSingle().Which.SceneId.Should().Be("other");
+            item.FingerprintConflictMovieId.Should().Be(movie.Id);
+        }
+
+        [Test]
+        public void should_drop_the_fingerprint_conflict_when_another_scene_was_picked()
+        {
+            var (movie, path) = GivenReprocessableConflict();
+
+            var item = Reprocess(movie, path, movie.Id + 1);
+
+            item.Rejections.Should().BeEmpty();
+            item.FingerprintConflictMovieId.Should().BeNull();
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_look_up_on_reprocess_when_the_item_had_no_conflict()
+        {
+            var (movie, path) = GivenReprocessableConflict();
+
+            var item = Reprocess(movie, path, null);
+
+            item.Rejections.Should().BeEmpty();
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_clear_the_conflict_on_reprocess_when_the_hash_no_longer_contradicts_the_scene()
+        {
+            var (movie, path) = GivenReprocessableConflict();
+
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Returns(new FileMatchOutcome { Tier = MatchTier.Confirmed });
+
+            Reprocess(movie, path, movie.Id).Rejections.Should().BeEmpty();
         }
 
         [Test]

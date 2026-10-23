@@ -39,23 +39,49 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public void Verify(IReadOnlyCollection<MovieFile> movieFiles)
         {
-            // Manual is the user's decision and Confirmed already has name and oshash agreeing; Conflict is already flagged
-            var files = movieFiles
-                .Where(f => f.MovieId > 0 && f.PHash != null && f.MatchTier is MatchTier.Unknown or MatchTier.Name or MatchTier.Hash)
-                .ToList();
+            var files = movieFiles.Where(IsVerifiable).ToList();
 
             if (files.Count == 0)
             {
                 return;
             }
 
+            // Only scenes have fingerprints to check against
             var movieIds = files.Select(f => f.MovieId).Distinct().ToList();
-            var foreignIds = _movieService.GetMovies(movieIds).ToDictionary(m => m.Id, m => m.ForeignId);
-            var changed = new List<MovieFile>();
+            var foreignIds = _movieService.GetMovies(movieIds)
+                                          .Where(m => m.MovieMetadata?.Value?.ItemType == ItemType.Scene)
+                                          .ToDictionary(m => m.Id, m => m.ForeignId);
+
+            files = files.Where(f => foreignIds.ContainsKey(f.MovieId)).ToList();
+
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+            var results = new Dictionary<string, FingerprintLookupResult>();
 
             foreach (var batch in files.Chunk(BatchSize))
             {
-                changed.AddRange(VerifyBatch(batch, foreignIds));
+                var fingerprints = batch.Select(f => new FileFingerprint { Key = f.Id.ToString(), PHash = f.PHash }).ToList();
+
+                foreach (var (key, result) in _lookupClient.Lookup(fingerprints, true))
+                {
+                    results[key] = result;
+                }
+            }
+
+            // The caller's rows were read before the (slow) phash run; classify the current ones so a tier or
+            // movie change made meanwhile isn't overwritten
+            var current = _mediaFileService.GetMovies(files.Select(f => f.Id).ToList()).ToDictionary(f => f.Id);
+            var changed = new List<MovieFile>();
+
+            foreach (var file in files)
+            {
+                if (current.TryGetValue(file.Id, out var fresh) && fresh.MovieId == file.MovieId && IsVerifiable(fresh))
+                {
+                    changed.AddRange(Verify(fresh, results, foreignIds));
+                }
             }
 
             if (changed.Count > 0)
@@ -66,39 +92,37 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             _logger.Debug("Perceptual hash verified {0} linked files, {1} changed", files.Count, changed.Count);
         }
 
-        // Returns the files whose tier changed
-        private List<MovieFile> VerifyBatch(MovieFile[] batch, Dictionary<int, string> foreignIds)
+        // Manual is the user's decision and Confirmed already has name and oshash agreeing; Conflict is already flagged
+        private static bool IsVerifiable(MovieFile file)
         {
-            var fingerprints = batch.Select(f => new FileFingerprint { Key = f.Id.ToString(), PHash = f.PHash }).ToList();
-            var results = _lookupClient.Lookup(fingerprints, true);
-            var changed = new List<MovieFile>();
+            return file.MovieId > 0 && file.PHash != null && file.MatchTier is MatchTier.Unknown or MatchTier.Name or MatchTier.Hash;
+        }
 
-            foreach (var file in batch)
+        // Returns the file when its tier changed, nothing otherwise
+        private IEnumerable<MovieFile> Verify(MovieFile file, Dictionary<string, FingerprintLookupResult> results, Dictionary<int, string> foreignIds)
+        {
+            if (!results.TryGetValue(file.Id.ToString(), out var result) ||
+                !foreignIds.TryGetValue(file.MovieId, out var foreignId))
             {
-                if (!results.TryGetValue(file.Id.ToString(), out var result) ||
-                    !foreignIds.TryGetValue(file.MovieId, out var foreignId))
-                {
-                    continue;
-                }
-
-                var tier = Classify(result, foreignId);
-
-                // A Hash link is flagged but never promoted: it stays Hash when the phash agrees
-                if (tier == null || (tier == MatchTier.Confirmed && file.MatchTier == MatchTier.Hash))
-                {
-                    continue;
-                }
-
-                file.MatchTier = tier.Value;
-                changed.Add(file);
-
-                if (tier == MatchTier.Conflict)
-                {
-                    _logger.Info("Perceptual hash of movie file {0} matches another scene than its linked movie {1}", file.Id, file.MovieId);
-                }
+                return Enumerable.Empty<MovieFile>();
             }
 
-            return changed;
+            var tier = Classify(result, foreignId);
+
+            // A Hash link is flagged but never promoted: it stays Hash when the phash agrees
+            if (tier == null || (tier == MatchTier.Confirmed && file.MatchTier == MatchTier.Hash))
+            {
+                return Enumerable.Empty<MovieFile>();
+            }
+
+            file.MatchTier = tier.Value;
+
+            if (tier == MatchTier.Conflict)
+            {
+                _logger.Info("Perceptual hash of movie file {0} matches another scene than its linked movie {1}", file.Id, file.MovieId);
+            }
+
+            return new[] { file };
         }
 
         // null means no usable candidate, so the file stays as it is

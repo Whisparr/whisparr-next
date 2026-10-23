@@ -321,8 +321,11 @@ namespace NzbDrone.Core.MediaFiles
             var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
             var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
+            // The listing can miss a file that is still there (filtered path, unreadable folder), so confirm on disk
             var missing = movieFiles
-                .Where(f => f.OsHash != null && !onDisk.Contains(Path.Combine(movie.Path, f.RelativePath)))
+                .Where(f => f.OsHash != null &&
+                            !onDisk.Contains(Path.Combine(movie.Path, f.RelativePath)) &&
+                            !_diskProvider.FileExists(Path.Combine(movie.Path, f.RelativePath)))
                 .ToList();
 
             if (missing.Count == 0)

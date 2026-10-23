@@ -36,6 +36,7 @@ interface ReprocessInteractiveImportItem {
   releaseGroup: string | undefined;
   indexerFlags: number;
   downloadId: string | undefined;
+  fingerprintConflictMovieId: number | null | undefined;
 }
 
 type ItemChanges = Record<number, Partial<InteractiveImport>>;
@@ -148,6 +149,7 @@ export default function useInteractiveImport(params: InteractiveImportParams) {
             releaseGroup: item.releaseGroup,
             indexerFlags: item.indexerFlags,
             downloadId: item.downloadId,
+            fingerprintConflictMovieId: item.fingerprintConflictMovieId,
           });
 
           return acc;

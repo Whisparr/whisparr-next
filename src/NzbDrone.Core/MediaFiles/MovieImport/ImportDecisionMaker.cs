@@ -203,13 +203,17 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             }
 
             var lookups = LookupUnmappedUpstream(pending);
-            var linkedMovieIds = new HashSet<int>();
+
+            // Scenes the parser/identification batch already imports count too, so one scene never gets two files
+            var linkedMovieIds = decisions.Where(d => d.Approved && d.LocalMovie.Movie != null)
+                                          .Select(d => d.LocalMovie.Movie.Id)
+                                          .ToHashSet();
 
             foreach (var (path, unmappedFile) in pending)
             {
                 var target = FindHashTarget(path, unmappedFile, lookups);
 
-                // A second file hashing to an already-linked scene is a duplicate; leave it unmapped so the user sees it
+                // A second file for an already-linked scene is a duplicate; leave it unmapped so the user sees it
                 if (target == null || linkedMovieIds.Contains(target.Id))
                 {
                     continue;
@@ -230,7 +234,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                 var decision = GetDecision(localMovie, downloadClientItem, false, null);
 
-                if (decision == null)
+                // A rejected link leaves the file unmapped rather than dropping it from the list
+                if (decision is not { Approved: true })
                 {
                     continue;
                 }
@@ -279,7 +284,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
             try
             {
-                var outcome = _fileMatchEvaluator.Evaluate(null, lookup, seconds > 0 ? seconds : null);
+                var outcome = _fileMatchEvaluator.Evaluate(null, lookup, seconds > 0 ? seconds : null, false);
 
                 // Hits never add scenes: only a scene already in the library qualifies
                 return outcome is { Tier: MatchTier.Hash, Target.Id: > 0 } ? outcome.Target : null;
@@ -331,14 +336,13 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 return null;
             }
 
-            var parserId = localMovie.Movie.ForeignId;
-            var other = localMovie.FingerprintCandidates.FirstOrDefault(c => !string.Equals(c.SceneId, parserId, StringComparison.OrdinalIgnoreCase))
-                        ?? localMovie.FingerprintCandidates.FirstOrDefault();
-            var title = other?.Title.IsNotNullOrWhiteSpace() == true ? other.Title : other?.SceneId;
+            // A file already in the scene's folder can't be left orphaned by a rescan: keep it linked, flagged as Conflict
+            if (localMovie.ExistingFile)
+            {
+                return null;
+            }
 
-            var message = _localizationService.GetLocalizedString("FingerprintConflictRejection", new Dictionary<string, object> { { "title", title } });
-
-            return new ImportRejection(ImportRejectionReason.FingerprintConflict, message);
+            return FingerprintConflictRejection.Create(_localizationService, localMovie.Movie, localMovie.FingerprintCandidates);
         }
 
         public (List<Movie> MoviesToAdd, List<MovieFile> UnmappedFiles, List<ImportDecision> Decisions) GetSceneImportDecisions(List<string> videoFiles, DownloadClientItem downloadClientItem, ParsedMovieInfo folderInfo, bool sceneSource, bool filterExistingFiles)
@@ -493,6 +497,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     if (lookups != null)
                     {
                         fingerprintRejection = VerifyFingerprint(localMovie, lookups);
+                    }
+                    else if (localMovie.MatchTier == MatchTier.Unknown)
+                    {
+                        // Matched by the parser or identification, with no hash data to confirm it
+                        localMovie.MatchTier = MatchTier.Name;
                     }
 
                     _formatCalculator.UpdateMovieCustomFormats(localMovie);

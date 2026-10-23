@@ -225,11 +225,42 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook.Fingerprints
         }
 
         [Test]
-        public void should_set_request_timeout_to_180_seconds()
+        public void should_set_upstream_request_timeout_to_180_seconds()
+        {
+            Subject.Lookup(Files(1), false);
+
+            _requests[0].RequestTimeout.Should().Be(TimeSpan.FromSeconds(180));
+        }
+
+        [Test]
+        public void should_set_local_only_request_timeout_to_15_seconds()
         {
             Subject.Lookup(Files(1), true);
 
-            _requests[0].RequestTimeout.Should().Be(TimeSpan.FromSeconds(180));
+            _requests[0].RequestTimeout.Should().Be(TimeSpan.FromSeconds(15));
+        }
+
+        [Test]
+        public void should_not_send_remaining_batches_after_a_timeout()
+        {
+            _respond = r => throw new WebException("timed out", WebExceptionStatus.Timeout);
+
+            var result = Subject.Lookup(Files(250), true);
+
+            _requests.Should().HaveCount(1);
+            result.Should().HaveCount(250);
+            result.Values.Should().OnlyContain(v => v.Status == FingerprintLookupStatus.TryLater);
+        }
+
+        [Test]
+        public void should_keep_sending_batches_after_a_non_success_response()
+        {
+            _respond = r => new HttpResponse(r, new HttpHeader(), "{}", HttpStatusCode.InternalServerError);
+
+            var result = Subject.Lookup(Files(250), true);
+
+            _requests.Should().HaveCount(3);
+            result.Values.Should().OnlyContain(v => v.Status == FingerprintLookupStatus.TryLater);
         }
 
         [Test]

@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
@@ -24,6 +27,9 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
         private const int TpdbUpstreamBatchSize = 20;
 
         private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(180);
+
+        // A local-only lookup is a database read on the service; if it takes longer something is wrong.
+        private static readonly TimeSpan LocalLookupTimeout = TimeSpan.FromSeconds(15);
 
         private readonly IHttpClient _httpClient;
         private readonly IHttpRequestBuilderFactory _whisparrMetadata;
@@ -71,9 +77,14 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
             var source = _configService.WhisparrSceneMetadataSource;
             var sourceName = source == SceneMetadataType.Tpdb ? "tpdb" : "stashDb";
 
+            var unreachable = false;
+
             foreach (var batch in sendable.Chunk(BatchSize(source, localOnly)))
             {
-                var batchResults = LookupBatch(batch, sourceName, localOnly);
+                // A timeout or transport failure means the service is slow or down: don't make every later batch wait too
+                var batchResults = unreachable
+                    ? new Dictionary<string, FingerprintLookupResult>()
+                    : LookupBatch(batch, sourceName, localOnly, out unreachable);
 
                 foreach (var key in batch.Select(f => f.Key))
                 {
@@ -86,9 +97,16 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
             return results;
         }
 
-        private Dictionary<string, FingerprintLookupResult> LookupBatch(FileFingerprint[] batch, string sourceName, bool localOnly)
+        private static bool IsTransportFailure(Exception ex)
+        {
+            return ex is WebException or HttpRequestException or TimeoutException or OperationCanceledException or IOException;
+        }
+
+        private Dictionary<string, FingerprintLookupResult> LookupBatch(FileFingerprint[] batch, string sourceName, bool localOnly, out bool unreachable)
         {
             var mapped = new Dictionary<string, FingerprintLookupResult>();
+
+            unreachable = false;
 
             try
             {
@@ -111,7 +129,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
 
                 request.AllowAutoRedirect = true;
                 request.SuppressHttpError = true;
-                request.RequestTimeout = LookupTimeout;
+                request.RequestTimeout = localOnly ? LocalLookupTimeout : LookupTimeout;
                 request.Headers.ContentType = "application/json";
                 request.SetContent(body.ToJson());
                 request.ContentSummary = $"{batch.Length} fingerprint(s), source {sourceName}, localOnly {localOnly}";
@@ -147,6 +165,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
                 _logger.Warn("Fingerprint lookup failed for {0} file(s): {1}", batch.Length, ex.Message);
 #pragma warning restore S6667
                 mapped.Clear();
+                unreachable = IsTransportFailure(ex);
             }
 
             return mapped;

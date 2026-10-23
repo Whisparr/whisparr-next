@@ -32,6 +32,7 @@ namespace Whisparr.Api.V5.ManualImport
         public int IndexerFlags { get; set; }
         public IEnumerable<ImportRejectionResource> Rejections { get; set; }
         public List<FingerprintCandidate> FingerprintCandidates { get; set; }
+        public int? FingerprintConflictMovieId { get; set; }
     }
 
     public static class ManualImportResourceMapper
@@ -66,7 +67,8 @@ namespace Whisparr.Api.V5.ManualImport
                 DownloadId = model.DownloadId,
                 IndexerFlags = model.IndexerFlags,
                 Rejections = model.Rejections.Select(r => r.ToResource()),
-                FingerprintCandidates = model.FingerprintCandidates
+                FingerprintCandidates = model.FingerprintCandidates,
+                FingerprintConflictMovieId = model.FingerprintConflictMovieId
             };
         }
 

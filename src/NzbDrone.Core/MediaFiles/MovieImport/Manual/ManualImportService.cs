@@ -11,6 +11,7 @@ using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
@@ -29,7 +30,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
     {
         List<ManualImportItem> GetMediaFiles(int movieId);
         List<ManualImportItem> GetMediaFiles(string path, string downloadId, int? movieId, bool filterExistingFiles);
-        ManualImportItem ReprocessItem(string path, string downloadId, int movieId, string releaseGroup, QualityModel quality, List<Language> languages, int indexerFlags);
+        ManualImportItem ReprocessItem(string path, string downloadId, int movieId, string releaseGroup, QualityModel quality, List<Language> languages, int indexerFlags, int? fingerprintConflictMovieId = null);
     }
 
     public class ManualImportService : IExecute<ManualImportCommand>, IManualImportService
@@ -53,6 +54,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         private readonly IVideoHashService _videoHashService;
         private readonly IFingerprintLookupClient _fingerprintLookupClient;
         private readonly IFileMatchEvaluator _fileMatchEvaluator;
+        private readonly ILocalizationService _localizationService;
         private readonly Logger _logger;
 
         public ManualImportService(IDiskProvider diskProvider,
@@ -74,8 +76,10 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                                    IVideoHashService videoHashService,
                                    IFingerprintLookupClient fingerprintLookupClient,
                                    IFileMatchEvaluator fileMatchEvaluator,
+                                   ILocalizationService localizationService,
                                    Logger logger)
         {
+            _localizationService = localizationService;
             _videoHashService = videoHashService;
             _fingerprintLookupClient = fingerprintLookupClient;
             _fileMatchEvaluator = fileMatchEvaluator;
@@ -231,7 +235,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             return ProcessFolder(path, path, downloadId, movieId, filterExistingFiles);
         }
 
-        public ManualImportItem ReprocessItem(string path, string downloadId, int movieId, string releaseGroup, QualityModel quality, List<Language> languages, int indexerFlags)
+        public ManualImportItem ReprocessItem(string path, string downloadId, int movieId, string releaseGroup, QualityModel quality, List<Language> languages, int indexerFlags, int? fingerprintConflictMovieId = null)
         {
             var rootFolder = Path.GetDirectoryName(path);
             var movie = _movieService.GetMovie(movieId);
@@ -280,7 +284,58 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             localMovie.Languages = finalLanguages;
             localMovie.IndexerFlags = (IndexerFlags)indexerFlags;
 
-            return MapItem(_importDecisionMaker.GetDecision(localMovie, downloadClientItem), rootFolder, downloadId, null);
+            var decision = _importDecisionMaker.GetDecision(localMovie, downloadClientItem);
+
+            // The edit doesn't clear a conflict the hash raised for this same scene; picking another scene does
+            if (fingerprintConflictMovieId.HasValue && movie != null && fingerprintConflictMovieId.Value == movie.Id)
+            {
+                decision = KeepFingerprintConflict(decision, localMovie);
+            }
+
+            return MapItem(decision, rootFolder, downloadId, null);
+        }
+
+        // Re-checks the file against the local index; the rejection comes back only while the hash still contradicts the scene.
+        private ImportDecision KeepFingerprintConflict(ImportDecision decision, LocalMovie localMovie)
+        {
+            try
+            {
+                var (osHash, _) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
+
+                if (osHash.IsNullOrWhiteSpace())
+                {
+                    return decision;
+                }
+
+                var lookups = _fingerprintLookupClient.Lookup(new List<FileFingerprint> { new() { Key = localMovie.Path, OsHash = osHash } }, true);
+
+                if (lookups == null || !lookups.TryGetValue(localMovie.Path, out var lookup))
+                {
+                    return decision;
+                }
+
+                var seconds = localMovie.MediaInfo?.RunTime.TotalSeconds;
+                var outcome = _fileMatchEvaluator.Evaluate(localMovie.Movie, lookup, seconds > 0 ? seconds : null);
+
+                if (outcome is not { Conflict: true })
+                {
+                    return decision;
+                }
+
+                localMovie.MatchTier = MatchTier.Conflict;
+                localMovie.FingerprintCandidates = outcome.Candidates ?? new List<FingerprintCandidate>();
+
+                var rejection = FingerprintConflictRejection.Create(_localizationService, localMovie.Movie, localMovie.FingerprintCandidates);
+
+                return new ImportDecision(localMovie, decision.Rejections.Append(rejection).ToArray());
+            }
+            catch (Exception ex)
+            {
+                // A lookup problem never fails the edit
+                _logger.Debug(ex, "Fingerprint re-check failed for {0}", localMovie.Path);
+
+                return decision;
+            }
         }
 
         private List<ManualImportItem> ProcessFolder(string rootFolder, string baseFolder, string downloadId, int? movieId, bool filterExistingFiles)

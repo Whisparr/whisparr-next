@@ -34,6 +34,8 @@ interface InteractiveImport extends ModelBase {
   indexerFlags: number;
   rejections: Rejection[];
   fingerprintCandidates?: FingerprintCandidate[];
+  // The scene the file's hash contradicts; echoed on reprocess so an edit keeps the conflict.
+  fingerprintConflictMovieId?: number | null;
   movieFileId?: number;
   downloadId?: string;
 }

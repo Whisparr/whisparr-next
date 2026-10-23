@@ -7,7 +7,7 @@ interface FingerprintCandidate {
   algorithm: 'OSHASH' | 'PHASH';
   distance: number;
   submissions: number;
-  duration: number;
+  duration: number | null;
   movieId: number | null;
   title?: string;
   studioTitle?: string;

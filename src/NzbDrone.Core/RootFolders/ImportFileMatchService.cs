@@ -18,6 +18,9 @@ namespace NzbDrone.Core.RootFolders
         // Upper bound on files looked up per run; the next run takes the rest
         internal const int MaxFilesPerRun = 500;
 
+        // Upper bound on remote scene-info calls per run, so a big backlog can't hammer the metadata service
+        internal const int MaxEnrichmentsPerRun = 100;
+
         private readonly IImportlFileService _importFileService;
         private readonly IFingerprintLookupClient _lookupClient;
         private readonly IFileMatchEvaluator _matchEvaluator;
@@ -62,6 +65,8 @@ namespace NzbDrone.Core.RootFolders
             var stamp = UtcNow();
             var done = new List<ImportFile>();
 
+            var enrichBudget = MaxEnrichmentsPerRun;
+
             foreach (var file in pending)
             {
                 // A missing entry or TryLater leaves the row unstamped for the next run
@@ -70,9 +75,21 @@ namespace NzbDrone.Core.RootFolders
                     continue;
                 }
 
-                file.Candidates = result.Status == FingerprintLookupStatus.Matched
-                    ? _matchEvaluator.BuildCandidates(result)
-                    : new List<FingerprintCandidate>();
+                if (result.Status == FingerprintLookupStatus.Matched)
+                {
+                    // Candidates past the run's budget keep library info only; a later run won't revisit them
+                    file.Candidates = _matchEvaluator.BuildCandidates(result, false);
+
+                    if (enrichBudget > 0)
+                    {
+                        enrichBudget -= _matchEvaluator.EnrichCandidates(file.Candidates, enrichBudget);
+                    }
+                }
+                else
+                {
+                    file.Candidates = new List<FingerprintCandidate>();
+                }
+
                 file.CandidatesCheckedAt = stamp;
                 done.Add(file);
             }

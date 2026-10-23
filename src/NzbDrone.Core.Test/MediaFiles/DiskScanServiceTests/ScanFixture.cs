@@ -487,6 +487,24 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void should_not_relink_a_row_missing_from_the_listing_but_still_on_disk()
+        {
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            var newPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row }, newPath);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(Path.Combine(_movie.Path, "old.mkv")))
+                  .Returns(true);
+
+            Subject.Scan(_movie);
+
+            row.RelativePath.Should().Be("old.mkv");
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(newPath), Times.Never());
+        }
+
+        [Test]
         public void should_not_relink_missing_row_without_oshash()
         {
             var row = GivenMissingRow(21, "old.mkv", null);

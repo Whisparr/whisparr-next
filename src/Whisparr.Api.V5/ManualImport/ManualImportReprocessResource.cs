@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Qualities;
 using Whisparr.Api.V5.CustomFormats;
 using Whisparr.Api.V5.Movies;
@@ -20,5 +21,9 @@ namespace Whisparr.Api.V5.ManualImport
         public int CustomFormatScore { get; set; }
         public int IndexerFlags { get; set; }
         public IEnumerable<ImportRejectionResource> Rejections { get; set; }
+
+        // Echoed back to the server so an edit keeps a fingerprint conflict raised for the same scene
+        public int? FingerprintConflictMovieId { get; set; }
+        public List<FingerprintCandidate> FingerprintCandidates { get; set; }
     }
 }

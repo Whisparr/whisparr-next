@@ -13,8 +13,17 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
     {
         FileMatchOutcome Evaluate(Movie parserMatch, FingerprintLookupResult lookup, double? fileDurationSeconds);
 
+        // Callers that only need the tier and target skip the remote display-info calls.
+        FileMatchOutcome Evaluate(Movie parserMatch, FingerprintLookupResult lookup, double? fileDurationSeconds, bool enrich);
+
         // De-duplicated per scene, best first, enriched with display info.
         List<FingerprintCandidate> BuildCandidates(FingerprintLookupResult lookup);
+
+        // Same list without the remote display-info calls; pair with EnrichCandidates when the caller budgets them.
+        List<FingerprintCandidate> BuildCandidates(FingerprintLookupResult lookup, bool enrich);
+
+        // Fills display info for candidates not in the library, at most maxCalls remote calls; returns the calls made.
+        int EnrichCandidates(List<FingerprintCandidate> candidates, int maxCalls);
     }
 
     public class FileMatchEvaluator : IFileMatchEvaluator
@@ -40,6 +49,11 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public FileMatchOutcome Evaluate(Movie parserMatch, FingerprintLookupResult lookup, double? fileDurationSeconds)
         {
+            return Evaluate(parserMatch, lookup, fileDurationSeconds, true);
+        }
+
+        public FileMatchOutcome Evaluate(Movie parserMatch, FingerprintLookupResult lookup, double? fileDurationSeconds, bool enrich)
+        {
             var usable = UsableCandidates(lookup);
             var library = new Dictionary<string, Movie>(StringComparer.OrdinalIgnoreCase);
             var candidates = Build(usable, library);
@@ -56,9 +70,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             }
 
             // Display info from the remote source is only worth a call when someone has to review the outcome
-            if (outcome.NeedsReview)
+            if (enrich && outcome.NeedsReview)
             {
-                EnrichRemote(candidates);
+                EnrichRemote(candidates, MaxRemoteLookups);
             }
 
             return outcome;
@@ -106,14 +120,27 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public List<FingerprintCandidate> BuildCandidates(FingerprintLookupResult lookup)
         {
+            return BuildCandidates(lookup, true);
+        }
+
+        public List<FingerprintCandidate> BuildCandidates(FingerprintLookupResult lookup, bool enrich)
+        {
             var candidates = Build(UsableCandidates(lookup), new Dictionary<string, Movie>(StringComparer.OrdinalIgnoreCase));
 
-            EnrichRemote(candidates);
+            if (enrich)
+            {
+                EnrichRemote(candidates, MaxRemoteLookups);
+            }
 
             return candidates;
         }
 
-        private void EnrichRemote(List<FingerprintCandidate> candidates)
+        public int EnrichCandidates(List<FingerprintCandidate> candidates, int maxCalls)
+        {
+            return EnrichRemote(candidates, Math.Min(maxCalls, MaxRemoteLookups));
+        }
+
+        private int EnrichRemote(List<FingerprintCandidate> candidates, int maxCalls)
         {
             var remoteLookups = 0;
 
@@ -124,7 +151,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     continue;
                 }
 
-                if (remoteLookups >= MaxRemoteLookups)
+                if (remoteLookups >= maxCalls)
                 {
                     break;
                 }
@@ -132,6 +159,8 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 remoteLookups++;
                 Enrich(candidate);
             }
+
+            return remoteLookups;
         }
 
         private static FileMatchOutcome EvaluateWithParser(Movie parserMatch, List<FingerprintCandidateResult> usable, List<FingerprintCandidate> candidates)
