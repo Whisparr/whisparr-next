@@ -29,6 +29,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(List<MovieFile> movieFiles);
         void SavePHashes(List<MovieFile> movieFiles);
+        void SaveMatchTiers(List<MovieFile> movieFiles);
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
@@ -161,6 +162,11 @@ namespace NzbDrone.Core.MediaFiles
         public void SavePHashes(List<MovieFile> movieFiles)
         {
             _mediaFileRepository.SavePHashes(movieFiles);
+        }
+
+        public void SaveMatchTiers(List<MovieFile> movieFiles)
+        {
+            _mediaFileRepository.SaveMatchTiers(movieFiles);
         }
 
         public List<string> FilterExistingFiles(List<string> files, Movie movie)

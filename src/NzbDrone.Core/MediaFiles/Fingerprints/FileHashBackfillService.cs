@@ -34,6 +34,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private readonly IMediaFileService _mediaFileService;
         private readonly IImportlFileService _importFileService;
         private readonly IImportFileMatchService _importFileMatchService;
+        private readonly ILinkedFileVerifier _linkedFileVerifier;
         private readonly IMovieService _movieService;
         private readonly IVideoHashService _videoHashService;
         private readonly IDiskProvider _diskProvider;
@@ -54,6 +55,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                                        IMediaFileService mediaFileService,
                                        IImportlFileService importFileService,
                                        IImportFileMatchService importFileMatchService,
+                                       ILinkedFileVerifier linkedFileVerifier,
                                        IMovieService movieService,
                                        IVideoHashService videoHashService,
                                        IDiskProvider diskProvider,
@@ -64,6 +66,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             _mediaFileService = mediaFileService;
             _importFileService = importFileService;
             _importFileMatchService = importFileMatchService;
+            _linkedFileVerifier = linkedFileVerifier;
             _movieService = movieService;
             _videoHashService = videoHashService;
             _diskProvider = diskProvider;
@@ -94,7 +97,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             if (total == 0)
             {
                 // Rows left unstamped by an earlier TryLater are retried even when nothing new was hashed
-                _importFileMatchService.MatchPending();
+                TryMatchPending();
 
                 return;
             }
@@ -143,7 +146,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
             _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
 
-            _importFileMatchService.MatchPending();
+            TryMatchPending();
         }
 
         public void Execute(GenerateVideoHashesCommand message)
@@ -166,7 +169,16 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
                     return f => ResolvePath(f, movies);
                 },
-                (f, hash) => f.PHash = hash,
+                (f, hash) =>
+                {
+                    f.PHash = hash;
+
+                    // Linked files are checked against the local index once the run ends
+                    if (f.MovieId > 0)
+                    {
+                        run.Linked.Add(f);
+                    }
+                },
                 (f, at) =>
                 {
                     f.PHashAttemptedAt = at;
@@ -193,6 +205,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     }
                 },
                 run);
+
+            // Also when the run stopped early; a breaker stop hashed nothing, so there is nothing to verify
+            TryVerifyLinkedFiles(run.Linked);
 
             if (run.TurnedOff)
             {
@@ -274,6 +289,38 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             }
         }
 
+        // The hashes are already saved: a failed lookup pass must not fail the command. Only the message is logged.
+#pragma warning disable S6667
+        private void TryMatchPending()
+        {
+            try
+            {
+                _importFileMatchService.MatchPending();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("Matching hashed import files failed: {0}", ex.Message);
+            }
+        }
+
+        private void TryVerifyLinkedFiles(List<MovieFile> movieFiles)
+        {
+            if (movieFiles.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                _linkedFileVerifier.Verify(movieFiles);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("Verifying linked files by perceptual hash failed: {0}", ex.Message);
+            }
+        }
+#pragma warning restore S6667
+
         private bool ShouldStop(PHashRun run)
         {
             // Read live each time: turning the setting off is how a user stops a running task
@@ -342,6 +389,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             public bool Stopped { get; set; }
             public bool AnySuccess { get; set; }
             public List<Action> Held { get; } = new();
+            public List<MovieFile> Linked { get; } = new();
 
             public void ReleaseHeld()
             {

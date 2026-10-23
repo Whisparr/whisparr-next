@@ -23,6 +23,8 @@ namespace NzbDrone.Core.RootFolders
         private readonly IFileMatchEvaluator _matchEvaluator;
         private readonly Logger _logger;
 
+        private int _watermark;
+
         public ImportFileMatchService(IImportlFileService importFileService,
                                       IFingerprintLookupClient lookupClient,
                                       IFileMatchEvaluator matchEvaluator,
@@ -40,7 +42,11 @@ namespace NzbDrone.Core.RootFolders
 
         public void MatchPending()
         {
-            var pending = _importFileService.GetFilesNeedingCandidates(MaxFilesPerRun);
+            var pending = _importFileService.GetFilesNeedingCandidates(_watermark, MaxFilesPerRun);
+
+            // Rows that stay TryLater stay unstamped; the watermark moves past them so they can't
+            // block later rows, and wraps at the end of the table so they are retried once per pass
+            _watermark = pending.Count < MaxFilesPerRun ? 0 : pending[^1].Id;
 
             if (pending.Count == 0)
             {

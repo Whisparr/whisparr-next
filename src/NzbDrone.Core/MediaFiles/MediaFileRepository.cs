@@ -15,6 +15,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<MovieFile> movieFiles);
         void SavePHashes(IList<MovieFile> movieFiles);
+        void SaveMatchTiers(IList<MovieFile> movieFiles);
         List<MovieFile> GetAllFiles();
         List<MovieFile> GetUnmappedFiles();
         void DeleteForMovies(List<int> movieIds);
@@ -68,6 +69,11 @@ namespace NzbDrone.Core.MediaFiles
         public void SavePHashes(IList<MovieFile> movieFiles)
         {
             SetFieldsWithoutEvents(movieFiles, f => f.PHash, f => f.PHashAttemptedAt);
+        }
+
+        public void SaveMatchTiers(IList<MovieFile> movieFiles)
+        {
+            SetFieldsWithoutEvents(movieFiles, f => f.MatchTier);
         }
 
         public List<MovieFile> GetAllFiles()

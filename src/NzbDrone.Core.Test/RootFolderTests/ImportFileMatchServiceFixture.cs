@@ -31,7 +31,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
                 .ToList();
 
             Mocker.GetMock<IImportlFileService>()
-                .Setup(s => s.GetFilesNeedingCandidates(It.IsAny<int>()))
+                .Setup(s => s.GetFilesNeedingCandidates(It.IsAny<int>(), It.IsAny<int>()))
                 .Returns(() => _files);
 
             Mocker.GetMock<IImportlFileService>()
@@ -64,7 +64,35 @@ namespace NzbDrone.Core.Test.RootFolderTests
         {
             Subject.MatchPending();
 
-            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingCandidates(500), Times.Once());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingCandidates(0, 500), Times.Once());
+        }
+
+        [Test]
+        public void should_continue_after_a_full_batch_of_try_later_rows_and_wrap_at_the_end()
+        {
+            var full = Enumerable.Range(1, 500).Select(i => new ImportFile { Id = i, OsHash = "h" }).ToList();
+            var rest = new List<ImportFile> { new() { Id = 501, OsHash = "h" } };
+            var requested = new List<int>();
+
+            Mocker.GetMock<IImportlFileService>()
+                .Setup(s => s.GetFilesNeedingCandidates(It.IsAny<int>(), It.IsAny<int>()))
+                .Returns<int, int>((after, _) =>
+                {
+                    requested.Add(after);
+
+                    if (after == 0)
+                    {
+                        return full;
+                    }
+
+                    return after == 500 ? rest : new List<ImportFile>();
+                });
+
+            Subject.MatchPending();
+            Subject.MatchPending();
+            Subject.MatchPending();
+
+            requested.Should().Equal(0, 500, 0);
         }
 
         [Test]

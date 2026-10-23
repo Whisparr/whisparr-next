@@ -11,7 +11,7 @@ namespace NzbDrone.Core.RootFolders
         List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<ImportFile> importFiles);
         void SavePHashes(IList<ImportFile> importFiles);
-        List<ImportFile> GetFilesNeedingCandidates(int limit);
+        List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit);
         void SaveCandidates(IList<ImportFile> importFiles);
     }
 
@@ -52,10 +52,11 @@ namespace NzbDrone.Core.RootFolders
             SetFieldsWithoutEvents(importFiles, f => f.Candidates, f => f.CandidatesCheckedAt);
         }
 
-        public List<ImportFile> GetFilesNeedingCandidates(int limit)
+        public List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit)
         {
+            // Rows left unstamped by TryLater are stepped past by the caller's Id watermark
             return Query(Builder()
-                .Where<ImportFile>(x => x.OsHash != null && x.CandidatesCheckedAt == null)
+                .Where<ImportFile>(x => x.OsHash != null && x.CandidatesCheckedAt == null && x.Id > afterId)
                 .OrderBy($"\"ImportFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 

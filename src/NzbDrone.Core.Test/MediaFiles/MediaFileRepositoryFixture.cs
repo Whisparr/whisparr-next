@@ -143,6 +143,20 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void match_tier_save_should_only_write_the_tier()
+        {
+            var file = GivenStoredFile();
+            file.MatchTier = MatchTier.Confirmed;
+            file.PHash = "should-not-be-saved";
+
+            Subject.SaveMatchTiers(new List<MovieFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.MatchTier.Should().Be(MatchTier.Confirmed);
+            stored.PHash.Should().BeNull();
+        }
+
+        [Test]
         public void phash_save_should_not_touch_oshash_columns()
         {
             var file = GivenStoredFile();

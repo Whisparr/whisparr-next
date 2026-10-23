@@ -633,6 +633,104 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         }
 
         [Test]
+        public void a_throwing_match_pass_should_not_fail_the_oshash_command()
+        {
+            GivenImportFiles(0, 2000, ImportFiles(1));
+            Mocker.GetMock<IImportFileMatchService>().Setup(s => s.MatchPending()).Throws(new InvalidOperationException("boom"));
+
+            var act = () => Subject.Execute(new GenerateOsHashesCommand());
+
+            act.Should().NotThrow();
+        }
+
+        [Test]
+        public void a_throwing_match_pass_should_not_fail_the_oshash_command_when_nothing_was_hashed()
+        {
+            Mocker.GetMock<IImportFileMatchService>().Setup(s => s.MatchPending()).Throws(new InvalidOperationException("boom"));
+
+            var act = () => Subject.Execute(new GenerateOsHashesCommand());
+
+            act.Should().NotThrow();
+        }
+
+        [Test]
+        public void phash_should_verify_linked_files_that_got_a_hash()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(2);
+            GivenPHashMovieFiles(files);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<ILinkedFileVerifier>()
+                .Verify(v => v.Verify(It.Is<List<MovieFile>>(l => l.SequenceEqual(files))), Times.Once());
+        }
+
+        [Test]
+        public void phash_should_not_verify_unlinked_files_or_files_without_a_hash()
+        {
+            GivenPHashEnabled();
+            var linkedWithoutHash = MovieFiles(1, firstId: 1);
+            var unlinked = new MovieFile { Id = 2, MovieId = 0, OriginalFilePath = Path.Combine(Path.GetTempPath(), "downloads", "orphan.mp4") };
+            var files = linkedWithoutHash.Concat(new[] { unlinked }).ToList();
+            GivenPHashMovieFiles(files);
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(Path.Combine(_movie.Path, "file1.mp4")))
+                .Returns((string)null);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<ILinkedFileVerifier>().Verify(v => v.Verify(It.IsAny<List<MovieFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_should_not_verify_when_the_breaker_stopped_the_run()
+        {
+            GivenPHashEnabled();
+            GivenPHashMovieFiles(MovieFiles(6));
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputePHash(It.IsAny<string>())).Returns((string)null);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<ILinkedFileVerifier>().Verify(v => v.Verify(It.IsAny<List<MovieFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_should_verify_files_hashed_before_the_setting_was_turned_off()
+        {
+            GivenPHashEnabled();
+            var files = MovieFiles(3);
+            GivenPHashMovieFiles(files);
+            Mocker.GetMock<IVideoHashService>()
+                .Setup(s => s.ComputePHash(It.IsAny<string>()))
+                .Returns<string>(p =>
+                {
+                    Mocker.GetMock<IConfigService>().SetupGet(c => c.EnablePerceptualHashing).Returns(false);
+
+                    return "ph-" + Path.GetFileName(p);
+                });
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            Mocker.GetMock<ILinkedFileVerifier>()
+                .Verify(v => v.Verify(It.Is<List<MovieFile>>(l => l.Count == 1 && l[0] == files[0])), Times.Once());
+        }
+
+        [Test]
+        public void a_throwing_verifier_should_not_fail_the_phash_command()
+        {
+            GivenPHashEnabled();
+            GivenPHashMovieFiles(MovieFiles(1));
+            Mocker.GetMock<ILinkedFileVerifier>()
+                .Setup(v => v.Verify(It.IsAny<List<MovieFile>>()))
+                .Throws(new InvalidOperationException("boom"));
+
+            var act = () => Subject.Execute(new GenerateVideoHashesCommand());
+
+            act.Should().NotThrow();
+        }
+
+        [Test]
         public void phash_should_keep_fetching_chunks_until_no_work_is_left()
         {
             GivenPHashEnabled();

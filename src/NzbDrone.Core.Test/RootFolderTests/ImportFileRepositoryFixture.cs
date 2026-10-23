@@ -170,12 +170,13 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Db.InsertMany(items);
 
-            var pending = Subject.GetFilesNeedingCandidates(100);
+            var pending = Subject.GetFilesNeedingCandidates(0, 100);
 
             pending.Should().HaveCount(4);
             pending.Should().OnlyContain(f => f.OsHash != null && f.CandidatesCheckedAt == null);
             pending.Select(f => f.Id).Should().BeInAscendingOrder();
-            Subject.GetFilesNeedingCandidates(2).Should().HaveCount(2);
+            Subject.GetFilesNeedingCandidates(0, 2).Should().HaveCount(2);
+            Subject.GetFilesNeedingCandidates(pending[1].Id, 100).Select(f => f.Id).Should().Equal(pending[2].Id, pending[3].Id);
         }
 
         [Test]
