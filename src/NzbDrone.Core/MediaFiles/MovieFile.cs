@@ -26,6 +26,11 @@ namespace NzbDrone.Core.MediaFiles
         public string Edition { get; set; }
         public Movie Movie { get; set; }
         public List<Language> Languages { get; set; }
+        public string OsHash { get; set; }
+        public string PHash { get; set; }
+        public DateTime? PHashAttemptedAt { get; set; }
+        public DateTime? HashedFileModifiedAt { get; set; }
+        public MatchTier MatchTier { get; set; }
 
         public override string ToString()
         {

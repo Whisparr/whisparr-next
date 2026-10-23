@@ -30,6 +30,9 @@ namespace Whisparr.Api.V5.MovieFiles
 
         public string OriginalFilePath { get; set; }
         public bool QualityCutoffNotMet { get; set; }
+        public string OsHash { get; set; }
+        public string PHash { get; set; }
+        public MatchTier MatchTier { get; set; }
     }
 
     public static class MovieFileResourceMapper
@@ -58,7 +61,10 @@ namespace Whisparr.Api.V5.MovieFiles
                 ReleaseGroup = model.ReleaseGroup,
                 Edition = model.Edition,
                 MediaInfo = model.MediaInfo.ToResource(model.SceneName),
-                OriginalFilePath = model.OriginalFilePath
+                OriginalFilePath = model.OriginalFilePath,
+                OsHash = model.OsHash,
+                PHash = model.PHash,
+                MatchTier = model.MatchTier
             };
         }
 
@@ -94,7 +100,10 @@ namespace Whisparr.Api.V5.MovieFiles
                 MediaInfo = model.MediaInfo.ToResource(model.SceneName),
                 QualityCutoffNotMet = upgradableSpecification?.QualityCutoffNotMet(movie.QualityProfile, model.Quality) ?? false,
                 OriginalFilePath = model.OriginalFilePath,
-                IndexerFlags = (int)model.IndexerFlags
+                IndexerFlags = (int)model.IndexerFlags,
+                OsHash = model.OsHash,
+                PHash = model.PHash,
+                MatchTier = model.MatchTier
             };
 
             if (formatCalculationService != null)
