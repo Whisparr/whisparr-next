@@ -4,6 +4,7 @@ using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MetadataSource;
@@ -505,6 +506,19 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             var outcome = Subject.Evaluate(null, Lookup(Cand(SceneA, duration: 944), Cand(SceneA, "PHASH", 2)), 944);
 
             outcome.Tier.Should().Be(MatchTier.Hash);
+        }
+
+        [TestCase(SceneMetadataType.StashDb, "stash:" + SceneA)]
+        [TestCase(SceneMetadataType.Tpdb, "tpdb:" + SceneA)]
+        public void candidates_carry_a_lookup_term_for_the_locked_source(SceneMetadataType source, string expected)
+        {
+            Mocker.GetMock<IConfigService>()
+                .SetupGet(s => s.WhisparrSceneMetadataSource)
+                .Returns(source);
+
+            var outcome = Subject.Evaluate(null, Lookup(Cand(SceneA)), 944);
+
+            outcome.Candidates.Single().LookupTerm.Should().Be(expected);
         }
 
         private void GivenAnySceneInfo()

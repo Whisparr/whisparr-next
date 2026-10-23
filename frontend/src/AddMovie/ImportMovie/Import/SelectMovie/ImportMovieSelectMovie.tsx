@@ -12,6 +12,7 @@ import translate from 'Utilities/String/translate';
 import {
   ImportItem,
   ImportItemType,
+  isHashMatch,
   MovieLookupResult,
 } from '../../ImportMovieTypes';
 import ImportMovieSearchResult from './ImportMovieSearchResult';
@@ -40,7 +41,6 @@ function ImportMovieSelectMovie({
     id,
     itemType,
     selectedMovie,
-    hashMatch,
     isFetching,
     isPopulated,
     isQueued,
@@ -154,7 +154,7 @@ function ImportMovieSelectMovie({
                 />
               ) : null}
 
-              {isPopulated && selectedMovie && hashMatch ? (
+              {isPopulated && isHashMatch(item) ? (
                 <Label kind={kinds.INFO} title={translate('HashMatchHelpText')}>
                   {translate('HashMatch')}
                 </Label>

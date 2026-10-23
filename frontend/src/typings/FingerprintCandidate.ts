@@ -2,6 +2,8 @@
 // de-duplicated per scene and ordered oshash-first.
 interface FingerprintCandidate {
   sceneId: string;
+  // Movie lookup term that resolves straight to this scene.
+  lookupTerm: string;
   algorithm: 'OSHASH' | 'PHASH';
   distance: number;
   submissions: number;

@@ -7,6 +7,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
     public class FingerprintCandidate
     {
         public string SceneId { get; set; }
+
+        // Ready-made movie lookup term that resolves straight to this scene under the locked source.
+        public string LookupTerm { get; set; }
         public string Algorithm { get; set; }
         public int Distance { get; set; }
         public int Submissions { get; set; }

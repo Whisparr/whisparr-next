@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NLog;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
@@ -26,10 +27,12 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         private readonly IMovieService _movieService;
         private readonly IProvideMovieInfo _movieInfo;
+        private readonly IConfigService _configService;
         private readonly Logger _logger;
 
-        public FileMatchEvaluator(IMovieService movieService, IProvideMovieInfo movieInfo, Logger logger)
+        public FileMatchEvaluator(IMovieService movieService, IProvideMovieInfo movieInfo, IConfigService configService, Logger logger)
         {
+            _configService = configService;
             _movieService = movieService;
             _movieInfo = movieInfo;
             _logger = logger;
@@ -182,12 +185,16 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 .Select(g => g.First())
                 .ToList();
 
+            // SkyHookProxy.TryGetLookupId accepts stash: under StashDB and tpdb: under TPDB for a direct scene lookup
+            var lookupPrefix = _configService.WhisparrSceneMetadataSource == SceneMetadataType.Tpdb ? "tpdb:" : "stash:";
+
             var result = new List<FingerprintCandidate>(ordered.Count);
             foreach (var source in ordered)
             {
                 var candidate = new FingerprintCandidate
                 {
                     SceneId = source.SceneId,
+                    LookupTerm = lookupPrefix + source.SceneId,
                     Algorithm = source.Algorithm,
                     Distance = source.Distance,
                     Submissions = source.Submissions,

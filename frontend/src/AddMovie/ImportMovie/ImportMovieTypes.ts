@@ -10,7 +10,9 @@ export interface ImportFile {
 
 // The scene to preselect for a file: only when its top candidate is an oshash
 // hit and no other oshash candidate competes with it.
-export function getHashMatchSceneId(file: ImportFile): string | null {
+export function getHashMatchCandidate(
+  file: ImportFile
+): FingerprintCandidate | null {
   const candidates = file.candidates ?? [];
   const oshash = candidates.filter((c) => c.algorithm === 'OSHASH');
 
@@ -18,7 +20,22 @@ export function getHashMatchSceneId(file: ImportFile): string | null {
     return null;
   }
 
-  return oshash[0].sceneId ? String(oshash[0].sceneId) : null;
+  return oshash[0].sceneId && oshash[0].lookupTerm ? oshash[0] : null;
+}
+
+function isSameScene(a?: string | null, b?: string | null): boolean {
+  return !!a && !!b && a.toLowerCase() === b.toLowerCase();
+}
+
+export function isHashMatch(item: ImportItem): boolean {
+  const { hashSceneId, selectedMovie } = item;
+
+  // An entry already in the library carries its own chip, so it needs no label.
+  return (
+    !!selectedMovie &&
+    !selectedMovie.isExisting &&
+    isSameScene(selectedMovie.foreignId, hashSceneId)
+  );
 }
 
 // The movies/scenes routes pin the lookup to one type; the bare
@@ -68,8 +85,9 @@ export interface ImportItem {
   error: Error | null;
   items: MovieLookupResult[];
   selectedMovie: MovieLookupResult | null;
-  // True while the selected scene is the one suggested by the file's fingerprint.
-  hashMatch: boolean;
+  // The scene suggested by the file's fingerprint; the label shows only while
+  // that scene is the selected one.
+  hashSceneId: string | null;
   monitor: string;
   qualityProfileId: number;
 }
@@ -116,21 +134,21 @@ export function importReducer(
       return {
         isLookingUp: false,
         items: sliced.map((f) => {
-          const hashSceneId = getHashMatchSceneId(f);
+          const hashCandidate = getHashMatchCandidate(f);
 
           return {
             id: f.name,
             path: f.path,
             relativePath: f.relativePath,
-            term: hashSceneId ?? f.name,
-            itemType: action.itemType,
+            term: hashCandidate?.lookupTerm ?? f.name,
+            itemType: hashCandidate ? ('scene' as const) : action.itemType,
             isFetching: false,
             isPopulated: false,
             isQueued: false,
             error: null,
             items: [],
             selectedMovie: null,
-            hashMatch: hashSceneId !== null,
+            hashSceneId: hashCandidate?.sceneId ?? null,
             monitor: action.defaults.monitor,
             qualityProfileId: action.defaults.qualityProfileId,
           };
@@ -154,7 +172,12 @@ export function importReducer(
             return item;
           }
 
-          const selectedMovie = item.selectedMovie ?? action.results[0] ?? null;
+          // The suggested scene wins over the server's ranking when it is in the results
+          const hashResult = action.results.find((r) =>
+            isSameScene(r.foreignId, item.hashSceneId)
+          );
+          const selectedMovie =
+            item.selectedMovie ?? hashResult ?? action.results[0] ?? null;
           return {
             ...item,
             isFetching: false,
@@ -163,9 +186,12 @@ export function importReducer(
             error: null,
             items: action.results,
             selectedMovie,
-            // An empty lookup means the suggested scene wasn't found, so a
-            // later selection can't be the hash-suggested one.
-            hashMatch: item.hashMatch && selectedMovie !== null,
+            // Without the suggested scene in the results the hash match is dropped
+            hashSceneId:
+              hashResult ||
+              isSameScene(selectedMovie?.foreignId, item.hashSceneId)
+                ? item.hashSceneId
+                : null,
           };
         }),
       };
@@ -191,13 +217,7 @@ export function importReducer(
         ...state,
         items: state.items.map((item) =>
           item.id === action.id
-            ? {
-                ...item,
-                selectedMovie: action.movie,
-                hashMatch:
-                  item.hashMatch &&
-                  action.movie?.foreignId === item.selectedMovie?.foreignId,
-              }
+            ? { ...item, selectedMovie: action.movie }
             : item
         ),
       };
