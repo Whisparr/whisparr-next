@@ -17,12 +17,20 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         // Upper bound on files hashed by a single run; the next scheduled run picks up the rest
         internal const int MaxFilesPerRun = 2000;
 
+        // Results are persisted in batches this size, so a restart mid-run keeps progress
+        internal const int FlushSize = 100;
+
         private readonly IMediaFileService _mediaFileService;
         private readonly IImportlFileService _importFileService;
         private readonly IMovieService _movieService;
         private readonly IVideoHashService _videoHashService;
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
+
+        // Rows that fail to hash stay NULL; the per-table Id watermark moves past them so they
+        // don't block later rows, and wraps to 0 at the end of a pass so they are retried once per pass
+        private int _movieFileWatermark;
+        private int _importFileWatermark;
 
         public FileHashBackfillService(IMediaFileService mediaFileService,
                                        IImportlFileService importFileService,
@@ -41,9 +49,20 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public void Execute(GenerateOsHashesCommand message)
         {
-            var movieFiles = _mediaFileService.GetFilesWithoutOsHash(MaxFilesPerRun);
+            var movieFiles = _mediaFileService.GetFilesWithoutOsHash(_movieFileWatermark, MaxFilesPerRun);
+
+            // Fewer rows than asked means this pass reached the end of the table: start over next run
+            _movieFileWatermark = movieFiles.Count < MaxFilesPerRun ? 0 : movieFiles[^1].Id;
+
             var remaining = MaxFilesPerRun - movieFiles.Count;
-            var importFiles = remaining > 0 ? _importFileService.GetFilesWithoutOsHash(remaining) : new List<ImportFile>();
+            var importFiles = new List<ImportFile>();
+
+            if (remaining > 0)
+            {
+                importFiles = _importFileService.GetFilesWithoutOsHash(_importFileWatermark, remaining);
+                _importFileWatermark = importFiles.Count < remaining ? 0 : importFiles[^1].Id;
+            }
+
             var total = movieFiles.Count + importFiles.Count;
 
             if (total == 0)
@@ -53,21 +72,24 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
             var movies = LoadMovies(movieFiles);
             var processed = 0;
-            var hashedMovieFiles = new List<MovieFile>();
-            var hashedImportFiles = new List<ImportFile>();
+            var hashed = 0;
+            var pendingMovieFiles = new List<MovieFile>();
+            var pendingImportFiles = new List<ImportFile>();
 
+            // Batch writes go straight to the repositories: no per-file events for the UI
             foreach (var movieFile in movieFiles)
             {
                 _logger.ProgressInfo("Hashing file {0}/{1}", ++processed, total);
 
-                var path = ResolvePath(movieFile, movies);
-
-                if (TryHash(path, out var osHash, out var modifiedAt))
+                if (TryHash(ResolvePath(movieFile, movies), out var osHash, out var modifiedAt))
                 {
                     movieFile.OsHash = osHash;
                     movieFile.HashedFileModifiedAt = modifiedAt;
-                    hashedMovieFiles.Add(movieFile);
+                    pendingMovieFiles.Add(movieFile);
+                    hashed++;
                 }
+
+                pendingMovieFiles = Flush(pendingMovieFiles, _mediaFileService.UpdateMany, FlushSize);
             }
 
             foreach (var importFile in importFiles)
@@ -78,21 +100,30 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 {
                     importFile.OsHash = osHash;
                     importFile.HashedFileModifiedAt = modifiedAt;
-                    hashedImportFiles.Add(importFile);
+                    pendingImportFiles.Add(importFile);
+                    hashed++;
                 }
+
+                pendingImportFiles = Flush(pendingImportFiles, _importFileService.UpdateMany, FlushSize);
             }
 
-            if (hashedMovieFiles.Count > 0)
+            Flush(pendingMovieFiles, _mediaFileService.UpdateMany, 1);
+            Flush(pendingImportFiles, _importFileService.UpdateMany, 1);
+
+            _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
+        }
+
+        // Writes the pending rows once there are at least `threshold` of them; returns the list to keep filling
+        private static List<T> Flush<T>(List<T> pending, Action<List<T>> save, int threshold)
+        {
+            if (pending.Count < threshold)
             {
-                _mediaFileService.Update(hashedMovieFiles);
+                return pending;
             }
 
-            if (hashedImportFiles.Count > 0)
-            {
-                _importFileService.UpdateMany(hashedImportFiles);
-            }
+            save(pending);
 
-            _logger.ProgressInfo("Hashed {0} of {1} files", hashedMovieFiles.Count + hashedImportFiles.Count, total);
+            return new List<T>();
         }
 
         private Dictionary<int, Movie> LoadMovies(List<MovieFile> movieFiles)
@@ -137,7 +168,8 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
             (osHash, modifiedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
 
-            return osHash != null;
+            // A hash without a last-write stamp can't be compared on rescan, so treat it as a failure
+            return osHash != null && modifiedAt != null;
         }
     }
 }

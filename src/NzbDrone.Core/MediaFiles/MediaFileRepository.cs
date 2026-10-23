@@ -11,7 +11,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovie(int movieId);
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
-        List<MovieFile> GetFilesWithoutOsHash(int limit);
+        List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<MovieFile> GetAllFiles();
         List<MovieFile> GetUnmappedFiles();
         void DeleteForMovies(List<int> movieIds);
@@ -41,11 +41,11 @@ namespace NzbDrone.Core.MediaFiles
             return Query(x => x.MediaInfo == null);
         }
 
-        public List<MovieFile> GetFilesWithoutOsHash(int limit)
+        public List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit)
         {
             // ORDER BY is the last clause of the select template, so the limit rides along with it
             return Query(Builder()
-                .Where<MovieFile>(x => x.OsHash == null)
+                .Where<MovieFile>(x => x.OsHash == null && x.Id > afterId)
                 .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 

@@ -25,9 +25,16 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Db.InsertMany(items);
 
-            Subject.GetFilesWithoutOsHash(100).Should().HaveCount(3);
-            Subject.GetFilesWithoutOsHash(100).Should().OnlyContain(f => f.OsHash == null);
-            Subject.GetFilesWithoutOsHash(2).Should().HaveCount(2);
+            var all = Subject.GetFilesWithoutOsHash(0, 100);
+
+            all.Should().HaveCount(3);
+            all.Should().OnlyContain(f => f.OsHash == null);
+            Subject.GetFilesWithoutOsHash(0, 2).Should().HaveCount(2);
+
+            var afterFirst = Subject.GetFilesWithoutOsHash(all[0].Id, 100);
+
+            afterFirst.Should().HaveCount(2);
+            afterFirst.Should().OnlyContain(f => f.Id > all[0].Id);
         }
     }
 }

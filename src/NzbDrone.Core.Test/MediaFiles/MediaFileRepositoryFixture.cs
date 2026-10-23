@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using NUnit.Framework;
@@ -91,13 +92,19 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Db.InsertMany(items);
 
-            var all = Subject.GetFilesWithoutOsHash(100);
+            var all = Subject.GetFilesWithoutOsHash(0, 100);
 
             all.Should().HaveCount(4);
             all.Should().OnlyContain(c => c.OsHash == null);
             all.Should().Contain(c => c.MovieId == 0);
 
-            Subject.GetFilesWithoutOsHash(3).Should().HaveCount(3);
+            Subject.GetFilesWithoutOsHash(0, 3).Should().HaveCount(3);
+
+            var afterFirst = Subject.GetFilesWithoutOsHash(all[0].Id, 100);
+
+            afterFirst.Should().HaveCount(3);
+            afterFirst.Should().OnlyContain(c => c.Id > all[0].Id);
+            afterFirst.Select(c => c.Id).Should().BeInAscendingOrder();
         }
     }
 }

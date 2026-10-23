@@ -1,7 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-
-// using System.IO.Abstractions;
 using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Cache;
@@ -25,7 +23,8 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovie(int movieId);
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
-        List<MovieFile> GetFilesWithoutOsHash(int limit);
+        List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
+        void UpdateMany(List<MovieFile> movieFiles);
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
@@ -85,13 +84,13 @@ namespace NzbDrone.Core.MediaFiles
             _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(movieFile));
         }
 
-        public void Update(List<MovieFile> movieFiles)
+        public void Update(List<MovieFile> movieFile)
         {
-            _mediaFileRepository.UpdateMany(movieFiles);
-            foreach (var movieFile in movieFiles)
+            _mediaFileRepository.UpdateMany(movieFile);
+            foreach (var file in movieFile)
             {
-                RemoveMovieResourcesCache(movieFile.MovieId.ToString());
-                _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(movieFile));
+                RemoveMovieResourcesCache(file.MovieId.ToString());
+                _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(file));
             }
         }
 
@@ -138,9 +137,15 @@ namespace NzbDrone.Core.MediaFiles
             return _mediaFileRepository.GetFilesWithoutMediaInfo();
         }
 
-        public List<MovieFile> GetFilesWithoutOsHash(int limit)
+        public List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit)
         {
-            return _mediaFileRepository.GetFilesWithoutOsHash(limit);
+            return _mediaFileRepository.GetFilesWithoutOsHash(afterId, limit);
+        }
+
+        // Batch write straight to the repository: no per-file events or cache clears
+        public void UpdateMany(List<MovieFile> movieFiles)
+        {
+            _mediaFileRepository.UpdateMany(movieFiles);
         }
 
         public List<string> FilterExistingFiles(List<string> files, Movie movie)
