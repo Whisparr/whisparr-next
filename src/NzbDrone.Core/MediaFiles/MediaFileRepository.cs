@@ -13,6 +13,8 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<MovieFile> GetFilesNeedingPHash(int limit);
+        void SaveOsHashes(IList<MovieFile> movieFiles);
+        void SavePHashes(IList<MovieFile> movieFiles);
         List<MovieFile> GetAllFiles();
         List<MovieFile> GetUnmappedFiles();
         void DeleteForMovies(List<int> movieIds);
@@ -56,6 +58,16 @@ namespace NzbDrone.Core.MediaFiles
             return Query(Builder()
                 .Where<MovieFile>(x => x.PHash == null && x.PHashAttemptedAt == null)
                 .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
+        }
+
+        public void SaveOsHashes(IList<MovieFile> movieFiles)
+        {
+            SetFieldsWithoutEvents(movieFiles, f => f.OsHash, f => f.HashedFileModifiedAt);
+        }
+
+        public void SavePHashes(IList<MovieFile> movieFiles)
+        {
+            SetFieldsWithoutEvents(movieFiles, f => f.PHash, f => f.PHashAttemptedAt);
         }
 
         public List<MovieFile> GetAllFiles()

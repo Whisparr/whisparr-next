@@ -25,7 +25,8 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<MovieFile> GetFilesNeedingPHash(int limit);
-        void UpdateMany(List<MovieFile> movieFiles);
+        void SaveOsHashes(List<MovieFile> movieFiles);
+        void SavePHashes(List<MovieFile> movieFiles);
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
@@ -148,10 +149,16 @@ namespace NzbDrone.Core.MediaFiles
             return _mediaFileRepository.GetFilesNeedingPHash(limit);
         }
 
-        // Batch write straight to the repository: no per-file events or cache clears
-        public void UpdateMany(List<MovieFile> movieFiles)
+        // Column-restricted writes straight to the repository: no events or cache clears, and
+        // a concurrent hash task can't overwrite the other task's columns with stale values
+        public void SaveOsHashes(List<MovieFile> movieFiles)
         {
-            _mediaFileRepository.UpdateMany(movieFiles);
+            _mediaFileRepository.SaveOsHashes(movieFiles);
+        }
+
+        public void SavePHashes(List<MovieFile> movieFiles)
+        {
+            _mediaFileRepository.SavePHashes(movieFiles);
         }
 
         public List<string> FilterExistingFiles(List<string> files, Movie movie)

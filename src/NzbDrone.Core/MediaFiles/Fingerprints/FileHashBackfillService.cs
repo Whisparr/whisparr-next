@@ -103,7 +103,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     hashed++;
                 }
 
-                pendingMovieFiles = Flush(pendingMovieFiles, _mediaFileService.UpdateMany, FlushSize);
+                pendingMovieFiles = Flush(pendingMovieFiles, _mediaFileService.SaveOsHashes, FlushSize);
             }
 
             foreach (var importFile in importFiles)
@@ -118,11 +118,11 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     hashed++;
                 }
 
-                pendingImportFiles = Flush(pendingImportFiles, _importFileService.UpdateMany, FlushSize);
+                pendingImportFiles = Flush(pendingImportFiles, _importFileService.SaveOsHashes, FlushSize);
             }
 
-            Flush(pendingMovieFiles, _mediaFileService.UpdateMany, 1);
-            Flush(pendingImportFiles, _importFileService.UpdateMany, 1);
+            Flush(pendingMovieFiles, _mediaFileService.SaveOsHashes, 1);
+            Flush(pendingImportFiles, _importFileService.SaveOsHashes, 1);
 
             _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
         }
@@ -147,7 +147,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 },
                 (f, hash) => f.PHash = hash,
                 (f, at) => f.PHashAttemptedAt = at,
-                f => _mediaFileService.UpdateMany(new List<MovieFile> { f }),
+                f => _mediaFileService.SavePHashes(new List<MovieFile> { f }),
                 run);
 
             finished = finished && HashChunks(
@@ -155,12 +155,12 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 _ => f => f.Path,
                 (f, hash) => f.PHash = hash,
                 (f, at) => f.PHashAttemptedAt = at,
-                f => _importFileService.UpdateMany(new List<ImportFile> { f }),
+                f => _importFileService.SavePHashes(new List<ImportFile> { f }),
                 run);
 
             if (run.Processed > 0)
             {
-                _logger.Info("Computed perceptual hashes for {0} of {1} files{2}", run.Hashed, run.Processed, finished ? string.Empty : " (time budget reached)");
+                _logger.ProgressInfo("Computed perceptual hashes for {0} of {1} files{2}", run.Hashed, run.Processed, finished ? string.Empty : " (time budget reached)");
             }
         }
 

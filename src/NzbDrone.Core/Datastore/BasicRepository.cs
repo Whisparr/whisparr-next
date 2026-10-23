@@ -323,6 +323,17 @@ namespace NzbDrone.Core.Datastore
 
         public void SetFields(IList<TModel> models, params Expression<Func<TModel, object>>[] properties)
         {
+            SetFieldsWithoutEvents(models, properties);
+
+            foreach (var model in models)
+            {
+                ModelUpdated(model);
+            }
+        }
+
+        // Writes only the given columns and publishes no model events
+        protected void SetFieldsWithoutEvents(IList<TModel> models, params Expression<Func<TModel, object>>[] properties)
+        {
             if (models.Any(x => x.Id == 0))
             {
                 throw new InvalidOperationException("Attempted to update model without ID");
@@ -330,17 +341,11 @@ namespace NzbDrone.Core.Datastore
 
             var propertiesToUpdate = properties.Select(x => x.GetMemberName()).ToList();
 
-            using (var conn = _database.OpenConnection())
-            using (var tran = conn.BeginTransaction(IsolationLevel.ReadCommitted))
-            {
-                UpdateFields(conn, tran, models, propertiesToUpdate);
-                tran.Commit();
-            }
+            using var conn = _database.OpenConnection();
+            using var tran = conn.BeginTransaction(IsolationLevel.ReadCommitted);
 
-            foreach (var model in models)
-            {
-                ModelUpdated(model);
-            }
+            UpdateFields(conn, tran, models, propertiesToUpdate);
+            tran.Commit();
         }
 
         protected static void AddFilters(SqlBuilder builder, PagingSpec<TModel> pagingSpec)

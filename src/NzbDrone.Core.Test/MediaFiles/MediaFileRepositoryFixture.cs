@@ -108,6 +108,83 @@ namespace NzbDrone.Core.Test.MediaFiles
             afterFirst.Select(c => c.Id).Should().BeInAscendingOrder();
         }
 
+        private MovieFile GivenStoredFile()
+        {
+            var file = Builder<MovieFile>.CreateNew()
+                .With(c => c.Id = 0)
+                .With(c => c.MovieId = _movie1.Id)
+                .With(c => c.Quality = new QualityModel(Quality.Bluray1080p))
+                .With(c => c.Languages = new List<Language> { Language.English })
+                .With(c => c.OsHash = null)
+                .With(c => c.HashedFileModifiedAt = null)
+                .With(c => c.PHash = null)
+                .With(c => c.PHashAttemptedAt = null)
+                .BuildNew();
+
+            Db.Insert(file);
+
+            return file;
+        }
+
+        [Test]
+        public void should_round_trip_phash_through_save_and_leave_file_out_of_the_phash_queue()
+        {
+            var file = GivenStoredFile();
+            var attemptedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+            file.PHash = "abcdef0123";
+            file.PHashAttemptedAt = attemptedAt;
+
+            Subject.SavePHashes(new List<MovieFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.PHash.Should().Be("abcdef0123");
+            stored.PHashAttemptedAt.Should().Be(attemptedAt);
+            Subject.GetFilesNeedingPHash(100).Should().NotContain(f => f.Id == file.Id);
+        }
+
+        [Test]
+        public void phash_save_should_not_touch_oshash_columns()
+        {
+            var file = GivenStoredFile();
+            var hashedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+            // A concurrent oshash run stores its columns after this copy of the row was loaded
+            var other = Subject.Get(file.Id);
+            other.OsHash = "0123456789abcdef";
+            other.HashedFileModifiedAt = hashedAt;
+            Subject.SaveOsHashes(new List<MovieFile> { other });
+
+            file.PHash = "ff";
+            file.PHashAttemptedAt = DateTime.UtcNow;
+            Subject.SavePHashes(new List<MovieFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.OsHash.Should().Be("0123456789abcdef");
+            stored.HashedFileModifiedAt.Should().Be(hashedAt);
+            stored.PHash.Should().Be("ff");
+        }
+
+        [Test]
+        public void oshash_save_should_not_touch_phash_columns()
+        {
+            var file = GivenStoredFile();
+            var attemptedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+            var other = Subject.Get(file.Id);
+            other.PHash = "ff";
+            other.PHashAttemptedAt = attemptedAt;
+            Subject.SavePHashes(new List<MovieFile> { other });
+
+            file.OsHash = "0123456789abcdef";
+            file.HashedFileModifiedAt = DateTime.UtcNow;
+            Subject.SaveOsHashes(new List<MovieFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.PHash.Should().Be("ff");
+            stored.PHashAttemptedAt.Should().Be(attemptedAt);
+            stored.OsHash.Should().Be("0123456789abcdef");
+        }
+
         [Test]
         public void should_get_only_files_needing_phash_up_to_limit()
         {

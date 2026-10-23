@@ -24,6 +24,8 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         private Movie _movie;
         private List<List<MovieFile>> _movieFileSaves;
         private List<List<ImportFile>> _importFileSaves;
+        private List<List<MovieFile>> _pHashMovieFileSaves;
+        private List<List<ImportFile>> _pHashImportFileSaves;
 
         [SetUp]
         public void Setup()
@@ -31,6 +33,8 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             _movie = new Movie { Id = 5, Path = Path.Combine(Path.GetTempPath(), "library", "movie") };
             _movieFileSaves = new List<List<MovieFile>>();
             _importFileSaves = new List<List<ImportFile>>();
+            _pHashMovieFileSaves = new List<List<MovieFile>>();
+            _pHashImportFileSaves = new List<List<ImportFile>>();
 
             Mocker.GetMock<IMovieService>()
                 .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
@@ -41,16 +45,24 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
                 .Returns(new List<MovieFile>());
 
             Mocker.GetMock<IMediaFileService>()
-                .Setup(s => s.UpdateMany(It.IsAny<List<MovieFile>>()))
+                .Setup(s => s.SaveOsHashes(It.IsAny<List<MovieFile>>()))
                 .Callback<List<MovieFile>>(l => _movieFileSaves.Add(l.ToList()));
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(s => s.SavePHashes(It.IsAny<List<MovieFile>>()))
+                .Callback<List<MovieFile>>(l => _pHashMovieFileSaves.Add(l.ToList()));
 
             Mocker.GetMock<IImportlFileService>()
                 .Setup(s => s.GetFilesWithoutOsHash(It.IsAny<int>(), It.IsAny<int>()))
                 .Returns(new List<ImportFile>());
 
             Mocker.GetMock<IImportlFileService>()
-                .Setup(s => s.UpdateMany(It.IsAny<List<ImportFile>>()))
+                .Setup(s => s.SaveOsHashes(It.IsAny<List<ImportFile>>()))
                 .Callback<List<ImportFile>>(l => _importFileSaves.Add(l.ToList()));
+
+            Mocker.GetMock<IImportlFileService>()
+                .Setup(s => s.SavePHashes(It.IsAny<List<ImportFile>>()))
+                .Callback<List<ImportFile>>(l => _pHashImportFileSaves.Add(l.ToList()));
 
             Mocker.GetMock<IMediaFileService>()
                 .Setup(s => s.GetFilesNeedingPHash(It.IsAny<int>()))
@@ -367,8 +379,8 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
 
             Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>()), Times.Never());
-            Mocker.GetMock<IMediaFileService>().Verify(s => s.UpdateMany(It.IsAny<List<MovieFile>>()), Times.Never());
-            Mocker.GetMock<IImportlFileService>().Verify(s => s.UpdateMany(It.IsAny<List<ImportFile>>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SavePHashes(It.IsAny<List<MovieFile>>()), Times.Never());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.SavePHashes(It.IsAny<List<ImportFile>>()), Times.Never());
         }
 
         [Test]
@@ -384,8 +396,9 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
 
             files.Select(f => f.PHash).Should().Equal("ph-file1.mp4", "ph-file2.mp4");
             files.Should().OnlyContain(f => f.PHashAttemptedAt == now);
-            _movieFileSaves.Should().HaveCount(2);
-            _movieFileSaves.Should().OnlyContain(s => s.Count == 1);
+            _pHashMovieFileSaves.Should().HaveCount(2);
+            _pHashMovieFileSaves.Should().OnlyContain(s => s.Count == 1);
+            _movieFileSaves.Should().BeEmpty();
         }
 
         [Test]
@@ -403,7 +416,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             files[0].PHash.Should().BeNull();
             files[0].PHashAttemptedAt.Should().NotBeNull();
             files[1].PHash.Should().Be("ph-file2.mp4");
-            _movieFileSaves.Should().HaveCount(2);
+            _pHashMovieFileSaves.Should().HaveCount(2);
         }
 
         [Test]
@@ -419,7 +432,22 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             files[0].PHash.Should().BeNull();
             files[0].PHashAttemptedAt.Should().NotBeNull();
             Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(It.IsAny<string>()), Times.Never());
-            _movieFileSaves.Should().ContainSingle();
+            _pHashMovieFileSaves.Should().ContainSingle();
+        }
+
+        [Test]
+        public void phash_should_hash_unmapped_movie_file_by_original_file_path()
+        {
+            GivenPHashEnabled();
+            var original = Path.Combine(Path.GetTempPath(), "downloads", "orphan.mp4");
+            var files = new List<MovieFile> { new() { Id = 1, MovieId = 0, OriginalFilePath = original } };
+            GivenPHashMovieFiles(files);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].PHash.Should().Be("ph-orphan.mp4");
+            files[0].PHashAttemptedAt.Should().NotBeNull();
+            Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputePHash(original), Times.Once());
         }
 
         [Test]
@@ -454,7 +482,8 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             order.Should().Equal("file1.mp4", "import1.mp4", "import2.mp4");
             importFiles.Select(f => f.PHash).Should().Equal("ph-import1.mp4", "ph-import2.mp4");
             importFiles.Should().OnlyContain(f => f.PHashAttemptedAt != null);
-            _importFileSaves.Should().HaveCount(2);
+            _pHashImportFileSaves.Should().HaveCount(2);
+            _importFileSaves.Should().BeEmpty();
         }
 
         [Test]
