@@ -176,7 +176,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     unmappedFile.OriginalFilePath = file.ToString();
                     unmappedFile.Size = _diskProvider.GetFileSize(file.ToString());
 
-                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, file.ToString());
+                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, file.ToString(), _logger);
                     unmappedFile.OsHash = osHash;
                     unmappedFile.HashedFileModifiedAt = hashedAt;
 

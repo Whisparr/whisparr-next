@@ -12,6 +12,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -281,6 +282,83 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             file.OsHash.Should().Be("0123456789abcdef");
             file.HashedFileModifiedAt.Should().Be(HashedAt);
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            VerifyPersisted(file, Times.Never());
+        }
+
+        [Test]
+        public void should_keep_phash_and_restamp_when_only_mtime_changed_and_oshash_matches()
+        {
+            var changed = HashedAt.AddMinutes(5);
+            var file = GivenExistingFileOnDisk(100, 100, "fedcba9876543210", HashedAt, changed);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            file.PHash.Should().Be("abcdef");
+            file.PHashAttemptedAt.Should().Be(HashedAt);
+            file.HashedFileModifiedAt.Should().Be(changed);
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_clear_phash_when_only_mtime_changed_and_oshash_differs()
+        {
+            var changed = HashedAt.AddMinutes(5);
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, changed);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            file.PHash.Should().BeNull();
+            file.PHashAttemptedAt.Should().BeNull();
+            file.HashedFileModifiedAt.Should().Be(changed);
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_clear_everything_when_only_mtime_changed_and_recompute_fails()
+        {
+            var changed = HashedAt.AddMinutes(5);
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, changed);
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(It.IsAny<string>())).Returns((string)null);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().BeNull();
+            file.PHash.Should().BeNull();
+            file.PHashAttemptedAt.Should().BeNull();
+            file.HashedFileModifiedAt.Should().BeNull();
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_persist_hash_changed_file_once_on_manual_scan_when_media_info_fails()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, null, null, HashedAt);
+
+            Subject.Scan(_movie, true);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.Update(It.Is<List<MovieFile>>(l => l.Count(f => f == file) == 1)), Times.Once());
+        }
+
+        [Test]
+        public void should_not_persist_again_on_manual_scan_when_media_info_update_succeeds()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, null, null, HashedAt);
+
+            Mocker.GetMock<IUpdateMediaInfo>()
+                  .Setup(s => s.Update(file, _movie))
+                  .Returns(true);
+
+            Subject.Scan(_movie, true);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            Mocker.GetMock<IUpdateMediaInfo>().Verify(v => v.Update(file, _movie), Times.Once());
+            VerifyPersisted(file, Times.Never());
         }
 
         [Test]

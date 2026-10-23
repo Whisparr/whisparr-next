@@ -307,7 +307,7 @@ namespace NzbDrone.Core.RootFolders
 
             foreach (var importFile in toAdd)
             {
-                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, importFile.Path);
+                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, importFile.Path, _logger);
                 importFile.OsHash = osHash;
                 importFile.HashedFileModifiedAt = hashedAt;
             }

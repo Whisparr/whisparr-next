@@ -257,24 +257,36 @@ namespace NzbDrone.Core.MediaFiles
         /// </summary>
         private bool UpdateHashes(MovieFile file, string path, long fileSize)
         {
-            var lastWrite = VideoHashExtensions.TryGetLastWrite(_diskProvider, path);
+            var lastWrite = VideoHashExtensions.TryGetLastWrite(_diskProvider, path, _logger);
             var changed = false;
 
-            var fileChanged = file.Size != fileSize ||
-                              (file.HashedFileModifiedAt.HasValue && lastWrite.HasValue && !VideoHashExtensions.SameLastWrite(file.HashedFileModifiedAt.Value, lastWrite.Value));
-
-            if (fileChanged)
+            if (file.Size != fileSize)
             {
-                file.OsHash = null;
-                file.PHash = null;
-                file.PHashAttemptedAt = null;
-                file.HashedFileModifiedAt = null;
+                ClearHashes(file);
                 changed = true;
+            }
+            else if (file.HashedFileModifiedAt.HasValue && lastWrite.HasValue && !VideoHashExtensions.SameLastWrite(file.HashedFileModifiedAt.Value, lastWrite.Value))
+            {
+                // Only the mtime moved (copy, touch, FileDate rewrite): the content is unchanged if the oshash still matches
+                var (newHash, newHashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
+
+                if (newHash != null && newHash == file.OsHash)
+                {
+                    file.HashedFileModifiedAt = newHashedAt ?? lastWrite;
+                }
+                else
+                {
+                    ClearHashes(file);
+                    file.OsHash = newHash;
+                    file.HashedFileModifiedAt = newHash != null ? newHashedAt : null;
+                }
+
+                return true;
             }
 
             if (file.OsHash == null)
             {
-                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path);
+                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
 
                 if (osHash != null)
                 {
@@ -290,6 +302,14 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return changed;
+        }
+
+        private static void ClearHashes(MovieFile file)
+        {
+            file.OsHash = null;
+            file.PHash = null;
+            file.PHashAttemptedAt = null;
+            file.HashedFileModifiedAt = null;
         }
 
         private void CleanMediaFiles(Movie movie, List<string> mediaFileList)

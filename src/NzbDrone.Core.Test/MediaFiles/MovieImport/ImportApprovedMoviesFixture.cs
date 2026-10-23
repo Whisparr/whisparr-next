@@ -413,6 +413,19 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
         }
 
         [Test]
+        public void should_still_import_when_hash_service_throws()
+        {
+            GivenExistingFileOnDisk();
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(It.IsAny<string>())).Throws(new IOException("boom"));
+
+            var results = Subject.Import(_approvedDecisions, false);
+
+            results.Should().ContainSingle(r => r.Result == ImportResultType.Imported);
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.OsHash == null)), Times.Once());
+        }
+
+        [Test]
         public void should_still_import_when_last_write_cannot_be_read()
         {
             GivenExistingFileOnDisk();

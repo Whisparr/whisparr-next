@@ -92,7 +92,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     movieFile.Size = _diskProvider.GetFileSize(localMovie.Path);
 
                     // Hash the source, before any move/copy; a hashing problem never fails the import
-                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path);
+                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path, _logger);
                     movieFile.OsHash = osHash;
                     movieFile.HashedFileModifiedAt = hashedAt;
 
