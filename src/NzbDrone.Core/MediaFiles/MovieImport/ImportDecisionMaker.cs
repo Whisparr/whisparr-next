@@ -8,6 +8,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.Movies;
@@ -37,6 +38,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         private readonly ITrackedDownloadService _trackedDownloadService;
         private readonly ILocalMovieCustomFormatCalculationService _formatCalculator;
         private readonly IVideoFileInfoReader _videoFileInfoReader;
+        private readonly IVideoHashService _videoHashService;
         private readonly IConfigService _configService;
         private readonly Logger _logger;
 
@@ -50,6 +52,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                                    ITrackedDownloadService trackedDownloadService,
                                    ILocalMovieCustomFormatCalculationService formatCalculator,
                                    IVideoFileInfoReader videoFileInfoReader,
+                                   IVideoHashService videoHashService,
                                    IConfigService configService,
                                    Logger logger)
         {
@@ -63,6 +66,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             _trackedDownloadService = trackedDownloadService;
             _formatCalculator = formatCalculator;
             _videoFileInfoReader = videoFileInfoReader;
+            _videoHashService = videoHashService;
             _configService = configService;
             _logger = logger;
         }
@@ -171,6 +175,10 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     unmappedFile.MediaInfo = _videoFileInfoReader.GetMediaInfo(file.ToString());
                     unmappedFile.OriginalFilePath = file.ToString();
                     unmappedFile.Size = _diskProvider.GetFileSize(file.ToString());
+
+                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, file.ToString());
+                    unmappedFile.OsHash = osHash;
+                    unmappedFile.HashedFileModifiedAt = hashedAt;
 
                     localMovie.Movie.MovieFile = unmappedFile;
                     localMovie.Path = file.ToString();

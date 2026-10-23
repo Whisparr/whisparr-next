@@ -13,6 +13,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Commands;
@@ -44,6 +45,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMediaFileTableCleanupService _mediaFileTableCleanupService;
         private readonly IRootFolderService _rootFolderService;
         private readonly IUpdateMediaInfo _updateMediaInfoService;
+        private readonly IVideoHashService _videoHashService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -60,6 +62,7 @@ namespace NzbDrone.Core.MediaFiles
                                IMediaFileTableCleanupService mediaFileTableCleanupService,
                                IRootFolderService rootFolderService,
                                IUpdateMediaInfo updateMediaInfoService,
+                               IVideoHashService videoHashService,
                                IEventAggregator eventAggregator,
                                Logger logger)
         {
@@ -73,6 +76,7 @@ namespace NzbDrone.Core.MediaFiles
             _mediaFileTableCleanupService = mediaFileTableCleanupService;
             _rootFolderService = rootFolderService;
             _updateMediaInfoService = updateMediaInfoService;
+            _videoHashService = videoHashService;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -170,8 +174,15 @@ namespace NzbDrone.Core.MediaFiles
                     var path = Path.Combine(movie.Path, file.RelativePath);
                     var fileSize = _diskProvider.GetFileSize(path);
 
+                    var hashesChanged = UpdateHashes(file, path, fileSize);
+
                     if (!manual && file.Size == fileSize)
                     {
+                        if (hashesChanged)
+                        {
+                            filesToUpdate.Add(file);
+                        }
+
                         continue;
                     }
 
@@ -238,6 +249,47 @@ namespace NzbDrone.Core.MediaFiles
 
                 _logger.Trace("Released scan lock for movie id {0} ({1})", movie.Id, movie.Title);
             }
+        }
+
+        /// <summary>
+        /// Clears stale hashes when the file changed on disk (size or last-write), then computes the oshash if missing.
+        /// Must run before file.Size is updated. Returns true when the file's hash fields changed and need saving.
+        /// </summary>
+        private bool UpdateHashes(MovieFile file, string path, long fileSize)
+        {
+            var lastWrite = VideoHashExtensions.TryGetLastWrite(_diskProvider, path);
+            var changed = false;
+
+            var fileChanged = file.Size != fileSize ||
+                              (file.HashedFileModifiedAt.HasValue && lastWrite.HasValue && !VideoHashExtensions.SameLastWrite(file.HashedFileModifiedAt.Value, lastWrite.Value));
+
+            if (fileChanged)
+            {
+                file.OsHash = null;
+                file.PHash = null;
+                file.PHashAttemptedAt = null;
+                file.HashedFileModifiedAt = null;
+                changed = true;
+            }
+
+            if (file.OsHash == null)
+            {
+                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path);
+
+                if (osHash != null)
+                {
+                    file.OsHash = osHash;
+                    file.HashedFileModifiedAt = hashedAt;
+                    changed = true;
+                }
+            }
+            else if (file.HashedFileModifiedAt == null && lastWrite.HasValue)
+            {
+                file.HashedFileModifiedAt = lastWrite;
+                changed = true;
+            }
+
+            return changed;
         }
 
         private void CleanMediaFiles(Movie movie, List<string> mediaFileList)

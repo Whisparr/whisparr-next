@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,6 +12,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -379,6 +381,49 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true, _downloadClientItem);
 
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(c => c.IndexerFlags == IndexerFlags.G_Freeleech)));
+        }
+
+        [Test]
+        public void should_hash_the_source_file_and_record_its_last_write()
+        {
+            GivenExistingFileOnDisk();
+
+            var sourcePath = _approvedDecisions[0].LocalMovie.Path;
+            var lastWrite = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(sourcePath)).Returns("0123456789abcdef");
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(sourcePath)).Returns(lastWrite);
+
+            Subject.Import(_approvedDecisions, false);
+
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.OsHash == "0123456789abcdef" && f.HashedFileModifiedAt == lastWrite)), Times.Once());
+        }
+
+        [Test]
+        public void should_still_import_when_hashing_returns_null()
+        {
+            GivenExistingFileOnDisk();
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(It.IsAny<string>())).Returns((string)null);
+
+            var results = Subject.Import(_approvedDecisions, false);
+
+            results.Should().ContainSingle(r => r.Result == ImportResultType.Imported);
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.OsHash == null)), Times.Once());
+        }
+
+        [Test]
+        public void should_still_import_when_last_write_cannot_be_read()
+        {
+            GivenExistingFileOnDisk();
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(It.IsAny<string>())).Returns("0123456789abcdef");
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(It.IsAny<string>())).Throws(new FileNotFoundException());
+
+            var results = Subject.Import(_approvedDecisions, false);
+
+            results.Should().ContainSingle(r => r.Result == ImportResultType.Imported);
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.Is<MovieFile>(f => f.OsHash == "0123456789abcdef" && f.HashedFileModifiedAt == null)), Times.Once());
         }
 
         private void GivenGrabHistory(Dictionary<string, string> data)

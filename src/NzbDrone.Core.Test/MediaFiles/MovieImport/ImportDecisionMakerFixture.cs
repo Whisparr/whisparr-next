@@ -1,11 +1,14 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.Movies;
@@ -106,6 +109,30 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
                   {
                       localMovie.Movie = _localMovie.Movie;
                   });
+        }
+
+        [Test]
+        public void should_hash_unmapped_scene_import_files()
+        {
+            var file = @"C:\Test\Unsorted\Unknown.Studio.24.01.02.Unknown.Scene.mp4".AsOsAgnostic();
+            var lastWrite = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+            Mocker.GetMock<ISceneIdentificationService>()
+                  .Setup(s => s.Identify(It.IsAny<string>(), It.IsAny<ParsedMovieInfo>()))
+                  .Returns(new Movie());
+
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns((LocalMovie localMovie, DownloadClientItem _) => localMovie);
+
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(file)).Returns("0123456789abcdef");
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(file)).Returns(lastWrite);
+
+            var result = Subject.GetSceneImportDecisions(new List<string> { file }, null, null, false, false);
+
+            var unmapped = result.UnmappedFiles.Should().ContainSingle().Subject;
+            unmapped.OsHash.Should().Be("0123456789abcdef");
+            unmapped.HashedFileModifiedAt.Should().Be(lastWrite);
         }
 
         [Test]

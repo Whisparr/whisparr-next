@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
@@ -9,6 +11,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -139,6 +142,145 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<IDiskProvider>()
                   .Verify(v => v.CreateFolder(_movie.Path), Times.Once());
+        }
+
+        private static readonly DateTime HashedAt = new(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+        private MovieFile GivenExistingFileOnDisk(long storedSize, long diskSize, string osHash, DateTime? hashedAt, DateTime diskLastWrite)
+        {
+            GivenMovieFolder();
+
+            var relativePath = "movie.mkv";
+            var path = Path.Combine(_movie.Path, relativePath);
+            var file = new MovieFile
+            {
+                Id = 11,
+                MovieId = _movie.Id,
+                RelativePath = relativePath,
+                Size = storedSize,
+                OsHash = osHash,
+                PHash = osHash == null ? null : "abcdef",
+                PHashAttemptedAt = osHash == null ? null : HashedAt,
+                HashedFileModifiedAt = hashedAt
+            };
+
+            GivenFiles(new List<string> { path });
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<MovieFile> { file });
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFileSize(path)).Returns(diskSize);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(path)).Returns(diskLastWrite);
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(path)).Returns("fedcba9876543210");
+
+            return file;
+        }
+
+        private void VerifyPersisted(MovieFile file, Times times)
+        {
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.Update(It.Is<List<MovieFile>>(l => l.Contains(file))), times);
+        }
+
+        [Test]
+        public void should_clear_phash_and_rehash_when_size_changed()
+        {
+            var file = GivenExistingFileOnDisk(100, 200, "0123456789abcdef", HashedAt, HashedAt);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            file.HashedFileModifiedAt.Should().Be(HashedAt);
+            file.PHash.Should().BeNull();
+            file.PHashAttemptedAt.Should().BeNull();
+            file.Size.Should().Be(200);
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_clear_phash_and_rehash_when_last_write_changed()
+        {
+            var changed = HashedAt.AddMinutes(5);
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, changed);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            file.HashedFileModifiedAt.Should().Be(changed);
+            file.PHash.Should().BeNull();
+            file.PHashAttemptedAt.Should().BeNull();
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_retry_oshash_without_touching_phash_when_hash_is_missing()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, null, null, HashedAt);
+            file.PHash = "abcdef";
+            file.PHashAttemptedAt = HashedAt;
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("fedcba9876543210");
+            file.HashedFileModifiedAt.Should().Be(HashedAt);
+            file.PHash.Should().Be("abcdef");
+            file.PHashAttemptedAt.Should().Be(HashedAt);
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_not_hash_unchanged_file_that_already_has_oshash()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, HashedAt);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("0123456789abcdef");
+            file.PHash.Should().Be("abcdef");
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            VerifyPersisted(file, Times.Never());
+        }
+
+        [Test]
+        public void should_treat_sub_second_last_write_difference_as_unchanged()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, HashedAt.AddMilliseconds(789));
+
+            Subject.Scan(_movie);
+
+            file.PHash.Should().Be("abcdef");
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            VerifyPersisted(file, Times.Never());
+        }
+
+        [Test]
+        public void should_record_last_write_when_hash_exists_without_one()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", null, HashedAt);
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("0123456789abcdef");
+            file.PHash.Should().Be("abcdef");
+            file.HashedFileModifiedAt.Should().Be(HashedAt);
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            VerifyPersisted(file, Times.Once());
+        }
+
+        [Test]
+        public void should_not_fail_scan_when_file_vanished_before_last_write_was_read()
+        {
+            var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, HashedAt);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileGetLastWrite(It.IsAny<string>()))
+                  .Throws(new FileNotFoundException());
+
+            Subject.Scan(_movie);
+
+            file.OsHash.Should().Be("0123456789abcdef");
+            file.HashedFileModifiedAt.Should().Be(HashedAt);
         }
 
         [Test]

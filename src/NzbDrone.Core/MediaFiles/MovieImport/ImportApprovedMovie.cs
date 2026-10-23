@@ -9,6 +9,7 @@ using NzbDrone.Core.Extras;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
@@ -28,6 +29,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         private readonly IExtraService _extraService;
         private readonly IExistingExtraFiles _existingExtraFiles;
         private readonly IDiskProvider _diskProvider;
+        private readonly IVideoHashService _videoHashService;
         private readonly IHistoryService _historyService;
         private readonly IEventAggregator _eventAggregator;
         private readonly IManageCommandQueue _commandQueueManager;
@@ -38,6 +40,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                                    IExtraService extraService,
                                    IExistingExtraFiles existingExtraFiles,
                                    IDiskProvider diskProvider,
+                                   IVideoHashService videoHashService,
                                    IHistoryService historyService,
                                    IEventAggregator eventAggregator,
                                    IManageCommandQueue commandQueueManager,
@@ -48,6 +51,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             _extraService = extraService;
             _existingExtraFiles = existingExtraFiles;
             _diskProvider = diskProvider;
+            _videoHashService = videoHashService;
             _historyService = historyService;
             _eventAggregator = eventAggregator;
             _commandQueueManager = commandQueueManager;
@@ -86,6 +90,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                     var movieFile = localMovie.ToMovieFile();
                     movieFile.Size = _diskProvider.GetFileSize(localMovie.Path);
+
+                    // Hash the source, before any move/copy; a hashing problem never fails the import
+                    var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, localMovie.Path);
+                    movieFile.OsHash = osHash;
+                    movieFile.HashedFileModifiedAt = hashedAt;
 
                     if (downloadClientItem?.DownloadId.IsNotNullOrWhiteSpace() == true)
                     {

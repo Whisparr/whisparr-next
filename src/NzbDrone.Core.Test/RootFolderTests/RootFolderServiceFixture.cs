@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
@@ -91,6 +94,37 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Mocker.GetMock<IRootFolderRepository>().Setup(c => c.All()).Returns(new List<RootFolder> { new RootFolder { Path = "C:\\TV".AsOsAgnostic() } });
 
             Assert.Throws<InvalidOperationException>(() => Subject.Add(new RootFolder { Path = @"C:\TV".AsOsAgnostic() }));
+        }
+
+        [Test]
+        public void refresh_should_hash_only_new_import_files()
+        {
+            var root = new RootFolder { Id = 7, Path = @"C:\TV".AsOsAgnostic() };
+            var importFolder = Path.Combine(root.Path, "import");
+            var known = Path.Combine(importFolder, "known.mp4");
+            var added = Path.Combine(importFolder, "added.mp4");
+            var lastWrite = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+            List<ImportFile> inserted = null;
+
+            Mocker.GetMock<IRootFolderRepository>().Setup(s => s.Get(7)).Returns(root);
+            Mocker.GetMock<IMovieRepository>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(importFolder, true)).Returns(new[] { known, added });
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(added)).Returns(lastWrite);
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(added)).Returns("0123456789abcdef");
+            Mocker.GetMock<IImportFileRepository>()
+                  .Setup(s => s.FindByRootFolderId(7))
+                  .Returns(new List<ImportFile> { new() { Id = 1, RootFolderId = 7, Path = known } });
+            Mocker.GetMock<IImportFileRepository>()
+                  .Setup(s => s.InsertMany(It.IsAny<IList<ImportFile>>()))
+                  .Callback<IList<ImportFile>>(files => inserted = files.ToList());
+
+            Subject.Refresh(7);
+
+            inserted.Should().ContainSingle();
+            inserted[0].Path.Should().Be(added);
+            inserted[0].OsHash.Should().Be("0123456789abcdef");
+            inserted[0].HashedFileModifiedAt.Should().Be(lastWrite);
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(known), Times.Never());
         }
 
         [Test]
