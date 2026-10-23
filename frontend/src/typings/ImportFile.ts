@@ -1,4 +1,5 @@
 import ModelBase from 'App/ModelBase';
+import FingerprintCandidate from './FingerprintCandidate';
 
 interface ImportFile extends ModelBase {
   id: number;
@@ -8,6 +9,7 @@ interface ImportFile extends ModelBase {
   name: string;
   foreignId: string;
   qualityProfileId: number;
+  candidates?: FingerprintCandidate[] | null;
 }
 
 export default ImportFile;

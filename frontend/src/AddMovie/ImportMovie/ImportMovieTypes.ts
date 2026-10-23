@@ -1,9 +1,24 @@
 import { QualityModel } from 'Quality/Quality';
+import FingerprintCandidate from 'typings/FingerprintCandidate';
 
 export interface ImportFile {
   name: string;
   path: string;
   relativePath: string;
+  candidates?: FingerprintCandidate[] | null;
+}
+
+// The scene to preselect for a file: only when its top candidate is an oshash
+// hit and no other oshash candidate competes with it.
+export function getHashMatchSceneId(file: ImportFile): string | null {
+  const candidates = file.candidates ?? [];
+  const oshash = candidates.filter((c) => c.algorithm === 'OSHASH');
+
+  if (oshash.length !== 1 || candidates[0] !== oshash[0]) {
+    return null;
+  }
+
+  return oshash[0].sceneId ? String(oshash[0].sceneId) : null;
 }
 
 // The movies/scenes routes pin the lookup to one type; the bare
@@ -53,6 +68,8 @@ export interface ImportItem {
   error: Error | null;
   items: MovieLookupResult[];
   selectedMovie: MovieLookupResult | null;
+  // True while the selected scene is the one suggested by the file's fingerprint.
+  hashMatch: boolean;
   monitor: string;
   qualityProfileId: number;
 }
@@ -98,21 +115,26 @@ export function importReducer(
       const sliced = action.files.slice(0, IMPORT_ITEM_LIMIT);
       return {
         isLookingUp: false,
-        items: sliced.map((f) => ({
-          id: f.name,
-          path: f.path,
-          relativePath: f.relativePath,
-          term: f.name,
-          itemType: action.itemType,
-          isFetching: false,
-          isPopulated: false,
-          isQueued: false,
-          error: null,
-          items: [],
-          selectedMovie: null,
-          monitor: action.defaults.monitor,
-          qualityProfileId: action.defaults.qualityProfileId,
-        })),
+        items: sliced.map((f) => {
+          const hashSceneId = getHashMatchSceneId(f);
+
+          return {
+            id: f.name,
+            path: f.path,
+            relativePath: f.relativePath,
+            term: hashSceneId ?? f.name,
+            itemType: action.itemType,
+            isFetching: false,
+            isPopulated: false,
+            isQueued: false,
+            error: null,
+            items: [],
+            selectedMovie: null,
+            hashMatch: hashSceneId !== null,
+            monitor: action.defaults.monitor,
+            qualityProfileId: action.defaults.qualityProfileId,
+          };
+        }),
       };
     }
 
@@ -141,6 +163,9 @@ export function importReducer(
             error: null,
             items: action.results,
             selectedMovie,
+            // An empty lookup means the suggested scene wasn't found, so a
+            // later selection can't be the hash-suggested one.
+            hashMatch: item.hashMatch && selectedMovie !== null,
           };
         }),
       };
@@ -166,7 +191,13 @@ export function importReducer(
         ...state,
         items: state.items.map((item) =>
           item.id === action.id
-            ? { ...item, selectedMovie: action.movie }
+            ? {
+                ...item,
+                selectedMovie: action.movie,
+                hashMatch:
+                  item.hashMatch &&
+                  action.movie?.foreignId === item.selectedMovie?.foreignId,
+              }
             : item
         ),
       };

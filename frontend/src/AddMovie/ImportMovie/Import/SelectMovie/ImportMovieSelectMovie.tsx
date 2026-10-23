@@ -3,6 +3,7 @@ import { Manager, Popper, Reference } from 'react-popper';
 import FormInputButton from 'Components/Form/FormInputButton';
 import TextInput from 'Components/Form/TextInput';
 import Icon from 'Components/Icon';
+import Label from 'Components/Label';
 import Link from 'Components/Link/Link';
 import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import Portal from 'Components/Portal';
@@ -39,6 +40,7 @@ function ImportMovieSelectMovie({
     id,
     itemType,
     selectedMovie,
+    hashMatch,
     isFetching,
     isPopulated,
     isQueued,
@@ -150,6 +152,12 @@ function ImportMovieSelectMovie({
                   existingQuality={selectedMovie.existingQuality}
                   existingSize={selectedMovie.sizeOnDisk}
                 />
+              ) : null}
+
+              {isPopulated && selectedMovie && hashMatch ? (
+                <Label kind={kinds.INFO} title={translate('HashMatchHelpText')}>
+                  {translate('HashMatch')}
+                </Label>
               ) : null}
 
               {isPopulated && !selectedMovie ? (

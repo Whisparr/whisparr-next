@@ -870,6 +870,8 @@
   "Group": "Group",
   "HairColor": "Hair Color",
   "HardlinkCopyFiles": "Hardlink/Copy Files",
+  "HashMatch": "Hash match",
+  "HashMatchHelpText": "Suggested from the file's fingerprint",
   "HasMovies": "Has Movies",
   "HasScenes": "Has Scenes",
   "HaveNotAddedMovies": "You haven't added any movies yet, do you want to import some or all of your movies first?",
