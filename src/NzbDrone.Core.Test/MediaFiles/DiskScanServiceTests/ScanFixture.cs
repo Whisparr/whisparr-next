@@ -361,6 +361,145 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             VerifyPersisted(file, Times.Never());
         }
 
+        private MovieFile GivenMissingRow(int id, string relativePath, string osHash)
+        {
+            return new MovieFile
+            {
+                Id = id,
+                MovieId = _movie.Id,
+                RelativePath = relativePath,
+                Size = 100,
+                OsHash = osHash,
+                PHash = "abcdef",
+                PHashAttemptedAt = HashedAt,
+                HashedFileModifiedAt = HashedAt,
+                MatchTier = MatchTier.Hash
+            };
+        }
+
+        private string GivenNewFileOnDisk(string relativePath, string osHash)
+        {
+            var path = Path.Combine(_movie.Path, relativePath);
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFileSize(path)).Returns(100);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(path)).Returns(HashedAt.AddMinutes(10));
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(path)).Returns(osHash);
+
+            return path;
+        }
+
+        private void GivenRowsAndDisk(List<MovieFile> rows, params string[] filesOnDisk)
+        {
+            GivenMovieFolder();
+            GivenFiles(filesOnDisk);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(rows);
+        }
+
+        private void VerifyImportedOnly(params string[] paths)
+        {
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Verify(v => v.GetImportDecisions(It.Is<List<string>>(l => l.SequenceEqual(paths)), _movie, false), Times.Once());
+        }
+
+        [Test]
+        public void should_relink_missing_row_to_new_file_with_same_oshash()
+        {
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            var newPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row }, newPath);
+
+            Subject.Scan(_movie);
+
+            row.RelativePath.Should().Be("new.mkv");
+            row.HashedFileModifiedAt.Should().Be(HashedAt.AddMinutes(10));
+            row.OsHash.Should().Be("aaaaaaaaaaaaaaaa");
+            row.PHash.Should().Be("abcdef");
+            row.PHashAttemptedAt.Should().Be(HashedAt);
+            row.MatchTier.Should().Be(MatchTier.Hash);
+            row.Size.Should().Be(100);
+
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(row), Times.Once());
+            Mocker.GetMock<IMediaFileTableCleanupService>()
+                  .Verify(v => v.Clean(_movie, It.Is<List<string>>(l => l.Contains(newPath))), Times.Once());
+            VerifyImportedOnly();
+        }
+
+        [Test]
+        public void should_import_other_new_file_with_different_oshash_normally()
+        {
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            var renamedPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            var otherPath = GivenNewFileOnDisk("other.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile> { row }, renamedPath, otherPath);
+
+            Subject.Scan(_movie);
+
+            row.RelativePath.Should().Be("new.mkv");
+            VerifyImportedOnly(otherPath);
+        }
+
+        [Test]
+        public void should_not_hash_new_files_when_no_row_is_missing()
+        {
+            var existingPath = Path.Combine(_movie.Path, "movie.mkv");
+            var row = GivenMissingRow(21, "movie.mkv", "aaaaaaaaaaaaaaaa");
+            var newPath = GivenNewFileOnDisk("new.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile> { row }, existingPath, newPath);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(newPath), Times.Never());
+            VerifyImportedOnly(newPath);
+        }
+
+        [Test]
+        public void should_not_relink_when_two_missing_rows_share_the_oshash()
+        {
+            var first = GivenMissingRow(21, "old1.mkv", "aaaaaaaaaaaaaaaa");
+            var second = GivenMissingRow(22, "old2.mkv", "aaaaaaaaaaaaaaaa");
+            var newPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { first, second }, newPath);
+
+            Subject.Scan(_movie);
+
+            first.RelativePath.Should().Be("old1.mkv");
+            second.RelativePath.Should().Be("old2.mkv");
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
+            VerifyImportedOnly(newPath);
+        }
+
+        [Test]
+        public void should_not_relink_when_two_new_files_share_the_oshash()
+        {
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            var firstPath = GivenNewFileOnDisk("new1.mkv", "aaaaaaaaaaaaaaaa");
+            var secondPath = GivenNewFileOnDisk("new2.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row }, firstPath, secondPath);
+
+            Subject.Scan(_movie);
+
+            row.RelativePath.Should().Be("old.mkv");
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
+            VerifyImportedOnly(firstPath, secondPath);
+        }
+
+        [Test]
+        public void should_not_relink_missing_row_without_oshash()
+        {
+            var row = GivenMissingRow(21, "old.mkv", null);
+            var newPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row }, newPath);
+
+            Subject.Scan(_movie);
+
+            row.RelativePath.Should().Be("old.mkv");
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(newPath), Times.Never());
+            VerifyImportedOnly(newPath);
+        }
+
         [Test]
         public void should_not_scan_extras_subfolder()
         {

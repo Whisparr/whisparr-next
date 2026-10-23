@@ -154,6 +154,8 @@ namespace NzbDrone.Core.MediaFiles
                 videoFilesStopwatch.Stop();
                 _logger.Trace("Finished getting movie files for: {0} [{1}]", movie, videoFilesStopwatch.Elapsed);
 
+                RelinkRenamedFiles(movie, mediaFileList);
+
                 CleanMediaFiles(movie, mediaFileList);
 
                 var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
@@ -308,6 +310,68 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return changed;
+        }
+
+        /// <summary>
+        /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
+        /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
+        /// </summary>
+        private void RelinkRenamedFiles(Movie movie, List<string> mediaFileList)
+        {
+            var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
+            var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
+
+            var missing = movieFiles
+                .Where(f => f.OsHash != null && !onDisk.Contains(Path.Combine(movie.Path, f.RelativePath)))
+                .ToList();
+
+            if (missing.Count == 0)
+            {
+                return;
+            }
+
+            var newFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
+
+            if (newFiles.Count == 0)
+            {
+                return;
+            }
+
+            var newFileHashes = new Dictionary<string, (string OsHash, DateTime? HashedAt)>();
+
+            foreach (var path in newFiles)
+            {
+                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
+
+                if (osHash != null)
+                {
+                    newFileHashes[path] = (osHash, hashedAt);
+                }
+            }
+
+            foreach (var row in missing)
+            {
+                if (missing.Count(m => m.OsHash == row.OsHash) != 1)
+                {
+                    continue;
+                }
+
+                var matches = newFileHashes.Where(h => h.Value.OsHash == row.OsHash).ToList();
+
+                if (matches.Count != 1)
+                {
+                    continue;
+                }
+
+                var newPath = matches[0].Key;
+                var oldRelativePath = row.RelativePath;
+
+                row.RelativePath = movie.Path.GetRelativePath(newPath);
+                row.HashedFileModifiedAt = matches[0].Value.HashedAt;
+                _mediaFileService.Update(row);
+
+                _logger.Info("Re-linked {0} to {1} by oshash", oldRelativePath, row.RelativePath);
+            }
         }
 
         private static void ClearHashes(MovieFile file)
