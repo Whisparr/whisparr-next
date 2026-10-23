@@ -576,6 +576,63 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
         }
 
         [Test]
+        public void phash_should_clear_the_check_stamp_of_an_import_file_with_no_candidates()
+        {
+            GivenPHashEnabled();
+            var files = ImportFiles(3);
+            files[0].CandidatesCheckedAt = LastWrite;
+            files[0].Candidates = new List<FingerprintCandidate>();
+            files[1].CandidatesCheckedAt = LastWrite;
+            files[1].Candidates = new List<FingerprintCandidate> { new() { SceneId = "scene-a" } };
+            GivenPHashImportFiles(files);
+            var candidateSaves = new List<List<ImportFile>>();
+            Mocker.GetMock<IImportlFileService>()
+                .Setup(s => s.SaveCandidates(It.IsAny<List<ImportFile>>()))
+                .Callback<List<ImportFile>>(l => candidateSaves.Add(l.ToList()));
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].CandidatesCheckedAt.Should().BeNull();
+            files[1].CandidatesCheckedAt.Should().Be(LastWrite);
+            files[2].CandidatesCheckedAt.Should().BeNull();
+            candidateSaves.Should().ContainSingle().Which.Should().Equal(files[0]);
+        }
+
+        [Test]
+        public void phash_should_not_clear_the_check_stamp_when_hashing_fails()
+        {
+            GivenPHashEnabled();
+            var files = ImportFiles(1);
+            files[0].CandidatesCheckedAt = LastWrite;
+            files[0].Candidates = new List<FingerprintCandidate>();
+            GivenPHashImportFiles(files);
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputePHash(It.IsAny<string>())).Returns((string)null);
+
+            Subject.Execute(new GenerateVideoHashesCommand());
+
+            files[0].CandidatesCheckedAt.Should().Be(LastWrite);
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.SaveCandidates(It.IsAny<List<ImportFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void should_match_pending_import_files_after_hashing()
+        {
+            GivenImportFiles(0, 2000, ImportFiles(1));
+
+            Subject.Execute(new GenerateOsHashesCommand());
+
+            Mocker.GetMock<IImportFileMatchService>().Verify(s => s.MatchPending(), Times.Once());
+        }
+
+        [Test]
+        public void should_match_pending_import_files_even_when_nothing_was_hashed()
+        {
+            Subject.Execute(new GenerateOsHashesCommand());
+
+            Mocker.GetMock<IImportFileMatchService>().Verify(s => s.MatchPending(), Times.Once());
+        }
+
+        [Test]
         public void phash_should_keep_fetching_chunks_until_no_work_is_left()
         {
             GivenPHashEnabled();

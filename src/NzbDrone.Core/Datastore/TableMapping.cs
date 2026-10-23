@@ -26,6 +26,7 @@ using NzbDrone.Core.Instrumentation;
 using NzbDrone.Core.Jobs;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
@@ -222,6 +223,7 @@ namespace NzbDrone.Core.Datastore
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<PendingReleaseAdditionalInfo>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<Ratings>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<Credit>>());
+            SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<FingerprintCandidate>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<HashSet<int>>());
             SqlMapper.AddTypeHandler(new OsPathConverter());
             SqlMapper.RemoveTypeMap(typeof(Guid));

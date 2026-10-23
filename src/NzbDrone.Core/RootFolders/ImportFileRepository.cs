@@ -11,6 +11,8 @@ namespace NzbDrone.Core.RootFolders
         List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<ImportFile> importFiles);
         void SavePHashes(IList<ImportFile> importFiles);
+        List<ImportFile> GetFilesNeedingCandidates(int limit);
+        void SaveCandidates(IList<ImportFile> importFiles);
     }
 
     public class ImportFileRepository : BasicRepository<ImportFile>, IImportFileRepository
@@ -43,6 +45,18 @@ namespace NzbDrone.Core.RootFolders
         public void SavePHashes(IList<ImportFile> importFiles)
         {
             SetFieldsWithoutEvents(importFiles, f => f.PHash, f => f.PHashAttemptedAt);
+        }
+
+        public void SaveCandidates(IList<ImportFile> importFiles)
+        {
+            SetFieldsWithoutEvents(importFiles, f => f.Candidates, f => f.CandidatesCheckedAt);
+        }
+
+        public List<ImportFile> GetFilesNeedingCandidates(int limit)
+        {
+            return Query(Builder()
+                .Where<ImportFile>(x => x.OsHash != null && x.CandidatesCheckedAt == null)
+                .OrderBy($"\"ImportFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 
         public List<ImportFile> GetFilesNeedingPHash(int afterId, int limit)

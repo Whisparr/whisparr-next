@@ -33,6 +33,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private readonly IConfigService _configService;
         private readonly IMediaFileService _mediaFileService;
         private readonly IImportlFileService _importFileService;
+        private readonly IImportFileMatchService _importFileMatchService;
         private readonly IMovieService _movieService;
         private readonly IVideoHashService _videoHashService;
         private readonly IDiskProvider _diskProvider;
@@ -47,9 +48,12 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private int _movieFileWatermark;
         private int _importFileWatermark;
 
+        // Every dependency is a distinct collaborator resolved by DI
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public FileHashBackfillService(IConfigService configService,
                                        IMediaFileService mediaFileService,
                                        IImportlFileService importFileService,
+                                       IImportFileMatchService importFileMatchService,
                                        IMovieService movieService,
                                        IVideoHashService videoHashService,
                                        IDiskProvider diskProvider,
@@ -59,6 +63,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             _configService = configService;
             _mediaFileService = mediaFileService;
             _importFileService = importFileService;
+            _importFileMatchService = importFileMatchService;
             _movieService = movieService;
             _videoHashService = videoHashService;
             _diskProvider = diskProvider;
@@ -88,6 +93,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
             if (total == 0)
             {
+                // Rows left unstamped by an earlier TryLater are retried even when nothing new was hashed
+                _importFileMatchService.MatchPending();
+
                 return;
             }
 
@@ -134,6 +142,8 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             Flush(pendingImportFiles, _importFileService.SaveOsHashes, 1);
 
             _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
+
+            _importFileMatchService.MatchPending();
         }
 
         public void Execute(GenerateVideoHashesCommand message)
@@ -174,6 +184,13 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 {
                     f.PHashAttemptedAt = at;
                     _importFileService.SavePHashes(new List<ImportFile> { f });
+
+                    // A new phash gives a file with no candidates another chance: clear the check stamp so the next lookup sends it
+                    if (f.PHash != null && f.CandidatesCheckedAt != null && (f.Candidates == null || f.Candidates.Count == 0))
+                    {
+                        f.CandidatesCheckedAt = null;
+                        _importFileService.SaveCandidates(new List<ImportFile> { f });
+                    }
                 },
                 run);
 

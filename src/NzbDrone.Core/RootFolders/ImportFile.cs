@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -15,5 +17,9 @@ namespace NzbDrone.Core.RootFolders
         public string PHash { get; set; }
         public DateTime? PHashAttemptedAt { get; set; }
         public DateTime? HashedFileModifiedAt { get; set; }
+
+        // Null until the first lookup; an empty list means the lookup found nothing
+        public List<FingerprintCandidate> Candidates { get; set; }
+        public DateTime? CandidatesCheckedAt { get; set; }
     }
 }

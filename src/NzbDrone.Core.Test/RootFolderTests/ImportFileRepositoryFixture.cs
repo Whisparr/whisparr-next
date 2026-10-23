@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 
@@ -111,6 +112,70 @@ namespace NzbDrone.Core.Test.RootFolderTests
             stored.PHash.Should().Be("ff");
             stored.PHashAttemptedAt.Should().Be(attemptedAt);
             stored.OsHash.Should().Be("0123456789abcdef");
+        }
+
+        [Test]
+        public void should_round_trip_candidates_through_save_without_touching_hashes()
+        {
+            var file = GivenStoredFile();
+            var checkedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+            var other = Subject.Get(file.Id);
+            other.OsHash = "0123456789abcdef";
+            Subject.SaveOsHashes(new List<ImportFile> { other });
+
+            file.Candidates = new List<FingerprintCandidate>
+            {
+                new() { SceneId = "scene-a", Algorithm = "OSHASH", Distance = 0, Submissions = 3, Duration = 1200, MovieId = 7, Title = "Title", StudioTitle = "Studio", ReleaseDate = "2026-01-02" }
+            };
+            file.CandidatesCheckedAt = checkedAt;
+            Subject.SaveCandidates(new List<ImportFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.OsHash.Should().Be("0123456789abcdef");
+            stored.CandidatesCheckedAt.Should().Be(checkedAt);
+            stored.Candidates.Should().ContainSingle().Which.Should().BeEquivalentTo(file.Candidates[0]);
+        }
+
+        [Test]
+        public void should_store_an_empty_candidate_list_and_clear_it_back_to_unchecked()
+        {
+            var file = GivenStoredFile();
+            file.Candidates = new List<FingerprintCandidate>();
+            file.CandidatesCheckedAt = DateTime.UtcNow;
+            Subject.SaveCandidates(new List<ImportFile> { file });
+
+            Subject.Get(file.Id).Candidates.Should().NotBeNull().And.BeEmpty();
+
+            file.CandidatesCheckedAt = null;
+            Subject.SaveCandidates(new List<ImportFile> { file });
+
+            Subject.Get(file.Id).CandidatesCheckedAt.Should().BeNull();
+        }
+
+        [Test]
+        public void should_get_only_hashed_unchecked_files_up_to_limit()
+        {
+            var items = Enumerable.Range(1, 6)
+                .Select(i => new ImportFile
+                {
+                    RootFolderId = 1,
+                    Path = $"/import/file{i}.mp4",
+                    RelativePath = $"file{i}.mp4",
+                    Name = $"file{i}",
+                    OsHash = i == 1 ? null : "0123456789abcdef",
+                    CandidatesCheckedAt = i == 2 ? DateTime.UtcNow : null
+                })
+                .ToList();
+
+            Db.InsertMany(items);
+
+            var pending = Subject.GetFilesNeedingCandidates(100);
+
+            pending.Should().HaveCount(4);
+            pending.Should().OnlyContain(f => f.OsHash != null && f.CandidatesCheckedAt == null);
+            pending.Select(f => f.Id).Should().BeInAscendingOrder();
+            Subject.GetFilesNeedingCandidates(2).Should().HaveCount(2);
         }
 
         [Test]
