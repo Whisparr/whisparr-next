@@ -165,7 +165,17 @@ namespace NzbDrone.Core.MediaFiles
             var decisionsStopwatch = Stopwatch.StartNew();
             var decisions = _importDecisionMaker.GetSceneImportDecisions(mediaFileList);
 
-            _importApprovedMovies.Import(decisions.Decisions, false);
+            // Hash-linked files still sit in the import folder: import them like a download so they are moved into the scene's folder
+            var hashLinked = decisions.Decisions.Where(d => d.LocalMovie.MatchTier == MatchTier.Hash).ToList();
+            var others = decisions.Decisions.Where(d => d.LocalMovie.MatchTier != MatchTier.Hash).ToList();
+
+            _importApprovedMovies.Import(others, false);
+
+            if (hashLinked.Count > 0)
+            {
+                _importApprovedMovies.Import(hashLinked, true, null, ImportMode.Move);
+            }
+
             decisionsStopwatch.Stop();
             _logger.Trace("Import decisions complete [{0}]", decisionsStopwatch.Elapsed);
 

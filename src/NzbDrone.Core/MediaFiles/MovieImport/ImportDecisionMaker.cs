@@ -203,12 +203,14 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             }
 
             var lookups = LookupUnmappedUpstream(pending);
+            var linkedMovieIds = new HashSet<int>();
 
             foreach (var (path, unmappedFile) in pending)
             {
                 var target = FindHashTarget(path, unmappedFile, lookups);
 
-                if (target == null)
+                // A second file hashing to an already-linked scene is a duplicate; leave it unmapped so the user sees it
+                if (target == null || linkedMovieIds.Contains(target.Id))
                 {
                     continue;
                 }
@@ -233,6 +235,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     continue;
                 }
 
+                linkedMovieIds.Add(target.Id);
                 unmappedFiles.Remove(unmappedFile);
                 decisions.Add(decision);
                 _logger.Info("Linked {0} to {1} by oshash", path, target);

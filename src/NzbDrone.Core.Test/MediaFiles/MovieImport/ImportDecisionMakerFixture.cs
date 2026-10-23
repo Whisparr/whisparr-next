@@ -192,6 +192,31 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
         }
 
         [Test]
+        public void should_link_only_the_first_of_two_unparsed_files_hashing_to_the_same_scene()
+        {
+            var files = new List<string>
+            {
+                @"C:\Test\Unsorted\Unknown.A.mp4".AsOsAgnostic(),
+                @"C:\Test\Unsorted\Unknown.B.mp4".AsOsAgnostic()
+            };
+            var target = GivenSceneInDatabase();
+            var lookup = new FingerprintLookupResult { Status = FingerprintLookupStatus.Matched };
+
+            GivenUnparsedSceneFile(files[0], "0123456789abcdef");
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(files[1])).Returns("fedcba9876543210");
+            Mocker.GetMock<IVideoFileInfoReader>().Setup(s => s.GetMediaInfo(files[1])).Returns(new MediaInfoModel());
+            GivenUpstreamLookup(files.ToDictionary(f => f, _ => lookup));
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.Evaluate(It.IsAny<Movie>(), It.IsAny<FingerprintLookupResult>(), It.IsAny<double?>()))
+                  .Returns(new FileMatchOutcome { Tier = MatchTier.Hash, Target = target });
+
+            var result = Subject.GetSceneImportDecisions(files, null, null, false, false);
+
+            result.Decisions.Should().ContainSingle().Which.LocalMovie.Path.Should().Be(files[0]);
+            result.UnmappedFiles.Should().ContainSingle().Which.OriginalFilePath.Should().Be(files[1]);
+        }
+
+        [Test]
         public void should_look_up_all_unparsed_scene_files_upstream_in_one_call()
         {
             var files = new List<string>
