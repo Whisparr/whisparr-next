@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
+
+// using System.IO.Abstractions;
 using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Cache;
@@ -24,7 +26,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
-        List<MovieFile> GetFilesNeedingPHash(int limit);
+        List<MovieFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(List<MovieFile> movieFiles);
         void SavePHashes(List<MovieFile> movieFiles);
         List<MovieFile> GetUnmappedFiles();
@@ -86,13 +88,13 @@ namespace NzbDrone.Core.MediaFiles
             _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(movieFile));
         }
 
-        public void Update(List<MovieFile> movieFile)
+        public void Update(List<MovieFile> movieFiles)
         {
-            _mediaFileRepository.UpdateMany(movieFile);
-            foreach (var file in movieFile)
+            _mediaFileRepository.UpdateMany(movieFiles);
+            foreach (var movieFile in movieFiles)
             {
-                RemoveMovieResourcesCache(file.MovieId.ToString());
-                _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(file));
+                RemoveMovieResourcesCache(movieFile.MovieId.ToString());
+                _eventAggregator.PublishEvent(new MovieFileUpdatedEvent(movieFile));
             }
         }
 
@@ -144,9 +146,9 @@ namespace NzbDrone.Core.MediaFiles
             return _mediaFileRepository.GetFilesWithoutOsHash(afterId, limit);
         }
 
-        public List<MovieFile> GetFilesNeedingPHash(int limit)
+        public List<MovieFile> GetFilesNeedingPHash(int afterId, int limit)
         {
-            return _mediaFileRepository.GetFilesNeedingPHash(limit);
+            return _mediaFileRepository.GetFilesNeedingPHash(afterId, limit);
         }
 
         // Column-restricted writes straight to the repository: no events or cache clears, and

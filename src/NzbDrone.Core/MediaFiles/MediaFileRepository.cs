@@ -12,7 +12,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<MovieFile> GetFilesWithoutOsHash(int afterId, int limit);
-        List<MovieFile> GetFilesNeedingPHash(int limit);
+        List<MovieFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<MovieFile> movieFiles);
         void SavePHashes(IList<MovieFile> movieFiles);
         List<MovieFile> GetAllFiles();
@@ -52,11 +52,11 @@ namespace NzbDrone.Core.MediaFiles
                 .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 
-        public List<MovieFile> GetFilesNeedingPHash(int limit)
+        public List<MovieFile> GetFilesNeedingPHash(int afterId, int limit)
         {
-            // Every processed row gets PHashAttemptedAt, so it leaves this query and no watermark is needed
+            // Rows skipped without an attempted stamp (missing files) are stepped past by the caller's Id watermark
             return Query(Builder()
-                .Where<MovieFile>(x => x.PHash == null && x.PHashAttemptedAt == null)
+                .Where<MovieFile>(x => x.PHash == null && x.PHashAttemptedAt == null && x.Id > afterId)
                 .OrderBy($"\"MovieFiles\".\"Id\" ASC LIMIT {limit}"));
         }
 

@@ -7,6 +7,8 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
@@ -97,23 +99,15 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
-        public void refresh_should_hash_only_new_import_files()
+        public void refresh_should_insert_new_import_files_unhashed_and_queue_the_backfill()
         {
             var root = new RootFolder { Id = 7, Path = @"C:\TV".AsOsAgnostic() };
             var importFolder = Path.Combine(root.Path, "import");
             var known = Path.Combine(importFolder, "known.mp4");
             var added = Path.Combine(importFolder, "added.mp4");
-            var lastWrite = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
             List<ImportFile> inserted = null;
 
-            Mocker.GetMock<IRootFolderRepository>().Setup(s => s.Get(7)).Returns(root);
-            Mocker.GetMock<IMovieRepository>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
-            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(importFolder, true)).Returns(new[] { known, added });
-            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileGetLastWrite(added)).Returns(lastWrite);
-            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(added)).Returns("0123456789abcdef");
-            Mocker.GetMock<IImportFileRepository>()
-                  .Setup(s => s.FindByRootFolderId(7))
-                  .Returns(new List<ImportFile> { new() { Id = 1, RootFolderId = 7, Path = known } });
+            SetupRefresh(root, importFolder, new[] { known, added }, known);
             Mocker.GetMock<IImportFileRepository>()
                   .Setup(s => s.InsertMany(It.IsAny<IList<ImportFile>>()))
                   .Callback<IList<ImportFile>>(files => inserted = files.ToList());
@@ -122,9 +116,36 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             inserted.Should().ContainSingle();
             inserted[0].Path.Should().Be(added);
-            inserted[0].OsHash.Should().Be("0123456789abcdef");
-            inserted[0].HashedFileModifiedAt.Should().Be(lastWrite);
-            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(known), Times.Never());
+            inserted[0].OsHash.Should().BeNull();
+            inserted[0].HashedFileModifiedAt.Should().BeNull();
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IManageCommandQueue>()
+                  .Verify(c => c.Push(It.IsAny<GenerateOsHashesCommand>(), CommandPriority.Low, CommandTrigger.Unspecified), Times.Once());
+        }
+
+        [Test]
+        public void refresh_should_not_queue_the_backfill_when_no_files_were_added()
+        {
+            var root = new RootFolder { Id = 7, Path = @"C:\TV".AsOsAgnostic() };
+            var importFolder = Path.Combine(root.Path, "import");
+            var known = Path.Combine(importFolder, "known.mp4");
+
+            SetupRefresh(root, importFolder, new[] { known }, known);
+
+            Subject.Refresh(7);
+
+            Mocker.GetMock<IManageCommandQueue>()
+                  .Verify(c => c.Push(It.IsAny<GenerateOsHashesCommand>(), It.IsAny<CommandPriority>(), It.IsAny<CommandTrigger>()), Times.Never());
+        }
+
+        private void SetupRefresh(RootFolder root, string importFolder, string[] filesOnDisk, string knownPath)
+        {
+            Mocker.GetMock<IRootFolderRepository>().Setup(s => s.Get(7)).Returns(root);
+            Mocker.GetMock<IMovieRepository>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(importFolder, true)).Returns(filesOnDisk);
+            Mocker.GetMock<IImportFileRepository>()
+                  .Setup(s => s.FindByRootFolderId(7))
+                  .Returns(new List<ImportFile> { new() { Id = 1, RootFolderId = 7, Path = knownPath } });
         }
 
         [Test]

@@ -8,7 +8,7 @@ namespace NzbDrone.Core.RootFolders
     {
         List<ImportFile> FindByRootFolderId(int rootFolderId);
         List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit);
-        List<ImportFile> GetFilesNeedingPHash(int limit);
+        List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<ImportFile> importFiles);
         void SavePHashes(IList<ImportFile> importFiles);
     }
@@ -45,11 +45,11 @@ namespace NzbDrone.Core.RootFolders
             SetFieldsWithoutEvents(importFiles, f => f.PHash, f => f.PHashAttemptedAt);
         }
 
-        public List<ImportFile> GetFilesNeedingPHash(int limit)
+        public List<ImportFile> GetFilesNeedingPHash(int afterId, int limit)
         {
-            // Every processed row gets PHashAttemptedAt, so it leaves this query and no watermark is needed
+            // Rows skipped without an attempted stamp (missing files) are stepped past by the caller's Id watermark
             return Query(Builder()
-                .Where<ImportFile>(x => x.PHash == null && x.PHashAttemptedAt == null)
+                .Where<ImportFile>(x => x.PHash == null && x.PHashAttemptedAt == null && x.Id > afterId)
                 .OrderBy($"\"ImportFiles\".\"Id\" ASC LIMIT {limit}"));
         }
     }

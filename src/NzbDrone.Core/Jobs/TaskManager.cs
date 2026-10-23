@@ -150,7 +150,8 @@ namespace NzbDrone.Core.Jobs
                     new ScheduledTask
                     {
                         Interval = 30,
-                        TypeName = typeof(GenerateOsHashesCommand).FullName
+                        TypeName = typeof(GenerateOsHashesCommand).FullName,
+                        Priority = CommandPriority.Low
                     },
 
                     new ScheduledTask

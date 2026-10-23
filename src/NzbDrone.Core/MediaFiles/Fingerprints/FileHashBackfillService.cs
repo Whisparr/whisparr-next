@@ -24,6 +24,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         // Results are persisted in batches this size, so a restart mid-run keeps progress
         internal const int FlushSize = 100;
 
+        // Failures before a run's first success that stop the run, unstamped
+        internal const int HeldFailureLimit = 5;
+
         // A phash run stops starting new files after this much wall time; the next run continues
         internal static readonly TimeSpan PHashRunBudget = TimeSpan.FromMinutes(15);
 
@@ -34,6 +37,10 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private readonly IVideoHashService _videoHashService;
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
+
+        // Missing files are skipped without a phash stamp, so these cursors keep them from coming back within a pass
+        private readonly PHashCursor _movieFilePHashCursor = new();
+        private readonly PHashCursor _importFilePHashCursor = new();
 
         // Rows that fail to hash stay NULL; the per-table Id watermark moves past them so they
         // don't block later rows, and wraps to 0 at the end of a pass so they are retried once per pass
@@ -93,7 +100,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             // Batch writes go straight to the repositories: no per-file events for the UI
             foreach (var movieFile in movieFiles)
             {
-                _logger.ProgressInfo("Hashing file {0}/{1}", ++processed, total);
+                _logger.ProgressDebug("Hashing file {0}/{1}", ++processed, total);
 
                 if (TryHash(ResolvePath(movieFile, movies), out var osHash, out var modifiedAt))
                 {
@@ -106,9 +113,12 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 pendingMovieFiles = Flush(pendingMovieFiles, _mediaFileService.SaveOsHashes, FlushSize);
             }
 
+            // Persist the movie-file remainder before the import loop so a throw there can't lose it
+            Flush(pendingMovieFiles, _mediaFileService.SaveOsHashes, 1);
+
             foreach (var importFile in importFiles)
             {
-                _logger.ProgressInfo("Hashing file {0}/{1}", ++processed, total);
+                _logger.ProgressDebug("Hashing file {0}/{1}", ++processed, total);
 
                 if (TryHash(importFile.Path, out var osHash, out var modifiedAt))
                 {
@@ -121,7 +131,6 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 pendingImportFiles = Flush(pendingImportFiles, _importFileService.SaveOsHashes, FlushSize);
             }
 
-            Flush(pendingMovieFiles, _mediaFileService.SaveOsHashes, 1);
             Flush(pendingImportFiles, _importFileService.SaveOsHashes, 1);
 
             _logger.ProgressInfo("Hashed {0} of {1} files", hashed, total);
@@ -138,7 +147,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
             // Movie files first, then import files, all inside one time budget
             var finished = HashChunks(
-                () => _mediaFileService.GetFilesNeedingPHash(PHashChunkSize),
+                _movieFilePHashCursor,
+                _mediaFileService.GetFilesNeedingPHash,
+                f => f.Id,
                 chunk =>
                 {
                     var movies = LoadMovies(chunk);
@@ -146,21 +157,33 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                     return f => ResolvePath(f, movies);
                 },
                 (f, hash) => f.PHash = hash,
-                (f, at) => f.PHashAttemptedAt = at,
-                f => _mediaFileService.SavePHashes(new List<MovieFile> { f }),
+                (f, at) =>
+                {
+                    f.PHashAttemptedAt = at;
+                    _mediaFileService.SavePHashes(new List<MovieFile> { f });
+                },
                 run);
 
             finished = finished && HashChunks(
-                () => _importFileService.GetFilesNeedingPHash(PHashChunkSize),
+                _importFilePHashCursor,
+                _importFileService.GetFilesNeedingPHash,
+                f => f.Id,
                 _ => f => f.Path,
                 (f, hash) => f.PHash = hash,
-                (f, at) => f.PHashAttemptedAt = at,
-                f => _importFileService.SavePHashes(new List<ImportFile> { f }),
+                (f, at) =>
+                {
+                    f.PHashAttemptedAt = at;
+                    _importFileService.SavePHashes(new List<ImportFile> { f });
+                },
                 run);
 
             if (run.TurnedOff)
             {
                 _logger.ProgressInfo("Perceptual hashing turned off, stopping after {0} files", run.Processed);
+            }
+            else if (run.Stopped)
+            {
+                // The warning was logged when the breaker tripped
             }
             else if (run.Processed > 0)
             {
@@ -168,71 +191,124 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             }
         }
 
-        // Hashes chunk after chunk until nothing is left (true) or the deadline passes (false).
-        // Every processed row gets an attempted stamp and is saved on its own, so it leaves the
-        // "needing phash" query and a long run keeps its work across a shutdown.
-        private bool HashChunks<T>(Func<List<T>> fetch,
+        // Hashes chunk after chunk until the pass reaches the end of the table (true), the deadline
+        // passes, the setting is turned off or the circuit breaker trips (false).
+        // An existing file that was tried gets an attempted stamp and is saved on its own, so it leaves
+        // the "needing phash" query and a long run keeps its work across a shutdown. Missing files are
+        // skipped unstamped; the cursor moves past them so they don't come back within the pass.
+        // Failures before the run's first success are held unstamped: if the first few all fail the
+        // cause is probably system-wide (ffmpeg), and stamping would burn the library.
+        private bool HashChunks<T>(PHashCursor cursor,
+                                   Func<int, int, List<T>> fetch,
+                                   Func<T, int> idOf,
                                    Func<List<T>, Func<T, string>> pathResolverFor,
                                    Action<T, string> setHash,
-                                   Action<T, DateTime> setAttemptedAt,
-                                   Action<T> save,
+                                   Action<T, DateTime> stamp,
                                    PHashRun run)
         {
             while (true)
             {
-                var chunk = fetch();
+                var chunk = fetch(cursor.AfterId, PHashChunkSize);
 
-                if (chunk.Count == 0)
-                {
-                    return true;
-                }
-
+                // Fewer rows than asked means this chunk reaches the end of the table
+                var lastChunk = chunk.Count < PHashChunkSize;
                 var resolvePath = pathResolverFor(chunk);
 
                 foreach (var file in chunk)
                 {
-                    // Read live each time: turning the setting off is how a user stops a running task
-                    if (!_configService.EnablePerceptualHashing)
-                    {
-                        run.TurnedOff = true;
-
-                        return false;
-                    }
-
-                    if (UtcNow() >= run.Deadline)
+                    if (ShouldStop(run))
                     {
                         return false;
                     }
 
                     run.Processed++;
 
-                    if (TryComputePHash(resolvePath(file), out var pHash))
+                    var path = resolvePath(file);
+
+                    if (path == null || !_diskProvider.FileExists(path))
                     {
-                        setHash(file, pHash);
-                        run.Hashed++;
+                        _logger.Debug("Skipping phash for missing file {0}", path);
+                        cursor.AfterId = idOf(file);
+
+                        continue;
                     }
 
-                    setAttemptedAt(file, UtcNow());
-                    save(file);
+                    _logger.ProgressDebug("Computing perceptual hash {0}", run.Processed);
+
+                    var pHash = _videoHashService.ComputePHash(path);
+
+                    if (!RecordPHashResult(file, pHash, setHash, () => stamp(file, UtcNow()), run))
+                    {
+                        // The held rows stay unstamped, so the next run starts the pass again
+                        cursor.AfterId = 0;
+
+                        return false;
+                    }
+
+                    cursor.AfterId = idOf(file);
+                }
+
+                if (lastChunk)
+                {
+                    cursor.AfterId = 0;
+
+                    return true;
                 }
             }
         }
 
-        // A missing file or a failed hash returns false; the caller still marks the row as attempted
-        private bool TryComputePHash(string path, out string pHash)
+        private bool ShouldStop(PHashRun run)
         {
-            pHash = null;
-
-            if (path == null || !_diskProvider.FileExists(path))
+            // Read live each time: turning the setting off is how a user stops a running task
+            if (!_configService.EnablePerceptualHashing)
             {
-                _logger.Debug("Skipping phash for missing file {0}", path);
+                run.TurnedOff = true;
 
-                return false;
+                return true;
             }
 
-            pHash = _videoHashService.ComputePHash(path);
+            return UtcNow() >= run.Deadline;
+        }
 
-            return pHash != null;
+        // Returns false when the circuit breaker tripped and the run must stop
+        private bool RecordPHashResult<T>(T file, string pHash, Action<T, string> setHash, Action stamp, PHashRun run)
+        {
+            if (pHash != null)
+            {
+                setHash(file, pHash);
+                run.Hashed++;
+                stamp();
+
+                // The first success shows the failures weren't system-wide: stamp the ones held back
+                run.AnySuccess = true;
+                run.ReleaseHeld();
+
+                return true;
+            }
+
+            if (run.AnySuccess)
+            {
+                stamp();
+
+                return true;
+            }
+
+            run.Held.Add(stamp);
+
+            if (run.Held.Count < HeldFailureLimit)
+            {
+                return true;
+            }
+
+            _logger.Warn("Perceptual hashing failed for the first {0} files of this run; stopping without marking them. Check ffmpeg/ffprobe.", HeldFailureLimit);
+            run.Stopped = true;
+
+            return false;
+        }
+
+        private sealed class PHashCursor
+        {
+            public int AfterId { get; set; }
         }
 
         private sealed class PHashRun
@@ -246,6 +322,19 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             public int Processed { get; set; }
             public int Hashed { get; set; }
             public bool TurnedOff { get; set; }
+            public bool Stopped { get; set; }
+            public bool AnySuccess { get; set; }
+            public List<Action> Held { get; } = new();
+
+            public void ReleaseHeld()
+            {
+                foreach (var stamp in Held)
+                {
+                    stamp();
+                }
+
+                Held.Clear();
+            }
         }
 
         // Writes the pending rows once there are at least `threshold` of them; returns the list to keep filling

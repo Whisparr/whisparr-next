@@ -12,7 +12,8 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
-using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Profiles.Qualities;
@@ -36,7 +37,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IQualityProfileRepository _profileRepository;
         private readonly IImportFileRepository _importFileRepository;
         private readonly IDiskProvider _diskProvider;
-        private readonly IVideoHashService _videoHashService;
+        private readonly IManageCommandQueue _commandQueueManager;
         private readonly IMovieRepository _movieRepository;
         private readonly IConfigService _configService;
         private readonly INamingConfigService _namingConfigService;
@@ -63,7 +64,7 @@ namespace NzbDrone.Core.RootFolders
                                     IQualityProfileRepository profileRepository,
                                     IImportFileRepository importFileRepository,
                                     IDiskProvider diskProvider,
-                                    IVideoHashService videoHashService,
+                                    IManageCommandQueue commandQueueManager,
                                     IMovieRepository movieRepository,
                                     IConfigService configService,
                                     INamingConfigService namingConfigService,
@@ -74,7 +75,7 @@ namespace NzbDrone.Core.RootFolders
             _profileRepository = profileRepository;
             _importFileRepository = importFileRepository;
             _diskProvider = diskProvider;
-            _videoHashService = videoHashService;
+            _commandQueueManager = commandQueueManager;
             _movieRepository = movieRepository;
             _configService = configService;
             _namingConfigService = namingConfigService;
@@ -305,15 +306,14 @@ namespace NzbDrone.Core.RootFolders
             _logger.ProgressInfo("Scanning Adding {0} new files to the database in {1}", toAdd.Count, importFolder);
             _logger.ProgressInfo("Scanning Cleaning {0} old files from the database in {1}", toRemove.Count, importFolder);
 
-            foreach (var importFile in toAdd)
-            {
-                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, importFile.Path, _logger);
-                importFile.OsHash = osHash;
-                importFile.HashedFileModifiedAt = hashedAt;
-            }
-
+            // Hashes stay null here: this runs inside the refresh request, so the backfill fills them in
             _importFileRepository.InsertMany(toAdd);
             _importFileRepository.DeleteMany(toRemove.Select(u => u.Id).ToList());
+
+            if (toAdd.Count > 0)
+            {
+                _commandQueueManager.Push(new GenerateOsHashesCommand(), CommandPriority.Low);
+            }
 
             var moviePaths = _movieRepository.AllMoviePaths();
             GetDetails(rootFolder, moviePaths, true);

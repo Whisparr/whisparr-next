@@ -270,7 +270,13 @@ namespace NzbDrone.Core.MediaFiles
                 // Only the mtime moved (copy, touch, FileDate rewrite): the content is unchanged if the oshash still matches
                 var (newHash, newHashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
 
-                if (newHash != null && newHash == file.OsHash)
+                if (newHash == null)
+                {
+                    // A transient read error says nothing about the content: keep every hash, the next scan retries
+                    return false;
+                }
+
+                if (newHash == file.OsHash)
                 {
                     file.HashedFileModifiedAt = newHashedAt ?? lastWrite;
                 }
@@ -278,7 +284,7 @@ namespace NzbDrone.Core.MediaFiles
                 {
                     ClearHashes(file);
                     file.OsHash = newHash;
-                    file.HashedFileModifiedAt = newHash != null ? newHashedAt : null;
+                    file.HashedFileModifiedAt = newHashedAt;
                 }
 
                 return true;

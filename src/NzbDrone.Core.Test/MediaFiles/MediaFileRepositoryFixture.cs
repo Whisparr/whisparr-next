@@ -139,7 +139,7 @@ namespace NzbDrone.Core.Test.MediaFiles
             var stored = Subject.Get(file.Id);
             stored.PHash.Should().Be("abcdef0123");
             stored.PHashAttemptedAt.Should().Be(attemptedAt);
-            Subject.GetFilesNeedingPHash(100).Should().NotContain(f => f.Id == file.Id);
+            Subject.GetFilesNeedingPHash(0, 100).Should().NotContain(f => f.Id == file.Id);
         }
 
         [Test]
@@ -206,13 +206,17 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Db.InsertMany(items);
 
-            var all = Subject.GetFilesNeedingPHash(100);
+            var all = Subject.GetFilesNeedingPHash(0, 100);
 
             all.Should().HaveCount(4);
             all.Should().OnlyContain(c => c.PHash == null && c.PHashAttemptedAt == null);
             all.Should().Contain(c => c.MovieId == 0);
             all.Select(c => c.Id).Should().BeInAscendingOrder();
-            Subject.GetFilesNeedingPHash(3).Should().HaveCount(3);
+            Subject.GetFilesNeedingPHash(0, 3).Should().HaveCount(3);
+
+            var afterFirst = Subject.GetFilesNeedingPHash(all[0].Id, 100);
+            afterFirst.Should().HaveCount(3);
+            afterFirst.Should().NotContain(c => c.Id <= all[0].Id);
         }
     }
 }

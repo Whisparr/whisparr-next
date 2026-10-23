@@ -317,7 +317,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
-        public void should_clear_everything_when_only_mtime_changed_and_recompute_fails()
+        public void should_keep_every_hash_when_only_mtime_changed_and_recompute_fails()
         {
             var changed = HashedAt.AddMinutes(5);
             var file = GivenExistingFileOnDisk(100, 100, "0123456789abcdef", HashedAt, changed);
@@ -326,11 +326,11 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Subject.Scan(_movie);
 
-            file.OsHash.Should().BeNull();
-            file.PHash.Should().BeNull();
-            file.PHashAttemptedAt.Should().BeNull();
-            file.HashedFileModifiedAt.Should().BeNull();
-            VerifyPersisted(file, Times.Once());
+            file.OsHash.Should().Be("0123456789abcdef");
+            file.PHash.Should().Be("abcdef");
+            file.PHashAttemptedAt.Should().Be(HashedAt);
+            file.HashedFileModifiedAt.Should().Be(HashedAt);
+            VerifyPersisted(file, Times.Never());
         }
 
         [Test]

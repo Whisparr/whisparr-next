@@ -67,7 +67,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             var stored = Subject.Get(file.Id);
             stored.PHash.Should().Be("abcdef0123");
             stored.PHashAttemptedAt.Should().Be(attemptedAt);
-            Subject.GetFilesNeedingPHash(100).Should().NotContain(f => f.Id == file.Id);
+            Subject.GetFilesNeedingPHash(0, 100).Should().NotContain(f => f.Id == file.Id);
         }
 
         [Test]
@@ -130,12 +130,16 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Db.InsertMany(items);
 
-            var all = Subject.GetFilesNeedingPHash(100);
+            var all = Subject.GetFilesNeedingPHash(0, 100);
 
             all.Should().HaveCount(3);
             all.Should().OnlyContain(f => f.PHash == null && f.PHashAttemptedAt == null);
             all.Select(f => f.Id).Should().BeInAscendingOrder();
-            Subject.GetFilesNeedingPHash(2).Should().HaveCount(2);
+            Subject.GetFilesNeedingPHash(0, 2).Should().HaveCount(2);
+
+            var afterFirst = Subject.GetFilesNeedingPHash(all[0].Id, 100);
+            afterFirst.Should().HaveCount(2);
+            afterFirst.Should().NotContain(f => f.Id <= all[0].Id);
         }
     }
 }
