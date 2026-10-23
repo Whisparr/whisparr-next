@@ -168,7 +168,41 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             _saves.Should().BeEmpty();
         }
 
-        [TestCase(MatchTier.Hash)]
+        [Test]
+        public void should_flag_a_hash_link_when_the_phash_points_at_another_scene()
+        {
+            var file = File(1, tier: MatchTier.Hash);
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1));
+
+            Subject.Verify(new List<MovieFile> { file });
+
+            file.MatchTier.Should().Be(MatchTier.Conflict);
+            _saves.Should().ContainSingle().Which.Should().Equal(file);
+        }
+
+        [Test]
+        public void should_keep_a_hash_link_as_hash_when_the_phash_agrees()
+        {
+            var file = File(1, tier: MatchTier.Hash);
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-a", 1));
+
+            Subject.Verify(new List<MovieFile> { file });
+
+            file.MatchTier.Should().Be(MatchTier.Hash);
+            _saves.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_keep_a_hash_link_when_candidates_include_the_linked_scene_and_another()
+        {
+            var file = File(1, tier: MatchTier.Hash);
+            GivenResult(1, FingerprintLookupStatus.Matched, ("scene-b", 1), ("scene-a", 2));
+
+            Subject.Verify(new List<MovieFile> { file });
+
+            file.MatchTier.Should().Be(MatchTier.Hash);
+        }
+
         [TestCase(MatchTier.Manual)]
         [TestCase(MatchTier.Confirmed)]
         [TestCase(MatchTier.Conflict)]

@@ -39,9 +39,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
         public void Verify(IReadOnlyCollection<MovieFile> movieFiles)
         {
-            // Hash and Manual links stay as they are; Confirmed and Conflict were already settled
+            // Manual is the user's decision and Confirmed already has name and oshash agreeing; Conflict is already flagged
             var files = movieFiles
-                .Where(f => f.MovieId > 0 && f.PHash != null && (f.MatchTier == MatchTier.Unknown || f.MatchTier == MatchTier.Name))
+                .Where(f => f.MovieId > 0 && f.PHash != null && f.MatchTier is MatchTier.Unknown or MatchTier.Name or MatchTier.Hash)
                 .ToList();
 
             if (files.Count == 0)
@@ -83,7 +83,8 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
 
                 var tier = Classify(result, foreignId);
 
-                if (tier == null)
+                // A Hash link is flagged but never promoted: it stays Hash when the phash agrees
+                if (tier == null || (tier == MatchTier.Confirmed && file.MatchTier == MatchTier.Hash))
                 {
                     continue;
                 }
