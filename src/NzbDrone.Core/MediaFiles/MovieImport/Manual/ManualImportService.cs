@@ -12,9 +12,11 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Parser;
@@ -48,6 +50,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         private readonly IEventAggregator _eventAggregator;
         private readonly IConfigService _configService;
         private readonly IStudioService _studioService;
+        private readonly IVideoHashService _videoHashService;
+        private readonly IFingerprintLookupClient _fingerprintLookupClient;
+        private readonly IFileMatchEvaluator _fileMatchEvaluator;
         private readonly Logger _logger;
 
         public ManualImportService(IDiskProvider diskProvider,
@@ -66,8 +71,14 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                                    IEventAggregator eventAggregator,
                                    IConfigService configService,
                                    IStudioService studioService,
+                                   IVideoHashService videoHashService,
+                                   IFingerprintLookupClient fingerprintLookupClient,
+                                   IFileMatchEvaluator fileMatchEvaluator,
                                    Logger logger)
         {
+            _videoHashService = videoHashService;
+            _fingerprintLookupClient = fingerprintLookupClient;
+            _fileMatchEvaluator = fileMatchEvaluator;
             _diskProvider = diskProvider;
             _parsingService = parsingService;
             _diskScanService = diskScanService;
@@ -122,6 +133,70 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         }
 
         public List<ManualImportItem> GetMediaFiles(string path, string downloadId, int? movieId, bool filterExistingFiles)
+        {
+            var items = FindMediaFiles(path, downloadId, movieId, filterExistingFiles);
+
+            AttachUpstreamCandidates(items);
+
+            return items;
+        }
+
+        // One upstream lookup for every file of the request the parser could not match.
+        // A failed lookup leaves the items as they are; the user can still pick a scene by hand.
+        private void AttachUpstreamCandidates(List<ManualImportItem> items)
+        {
+            var unknown = items.Where(i => i.Movie == null &&
+                                           i.Path.IsNotNullOrWhiteSpace() &&
+                                           i.Rejections.Any(r => r.Reason == ImportRejectionReason.UnknownMovie))
+                               .ToList();
+
+            if (unknown.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var files = new List<FileFingerprint>();
+
+                foreach (var item in unknown)
+                {
+                    var (osHash, _) = _videoHashService.ComputeOsHashStamp(_diskProvider, item.Path, _logger);
+
+                    if (osHash.IsNotNullOrWhiteSpace() && files.All(f => f.Key != item.Path))
+                    {
+                        files.Add(new FileFingerprint { Key = item.Path, OsHash = osHash });
+                    }
+                }
+
+                if (files.Count == 0)
+                {
+                    return;
+                }
+
+                var lookups = _fingerprintLookupClient.Lookup(files, false);
+
+                if (lookups == null)
+                {
+                    return;
+                }
+
+                foreach (var item in unknown)
+                {
+                    if (lookups.TryGetValue(item.Path, out var lookup) && lookup?.Candidates is { Count: > 0 })
+                    {
+                        item.FingerprintCandidates = _fileMatchEvaluator.BuildCandidates(lookup) ?? new List<FingerprintCandidate>();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // A lookup problem never fails the listing
+                _logger.Debug(ex, "Fingerprint lookup failed for {0} unmatched files", unknown.Count);
+            }
+        }
+
+        private List<ManualImportItem> FindMediaFiles(string path, string downloadId, int? movieId, bool filterExistingFiles)
         {
             if (downloadId.IsNotNullOrWhiteSpace())
             {
@@ -421,6 +496,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             item.ReleaseGroup = decision.LocalMovie.ReleaseGroup;
             item.Rejections = decision.Rejections;
             item.IndexerFlags = (int)decision.LocalMovie.IndexerFlags;
+            item.FingerprintCandidates = decision.LocalMovie.FingerprintCandidates ?? new List<FingerprintCandidate>();
 
             if (decision.LocalMovie.Movie != null)
             {
@@ -489,7 +565,10 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                         Languages = file.Languages,
                         IndexerFlags = (IndexerFlags)file.IndexerFlags,
                         Movie = movie,
-                        Size = 0
+                        Size = 0,
+
+                        // The user picked the scene, which outranks any automatic tier
+                        MatchTier = MatchTier.Manual
                     };
 
                     if (file.DownloadId.IsNotNullOrWhiteSpace())

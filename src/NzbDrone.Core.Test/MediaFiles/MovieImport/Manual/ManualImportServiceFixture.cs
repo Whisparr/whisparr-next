@@ -1,13 +1,23 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.MovieImport;
+using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.MediaFiles.MovieImport.Manual;
+using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -54,6 +64,173 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
             Subject.GetMediaFiles(movie.Id).Should().BeEmpty();
 
             Mocker.GetMock<IDiskScanService>().Verify(v => v.GetVideoFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        private static readonly string Folder = @"C:\Test\Unknown".AsOsAgnostic();
+
+        private List<string> GivenUnknownFiles(params string[] names)
+        {
+            var files = names.Select(n => System.IO.Path.Combine(Folder, n)).ToList();
+
+            Mocker.GetMock<IConfigService>().SetupGet(s => s.WhisparrFolderLimit).Returns(100);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(Folder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetDirectories(Folder)).Returns(Array.Empty<string>());
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.FilterPaths(Folder, It.IsAny<IEnumerable<string>>(), It.IsAny<bool>()))
+                  .Returns<string, IEnumerable<string>, bool>((_, paths, _) => paths.ToList());
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.GetVideoFiles(Folder, false))
+                  .Returns(files.ToArray());
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns<LocalMovie, DownloadClientItem>((lm, _) => lm);
+            Mocker.GetMock<IVideoHashService>()
+                  .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
+                  .Returns<string>(p => "hash-" + System.IO.Path.GetFileName(p));
+
+            return files;
+        }
+
+        [Test]
+        public void should_do_one_upstream_lookup_for_all_unknown_files_and_attach_candidates()
+        {
+            var files = GivenUnknownFiles("a.mp4", "b.mp4");
+            var candidate = new FingerprintCandidate { SceneId = "s1", MovieId = 7 };
+            IReadOnlyCollection<FileFingerprint> sent = null;
+
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), false))
+                  .Callback<IReadOnlyCollection<FileFingerprint>, bool>((f, _) => sent = f)
+                  .Returns<IReadOnlyCollection<FileFingerprint>, bool>((f, _) => f.ToDictionary(
+                      x => x.Key,
+                      x => new FingerprintLookupResult
+                      {
+                          Key = x.Key,
+                          Status = FingerprintLookupStatus.Matched,
+                          Candidates = new List<FingerprintCandidateResult> { new() { SceneId = "s1" } }
+                      }));
+            Mocker.GetMock<IFileMatchEvaluator>()
+                  .Setup(s => s.BuildCandidates(It.IsAny<FingerprintLookupResult>()))
+                  .Returns(new List<FingerprintCandidate> { candidate });
+
+            var items = Subject.GetMediaFiles(Folder, null, null, true);
+
+            items.Should().HaveCount(2);
+            items.Should().OnlyContain(i => i.FingerprintCandidates.Count == 1 && i.FingerprintCandidates[0].SceneId == "s1");
+            items.Should().OnlyContain(i => i.Rejections.Any(r => r.Reason == ImportRejectionReason.UnknownMovie));
+            sent.Select(f => f.Key).Should().BeEquivalentTo(files);
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), false), Times.Once());
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), true), Times.Never());
+        }
+
+        [Test]
+        public void should_return_items_without_candidates_when_the_lookup_throws()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), false))
+                  .Throws(new InvalidOperationException("boom"));
+
+            var items = Subject.GetMediaFiles(Folder, null, null, true);
+
+            items.Should().ContainSingle();
+            items[0].FingerprintCandidates.Should().BeEmpty();
+            items[0].Rejections.Should().Contain(r => r.Reason == ImportRejectionReason.UnknownMovie);
+        }
+
+        [Test]
+        public void should_not_look_up_files_without_an_oshash()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            Mocker.GetMock<IVideoHashService>()
+                  .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
+                  .Returns((string)null);
+
+            var items = Subject.GetMediaFiles(Folder, null, null, true);
+
+            items.Should().ContainSingle();
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_surface_conflict_candidates_on_the_item()
+        {
+            var movie = new Movie { Id = 3, Path = Folder };
+            var file = System.IO.Path.Combine(Folder, "a.mp4");
+            var candidate = new FingerprintCandidate { SceneId = "other", MovieId = 9 };
+            var localMovie = new LocalMovie
+            {
+                Path = file,
+                Movie = movie,
+                Quality = new QualityModel(Quality.Unknown),
+                Languages = new List<Language>(),
+                FingerprintCandidates = new List<FingerprintCandidate> { candidate }
+            };
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(movie.Id)).Returns(movie);
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), movie, It.IsAny<DownloadClientItem>(), It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                  .Returns(new List<ImportDecision>
+                  {
+                      new(localMovie, new ImportRejection(ImportRejectionReason.FingerprintConflict, "conflict"))
+                  });
+            Mocker.GetMock<IConfigService>().SetupGet(s => s.WhisparrFolderLimit).Returns(100);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(Folder)).Returns(true);
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.GetVideoFiles(Folder, true))
+                  .Returns(new[] { file });
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.FilterPaths(Folder, It.IsAny<IEnumerable<string>>(), It.IsAny<bool>()))
+                  .Returns<string, IEnumerable<string>, bool>((_, paths, _) => paths.ToList());
+
+            var items = Subject.GetMediaFiles(Folder, null, movie.Id, true);
+
+            items.Should().ContainSingle();
+            items[0].FingerprintCandidates.Should().ContainSingle().Which.SceneId.Should().Be("other");
+            items[0].Rejections.Should().Contain(r => r.Reason == ImportRejectionReason.FingerprintConflict);
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_import_with_the_manual_match_tier()
+        {
+            var movie = new Movie { Id = 3, Path = @"C:\Test\Movies\Scene".AsOsAgnostic() };
+            var path = System.IO.Path.Combine(Folder, "a.mp4");
+            List<ImportDecision> imported = null;
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(path)).Returns(true);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(movie.Id)).Returns(movie);
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns<LocalMovie, DownloadClientItem>((lm, _) => lm);
+            Mocker.GetMock<IImportApprovedMovie>()
+                  .Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>(), It.IsAny<DownloadClientItem>(), It.IsAny<ImportMode>()))
+                  .Callback<List<ImportDecision>, bool, DownloadClientItem, ImportMode>((d, _, _, _) => imported = d)
+                  .Returns(new List<ImportResult>());
+
+            Subject.Execute(new ManualImportCommand
+            {
+                ImportMode = ImportMode.Auto,
+                Files = new List<ManualImportFile>
+                {
+                    new()
+                    {
+                        Path = path,
+                        MovieId = movie.Id,
+                        Quality = new QualityModel(Quality.Unknown),
+                        Languages = new List<Language> { Language.English }
+                    }
+                }
+            });
+
+            imported.Should().ContainSingle();
+            imported[0].LocalMovie.MatchTier.Should().Be(MatchTier.Manual);
         }
     }
 }

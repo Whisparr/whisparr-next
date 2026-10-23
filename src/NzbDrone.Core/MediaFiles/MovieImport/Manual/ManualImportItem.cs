@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Qualities;
 
@@ -23,5 +24,6 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         public int CustomFormatScore { get; set; }
         public int IndexerFlags { get; set; }
         public IEnumerable<ImportRejection> Rejections { get; set; } = new List<ImportRejection>();
+        public List<FingerprintCandidate> FingerprintCandidates { get; set; } = new();
     }
 }

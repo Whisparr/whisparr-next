@@ -3,6 +3,7 @@ using System.Linq;
 using NzbDrone.Common.Crypto;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.MediaFiles.MovieImport.Manual;
 using NzbDrone.Core.Qualities;
@@ -30,6 +31,7 @@ namespace Whisparr.Api.V5.ManualImport
         public int CustomFormatScore { get; set; }
         public int IndexerFlags { get; set; }
         public IEnumerable<ImportRejectionResource> Rejections { get; set; }
+        public List<FingerprintCandidate> FingerprintCandidates { get; set; }
     }
 
     public static class ManualImportResourceMapper
@@ -63,7 +65,8 @@ namespace Whisparr.Api.V5.ManualImport
                 // QualityWeight
                 DownloadId = model.DownloadId,
                 IndexerFlags = model.IndexerFlags,
-                Rejections = model.Rejections.Select(r => r.ToResource())
+                Rejections = model.Rejections.Select(r => r.ToResource()),
+                FingerprintCandidates = model.FingerprintCandidates
             };
         }
 
