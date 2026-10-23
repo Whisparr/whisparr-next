@@ -16,6 +16,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     {
         MediaInfoModel GetMediaInfo(string filename);
         TimeSpan? GetRunTime(string filename);
+        double? GetContainerDuration(string filename);
     }
 
     public class VideoFileInfoReader : IVideoFileInfoReader
@@ -149,6 +150,21 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             var info = GetMediaInfo(filename);
 
             return info?.RunTime;
+        }
+
+        public double? GetContainerDuration(string filename)
+        {
+            try
+            {
+                var analysis = FFProbe.Analyse(filename);
+
+                return Math.Round(analysis.Format.Duration.TotalSeconds, 2, MidpointRounding.AwayFromZero);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Unable to read container duration from {0}", filename);
+                return null;
+            }
         }
 
         private static TimeSpan GetBestRuntime(TimeSpan? audio, TimeSpan? video, TimeSpan general)
