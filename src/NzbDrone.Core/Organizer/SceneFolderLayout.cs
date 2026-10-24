@@ -25,6 +25,7 @@ namespace NzbDrone.Core.Organizer
                                      IHandle<MoviesImportedEvent>,
                                      IHandle<MoviesDeletedEvent>,
                                      IHandle<MovieEditedEvent>,
+                                     IHandle<MoviesBulkEditedEvent>,
                                      IHandle<MovieMovedEvent>,
                                      IHandle<MovieRenamedEvent>
     {
@@ -117,6 +118,11 @@ namespace NzbDrone.Core.Organizer
         }
 
         public void Handle(MovieEditedEvent message)
+        {
+            _pathCache.Clear();
+        }
+
+        public void Handle(MoviesBulkEditedEvent message)
         {
             _pathCache.Clear();
         }

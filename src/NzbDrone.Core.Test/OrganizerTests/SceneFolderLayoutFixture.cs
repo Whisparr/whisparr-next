@@ -134,6 +134,22 @@ namespace NzbDrone.Core.Test.OrganizerTests
             Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
         }
 
+        [Test]
+        public void path_cache_is_cleared_on_movies_bulk_edited_event()
+        {
+            GivenEntries(Entry(1, "/media/scenes/Studio/A", ItemType.Scene));
+
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+
+            Subject.Handle(new MoviesBulkEditedEvent(new List<Movie>()));
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+        }
+
         private void GivenEntries(params MoviePathEntry[] entries)
         {
             Mocker.GetMock<IMovieService>()
