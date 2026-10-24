@@ -94,12 +94,12 @@ namespace NzbDrone.Core.Test.OrganizerTests
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
 
             Subject.Handle(new MovieFileAddedEvent(new MovieFile()));
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
         }
 
         [Test]
@@ -115,7 +115,7 @@ namespace NzbDrone.Core.Test.OrganizerTests
             Subject.GetItemsTouchingFolder("/media/scenes/Studio").Select(e => e.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
             Subject.GetItemsTouchingFolder("/media/scenes/Studio");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
         }
 
         [Test]
@@ -182,12 +182,12 @@ namespace NzbDrone.Core.Test.OrganizerTests
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
 
             Subject.Handle(new MovieEditedEvent(new Movie(), new Movie()));
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
         }
 
         [Test]
@@ -198,17 +198,17 @@ namespace NzbDrone.Core.Test.OrganizerTests
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
 
             Subject.Handle(new MoviesBulkEditedEvent(new List<Movie>()));
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
         }
 
         private void GivenEntries(params MoviePathEntry[] entries)
         {
-            Mocker.GetMock<IMovieService>()
+            Mocker.GetMock<IMovieRepository>()
                   .Setup(s => s.AllMoviePathEntries())
                   .Returns(new List<MoviePathEntry>(entries));
         }

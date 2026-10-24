@@ -42,16 +42,17 @@ namespace NzbDrone.Core.Organizer
         private static readonly string[] SceneLevelPrefixes = { "Scene ", "Scene.", "Scene-", "Scene_", "Release ", "Release.", "Release-", "Release_", "Movie ", "Movie.", "Movie-", "Movie_", "Original ", "Original.", "Original-", "Original_" };
         private static readonly string[] SceneLevelIds = { "StashId", "TmdbId", "ImdbId" };
 
-        private readonly IMovieService _movieService;
+        // The repository, not the service: MediaFileService depends on this class, and the service reaches it again
+        private readonly IMovieRepository _movieRepository;
         private readonly INamingConfigService _namingConfigService;
         private readonly ICached<List<MoviePathEntry>> _pathCache;
         private readonly ICached<bool> _flatCache;
 
-        public SceneFolderLayout(IMovieService movieService,
+        public SceneFolderLayout(IMovieRepository movieRepository,
                                  INamingConfigService namingConfigService,
                                  ICacheManager cacheManager)
         {
-            _movieService = movieService;
+            _movieRepository = movieRepository;
             _namingConfigService = namingConfigService;
             _pathCache = cacheManager.GetCache<List<MoviePathEntry>>(GetType());
             _flatCache = cacheManager.GetCache<bool>(GetType(), "flat");
@@ -184,7 +185,7 @@ namespace NzbDrone.Core.Organizer
 
         private List<MoviePathEntry> AllPathEntries()
         {
-            return _pathCache.Get("all", () => _movieService.AllMoviePathEntries(), TimeSpan.FromMinutes(5));
+            return _pathCache.Get("all", () => _movieRepository.AllMoviePathEntries(), TimeSpan.FromMinutes(5));
         }
     }
 }
