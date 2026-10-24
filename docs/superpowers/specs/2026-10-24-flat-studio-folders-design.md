@@ -83,7 +83,10 @@ Working today: organising video files into the flat folder (the file and `Movie.
 - **A scene owns a video file** when one of these holds:
   1. it has a `MovieFile` row whose path is that file; or
   2. the file identifies as that scene. The order is D's: the parser (`FindScene` with this studio), then an oshash match (the local `MovieFiles.OsHash`, then the fingerprint lookup's Hash tier).
-- **A scene owns a non-video file** only when it's tracked as that scene's extra/metadata file, or when its name starts with the base name of a video file the scene owns **followed by a boundary** (`.`, `-` or the end of the name). So `Title.en.srt` and `Title-poster.jpg` match `Title.mp4`, but `Title 2.nfo` doesn't. When several owned base names match, the longest wins; a tie leaves the file unowned (my call). The import-time test in `OtherExtraService`/`SubtitleService.ImportFiles` (a plain `StartsWith`) gets the same boundary rule.
+- **A scene owns a non-video file** when it's tracked as that scene's extra/metadata file, or when one of these holds. **Reuse v2's approach rather than inventing a new one.**
+  1. **The sidecar's own name identifies the scene.** This is v2's `ExistingSubtitleImporter`, `ExistingOtherExtraImporter` and `ExistingMetadataImporter` (`~/Git/Whisparrv2/src/NzbDrone.Core/Extras/`). They parse each sidecar's name through the same identification as video files, link it to that item's file, and skip it when the name maps to more than one file. The v5 importers get the same shape, with the parser plus `FindScene` in place of v2's episode aggregation.
+  2. **Fallback, when the name doesn't parse:** it starts with the base name of a video file the scene owns, **followed by a boundary** (`.`, `-` or the end of the name). So `Title.en.srt` and `Title-poster.jpg` match `Title.mp4`, but `Title 2.nfo` doesn't. When several owned base names match, the longest wins; a tie leaves the file unowned (my call).
+- **The import-time sidecar test** in `OtherExtraService`/`SubtitleService.ImportFiles` (a plain `StartsWith`, the same in v2) gets the boundary rule. v2 rarely needs it because `S01E01` names are seldom prefixes of each other; scene titles can be.
 - **A file that identifies as a scene that already has a file** goes through the same import decision rules an exclusive folder applies today: upgrade, or rejected as not an upgrade. No new duplicate handling (my call).
 - **Generic-named files in a shared folder belong to no scene.** Examples: `movie.nfo`, `poster.jpg`, `fanart.jpg`. Whisparr never claims, renames or deletes them.
 - **A file that identifies as no scene, or as more than one, is left alone.** It's never imported into the scene being scanned.
@@ -112,7 +115,7 @@ Working today: organising video files into the flat folder (the file and `Movie.
 - **Fix the extras move on rename** (finding 4, every layout):
   - Resolve each extra's current location from the folder the scene was in before the rename, not the new `movie.Path`. `MovieFileRenamedEvent`/`MovieRenamedEvent` already carry the previous paths.
   - Move and rename owned extras next to the video file.
-- **Metadata consumers in a shared folder** write per-file names only:
+- **Metadata consumers in a shared folder** write per-file names only, following v2's per-file Kodi naming but **movie-style** (plz12345's decision: a `<movie>` nfo, never v2's TV-style `tvshow.nfo`/`<episodedetails>`):
   - Kodi `UseMovieNfo` is ignored there, so the file is `<file>.nfo`.
   - Movie images become `<file>-<type>.<ext>`, a Kodi-supported form that `MovieFileImageRegex` already recognises.
   - Every other consumer (WDTV, Roksbox, MediaBrowser, Kometa) must either write a per-file name or skip folder-level files in a shared folder. It must never write one shared file for several scenes. The builder audits each consumer.
@@ -130,7 +133,7 @@ Working today: organising video files into the flat folder (the file and `Movie.
 ### Delete and move
 
 - **Deleting a scene with "delete files" in a shared folder** recycles that scene's owned video files and owned extras, then removes empty folders. It never recycles the folder.
-- **The shared-path guard in `HandleAsync(MoviesDeletedEvent)`** compares against **every item in the DB**, not just the deleted batch. It applies to movies too. That's a correctness fix that keeps movie behaviour identical when no paths are shared.
+- **The shared-path guard in `HandleAsync(MoviesDeletedEvent)`** compares against **every item in the DB**, not just the deleted batch. This is v2's guard (`MediaFileDeletionService.HandleAsync(SeriesDeletedEvent)`, which uses `GetAllSeriesPaths`), ported as is. It applies to movies too. That's a correctness fix that keeps movie behaviour identical when no paths are shared.
 - **`DeleteMovieFilesCommand`** is already per file and stays so.
 - **`MoveMovieService`** (changing a scene's root folder or path, single or bulk) moves owned files and extras one by one in a shared folder, never `TransferFolder` on the shared folder. Exclusive folders keep the folder move.
 
