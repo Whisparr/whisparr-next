@@ -19,6 +19,7 @@ using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles
@@ -46,11 +47,17 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IRootFolderService _rootFolderService;
         private readonly IUpdateMediaInfo _updateMediaInfoService;
         private readonly IVideoHashService _videoHashService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly ISharedFolderScanner _sharedFolderScanner;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
         // Per-movie in-process locks to ensure Scan runs only one concurrent scan per movie.Id
         private static readonly ConcurrentDictionary<int, SemaphoreSlim> ScanLocks = new ConcurrentDictionary<int, SemaphoreSlim>();
+
+        // Per-folder locks so sibling scenes sharing a folder never import the same file twice. Always taken after the
+        // movie lock. Entries are never removed: dropping one while a waiter holds it would let two scans in at once.
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> FolderLocks = new ConcurrentDictionary<string, SemaphoreSlim>(PathEqualityComparer.Instance);
 
         public DiskScanService(IDiskProvider diskProvider,
                                IMakeImportDecision importDecisionMaker,
@@ -63,9 +70,13 @@ namespace NzbDrone.Core.MediaFiles
                                IRootFolderService rootFolderService,
                                IUpdateMediaInfo updateMediaInfoService,
                                IVideoHashService videoHashService,
+                               ISceneFolderLayout sceneFolderLayout,
+                               ISharedFolderScanner sharedFolderScanner,
                                IEventAggregator eventAggregator,
                                Logger logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
+            _sharedFolderScanner = sharedFolderScanner;
             _diskProvider = diskProvider;
             _importDecisionMaker = importDecisionMaker;
             _importApprovedMovies = importApprovedMovies;
@@ -154,7 +165,9 @@ namespace NzbDrone.Core.MediaFiles
                 videoFilesStopwatch.Stop();
                 _logger.Trace("Finished getting movie files for: {0} [{1}]", movie, videoFilesStopwatch.Elapsed);
 
-                RelinkRenamedFiles(movie, mediaFileList);
+                var shared = movie.Path.IsNotNullOrWhiteSpace() && _sceneFolderLayout.IsShared(movie);
+
+                RelinkRenamedFiles(movie, mediaFileList, shared);
 
                 CleanMediaFiles(movie, mediaFileList);
 
@@ -162,10 +175,21 @@ namespace NzbDrone.Core.MediaFiles
                 var unmappedFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
 
                 var decisionsStopwatch = Stopwatch.StartNew();
-                var decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
-                decisionsStopwatch.Stop();
-                _logger.Trace("Import decisions complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
-                _importApprovedMovies.Import(decisions, false);
+                List<ImportDecision> decisions;
+
+                if (shared)
+                {
+                    decisions = IdentifyAndImportOwned(movie, unmappedFiles);
+                    decisionsStopwatch.Stop();
+                    _logger.Trace("Shared folder import complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
+                }
+                else
+                {
+                    decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
+                    decisionsStopwatch.Stop();
+                    _logger.Trace("Import decisions complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
+                    _importApprovedMovies.Import(decisions, false);
+                }
 
                 // Update existing files that have a different file size
                 var fileInfoStopwatch = Stopwatch.StartNew();
@@ -216,9 +240,18 @@ namespace NzbDrone.Core.MediaFiles
                     var existingUnmappedFiles = _mediaFileRepository.GetUnmappedFiles();
                     if (existingUnmappedFiles != null)
                     {
+                        // In a shared folder only the files this scan imported count; a row for a sibling's file stays
+                        var importedPaths = shared
+                            ? decisions.Where(d => d.Approved).Select(d => d.LocalMovie.Path).ToList()
+                            : null;
+
                         foreach (var unmappedFile in existingUnmappedFiles)
                         {
-                            if (unmappedFile.OriginalFilePath.Contains(movie.Path))
+                            var owned = shared
+                                ? importedPaths.Contains(unmappedFile.OriginalFilePath, PathEqualityComparer.Instance)
+                                : unmappedFile.OriginalFilePath.Contains(movie.Path);
+
+                            if (owned)
                             {
                                 var reason = DeleteMediaFileReason.Manual;
                                 _mediaFileRepository.Delete(unmappedFile);
@@ -316,7 +349,35 @@ namespace NzbDrone.Core.MediaFiles
         /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
         /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
         /// </summary>
-        private void RelinkRenamedFiles(Movie movie, List<string> mediaFileList)
+        private List<ImportDecision> IdentifyAndImportOwned(Movie movie, List<string> unmappedFiles)
+        {
+            var folderLock = FolderLocks.GetOrAdd(movie.Path, _ => new SemaphoreSlim(1, 1));
+
+            _logger.Trace("Acquiring folder scan lock for {0}", movie.Path);
+            folderLock.Wait();
+            try
+            {
+                var decisions = _sharedFolderScanner.IdentifyOwned(movie, unmappedFiles);
+                _importApprovedMovies.Import(decisions, false);
+
+                return decisions;
+            }
+            finally
+            {
+                try
+                {
+                    folderLock.Release();
+                }
+                catch (SemaphoreFullException)
+                {
+                    // Shouldn't happen, but guard against releasing too many times.
+                }
+
+                _logger.Trace("Released folder scan lock for {0}", movie.Path);
+            }
+        }
+
+        private void RelinkRenamedFiles(Movie movie, List<string> mediaFileList, bool shared)
         {
             var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
             var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
@@ -334,6 +395,17 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             var newFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
+
+            if (shared)
+            {
+                // A sibling's tracked file is not up for re-linking, even when its hash matches
+                var siblingFiles = _sceneFolderLayout.GetItemsInFolder(movie.Path)
+                    .Where(i => i.Id != movie.Id)
+                    .SelectMany(i => _mediaFileService.GetFilesByMovie(i.Id).Select(f => Path.Combine(i.Path, f.RelativePath)))
+                    .ToList();
+
+                newFiles = newFiles.Except(siblingFiles, PathEqualityComparer.Instance).ToList();
+            }
 
             if (newFiles.Count == 0)
             {

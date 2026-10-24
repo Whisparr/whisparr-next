@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Cache;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -33,6 +34,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
+        List<string> FilterFilesTrackedByAnyItem(List<string> files);
         MovieFile GetMovie(int id);
         List<MovieFile> GetMovies(IEnumerable<int> ids);
         List<MovieFile> GetFilesWithBasePath(string path);
@@ -215,6 +217,22 @@ namespace NzbDrone.Core.MediaFiles
             return files.Except(movieFiles, PathEqualityComparer.Instance).ToList();
 
             // return files;
+        }
+
+        // Drops files a MovieFile row points at, for any item (movies included). Unlike FilterExistingFiles,
+        // unmapped rows (MovieId 0) don't count, so those files stay candidates, and nothing is deleted.
+        public List<string> FilterFilesTrackedByAnyItem(List<string> files)
+        {
+            var moviePaths = _movieRepository.AllMoviePathEntries()
+                .Where(e => e.Path.IsNotNullOrWhiteSpace())
+                .ToDictionary(e => e.Id, e => e.Path);
+
+            var tracked = _mediaFileRepository.GetAllFiles()
+                .Where(f => f.MovieId > 0 && f.RelativePath.IsNotNullOrWhiteSpace() && moviePaths.ContainsKey(f.MovieId))
+                .Select(f => Path.Combine(moviePaths[f.MovieId], f.RelativePath))
+                .ToList();
+
+            return files.Except(tracked, PathEqualityComparer.Instance).ToList();
         }
 
         public List<MovieFile> GetMovies(IEnumerable<int> ids)
