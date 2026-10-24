@@ -28,7 +28,13 @@ namespace NzbDrone.Core.Validation.Paths
 
             context.MessageFormatter.AppendArgument("path", value);
 
-            return !_movieService.AllMoviePaths().Any(s => value.IsParentPath(s.Value));
+            // A scene may contain any item's folder; only a movie must not.
+            if (ValidatedItemType.IsScene(context.InstanceToValidate))
+            {
+                return true;
+            }
+
+            return !_movieService.AllMoviePathEntries().Any(s => value.IsParentPath(s.Path));
         }
     }
 }

@@ -32,10 +32,13 @@ namespace NzbDrone.Core.Validation.Paths
 
             context.MessageFormatter.AppendArgument("path", value);
 
-            // Skip the path for this movie and any invalid paths
-            return !_moviesService.AllMoviePaths().Any(s => s.Key != instanceId &&
-                                                            s.Value.IsPathValid(PathValidationType.CurrentOs) &&
-                                                            s.Value.PathEquals(value));
+            var instanceIsScene = ValidatedItemType.IsScene(instance);
+
+            // Skip the path for this movie and any invalid paths. Scenes may share a path with other scenes.
+            return !_moviesService.AllMoviePathEntries().Any(s => s.Id != instanceId &&
+                                                                  !(instanceIsScene && s.ItemType == ItemType.Scene) &&
+                                                                  s.Path.IsPathValid(PathValidationType.CurrentOs) &&
+                                                                  s.Path.PathEquals(value));
         }
     }
 }
