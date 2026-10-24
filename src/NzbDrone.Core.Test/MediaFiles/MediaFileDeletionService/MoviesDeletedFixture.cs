@@ -221,6 +221,63 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
             });
         }
 
+        private static List<Movie> GivenStudioScenes()
+        {
+            return Enumerable.Range(1, 3)
+                             .Select(i =>
+                             {
+                                 var scene = Builder<Movie>.CreateNew().With(m => m.Id = i).With(m => m.Path = SharedPath).Build();
+                                 scene.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+                                 return scene;
+                             })
+                             .ToList();
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void bulk_delete_of_whole_studio_folder_never_recycles_the_folder(bool captureThrows)
+        {
+            var scenes = GivenStudioScenes();
+            var owned = new Dictionary<int, List<string>>();
+
+            // The batch's own rows are gone by now
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+
+            if (captureThrows)
+            {
+                Mocker.GetMock<IMediaFileService>()
+                      .Setup(s => s.GetFilesByMovie(2))
+                      .Throws(new System.InvalidOperationException("db"));
+
+                var deleting = new MoviesDeletingEvent(scenes);
+
+                Subject.Handle(deleting);
+                owned = deleting.OwnedFilePaths;
+            }
+
+            Subject.HandleAsync(new MoviesDeletedEvent(scenes, true, false, owned));
+
+            Mocker.GetMock<IRecycleBinProvider>()
+                  .Verify(v => v.DeleteFolder(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void batch_scenes_sharing_a_path_never_recycle_it_in_a_per_scene_format()
+        {
+            var scenes = GivenStudioScenes();
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(false);
+
+            Subject.HandleAsync(new MoviesDeletedEvent(scenes, true, false));
+
+            Mocker.GetMock<IRecycleBinProvider>()
+                  .Verify(v => v.DeleteFolder(It.IsAny<string>()), Times.Never());
+        }
+
         [Test]
         public void should_recycle_folder_when_no_other_item_shares_it()
         {

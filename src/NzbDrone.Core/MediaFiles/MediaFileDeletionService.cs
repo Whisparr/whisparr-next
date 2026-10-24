@@ -215,21 +215,30 @@ namespace NzbDrone.Core.MediaFiles
         {
             foreach (var movie in message.Movies)
             {
-                if (!_sceneFolderLayout.IsShared(movie))
+                try
                 {
-                    continue;
+                    if (movie.Path.IsNullOrWhiteSpace() || !_sceneFolderLayout.IsShared(movie))
+                    {
+                        continue;
+                    }
+
+                    var relativePaths = _mediaFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath)
+                        .Concat(_subtitleFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                        .Concat(_otherExtraFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                        .Concat(_metadataFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath));
+
+                    message.OwnedFilePaths[movie.Id] = relativePaths
+                        .Where(p => p.IsNotNullOrWhiteSpace())
+                        .Select(p => Path.Combine(movie.Path, p))
+                        .Distinct()
+                        .ToList();
                 }
-
-                var relativePaths = _mediaFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath)
-                    .Concat(_subtitleFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
-                    .Concat(_otherExtraFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
-                    .Concat(_metadataFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath));
-
-                message.OwnedFilePaths[movie.Id] = relativePaths
-                    .Where(p => p.IsNotNullOrWhiteSpace())
-                    .Select(p => Path.Combine(movie.Path, p))
-                    .Distinct()
-                    .ToList();
+                catch (Exception ex)
+                {
+                    // Fail closed: an empty entry keeps this scene on the owned-files path, never the folder recycle
+                    _logger.Warn(ex, "Unable to capture owned files for {0}, none of its files will be deleted", movie);
+                    message.OwnedFilePaths[movie.Id] = new List<string>();
+                }
             }
         }
 
@@ -248,7 +257,14 @@ namespace NzbDrone.Core.MediaFiles
                         continue;
                     }
 
-                    if (IsPathUsedByAnotherMovie(movie, allMoviePaths))
+                    // No capture entry for a scene in a flat layout means sharing wasn't established: never recycle the folder
+                    if (movie.MovieMetadata.Value.ItemType == ItemType.Scene && _sceneFolderLayout.IsFlat())
+                    {
+                        _logger.Warn("Movie path: '{0}' is a flat scene folder with no captured files, not deleting the folder.", movie.Path);
+                        continue;
+                    }
+
+                    if (IsPathUsedByAnotherMovie(movie, allMoviePaths) || IsPathUsedByBatchPeer(movie, message.Movies))
                     {
                         continue;
                     }
@@ -306,6 +322,14 @@ namespace NzbDrone.Core.MediaFiles
             {
                 _diskProvider.DeleteFolder(movie.Path, true);
             }
+        }
+
+        // The batch's own rows are already gone from the table, so peers are checked from the event.
+        private static bool IsPathUsedByBatchPeer(Movie movie, List<Movie> batch)
+        {
+            return batch.Any(other => other.Id != movie.Id &&
+                                      other.Path.IsNotNullOrWhiteSpace() &&
+                                      (movie.Path.PathEquals(other.Path) || movie.Path.IsParentPath(other.Path)));
         }
 
         private bool IsPathUsedByAnotherMovie(Movie movie, Dictionary<int, string> allMoviePaths)
