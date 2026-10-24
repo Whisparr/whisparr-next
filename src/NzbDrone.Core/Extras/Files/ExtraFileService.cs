@@ -105,7 +105,8 @@ namespace NzbDrone.Core.Extras.Files
             var movieFile = message.MovieFile;
 
             var deleteFromDisk = message.Reason == DeleteMediaFileReason.Manual
-                                 || message.Reason == DeleteMediaFileReason.Upgrade;
+                                 || message.Reason == DeleteMediaFileReason.Upgrade
+                                 || message.Reason == DeleteMediaFileReason.ManualOverride;
 
             if (!deleteFromDisk || message.MovieFile.MovieId == 0)
             {

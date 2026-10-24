@@ -87,6 +87,18 @@ namespace NzbDrone.Core.Test.Extras.Files
         }
 
         [Test]
+        public void should_recycle_extras_when_reason_is_manual_override()
+        {
+            Delete(DeleteMediaFileReason.ManualOverride);
+
+            Mocker.GetMock<IRecycleBinProvider>()
+                  .Verify(v => v.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Once());
+
+            Mocker.GetMock<IExtraFileRepository<SubtitleFile>>()
+                  .Verify(v => v.DeleteForMovieFile(_movieFile.Id), Times.Once());
+        }
+
+        [Test]
         public void should_recycle_extras_when_reason_is_upgrade()
         {
             Delete(DeleteMediaFileReason.Upgrade);
