@@ -5,6 +5,7 @@ using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.Validation;
 using Whisparr.Http;
 using Whisparr.Http.REST;
 using Whisparr.Http.REST.Attributes;
@@ -32,6 +33,8 @@ namespace Whisparr.Api.V3.Config
             SharedValidator.RuleFor(c => c.StandardSceneFormat).ValidSceneFormat();
             SharedValidator.RuleFor(c => c.SceneFolderFormat).ValidSceneFolderFormat();
             SharedValidator.RuleFor(c => c.SceneFolderFormat).ValidMainSceneFolderFormat();
+            SharedValidator.RuleFor(c => c.SceneFolderFormat).NotCollidingWithMainFolders(c => c.MovieFolderFormat, c => c.SceneImportFolderFormat);
+            SharedValidator.RuleFor(c => c.StandardSceneFormat).FlatSceneFolderKeepsFileNamesUnique(c => c.SceneFolderFormat).AsWarning();
             SharedValidator.RuleFor(c => c.SceneImportFolderFormat).ValidSceneImportFolderFormat();
         }
 

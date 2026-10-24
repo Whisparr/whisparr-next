@@ -1,13 +1,21 @@
+using System;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using FluentValidation;
 using FluentValidation.Validators;
+using NzbDrone.Common;
 using NzbDrone.Common.Extensions;
 
 namespace NzbDrone.Core.Organizer
 {
     public static class FileNameValidation
     {
+        private static readonly char[] PathSeparators = { '/', '\\' };
+
+        // Matches the token as the name builder reads it: optional prefix, any separator, any case.
+        private static readonly Regex UniqueFileNameTokenRegex = new(@"\{[- ._\[(]*(Release[- ._]+Date|Scene[- ._]+ForeignId)", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
         public static IRuleBuilderOptions<T, string> ValidMovieFolderFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
         {
             ruleBuilder.NotEmpty();
@@ -45,12 +53,41 @@ namespace NzbDrone.Core.Organizer
         public static IRuleBuilderOptions<T, string> ValidMainSceneFolderFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
         {
             ruleBuilder.NotEmpty();
-            ruleBuilder.SetValidator(new IllegalCharactersValidator<T>());
-            ruleBuilder.Matches(FileNameBuilder.MainFolderRegex)
-                       .WithMessage("Must start with a relative path inside root folder, ex. 'scenes/'");
-            return ruleBuilder.Must(value =>
-                value is string s && FileNameBuilder.SceneTitleTokenRegex.IsMatch(s))
-                    .WithMessage("Must contain a Scene Title naming token, ex. {Scene CleanTitle}");
+            return ruleBuilder.SetValidator(new IllegalCharactersValidator<T>());
+        }
+
+        public static IRuleBuilderOptions<T, string> NotCollidingWithMainFolders<T>(this IRuleBuilder<T, string> ruleBuilder, Func<T, string> movieFolderFormat, Func<T, string> sceneImportFolderFormat)
+        {
+            return ruleBuilder.Must((root, value) =>
+            {
+                var first = FirstSegment(value);
+
+                if (first.IsNullOrWhiteSpace() || first.Contains('{'))
+                {
+                    return true;
+                }
+
+                return !first.Equals(FirstSegment(movieFolderFormat(root)), StringComparison.OrdinalIgnoreCase) &&
+                       !first.Equals(FirstSegment(sceneImportFolderFormat(root)), StringComparison.OrdinalIgnoreCase);
+            }).WithMessage("Must not start with the movie or scene import folder");
+        }
+
+        public static IRuleBuilderOptions<T, string> FlatSceneFolderKeepsFileNamesUnique<T>(this IRuleBuilder<T, string> ruleBuilder, Func<T, string> sceneFolderFormat)
+        {
+            return ruleBuilder.Must((root, value) =>
+            {
+                if (!SceneFolderLayout.FormatIsFlat(sceneFolderFormat(root)))
+                {
+                    return true;
+                }
+
+                return value != null && UniqueFileNameTokenRegex.IsMatch(value);
+            }).WithMessage("Flat scene folders need {Release Date} or {Scene ForeignId} in the scene file format to keep file names unique");
+        }
+
+        private static string FirstSegment(string format)
+        {
+            return (format ?? string.Empty).Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         }
 
         public static IRuleBuilderOptions<T, string> ValidSceneImportFolderFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
