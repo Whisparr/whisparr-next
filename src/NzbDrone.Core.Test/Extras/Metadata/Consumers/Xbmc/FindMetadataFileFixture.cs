@@ -25,6 +25,17 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Xbmc
         }
 
         [Test]
+        public void should_return_movie_image_for_per_file_poster()
+        {
+            var path = Path.Combine(_movie.Path, "Studio - Scene Title (2026)-poster.jpg");
+
+            var result = Subject.FindMetadataFile(_movie, path);
+
+            result.Type.Should().Be(MetadataType.MovieImage);
+            result.RelativePath.Should().Be("Studio - Scene Title (2026)-poster.jpg");
+        }
+
+        [Test]
         public void should_return_null_if_filename_is_not_handled()
         {
             var path = Path.Combine(_movie.Path, "file.jpg");

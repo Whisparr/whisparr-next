@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Xml.Linq;
 using FluentAssertions;
@@ -7,10 +9,13 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Consumers.Xbmc;
+using NzbDrone.Core.Extras.Metadata.Files;
+using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -110,6 +115,112 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Xbmc
 
             result.Contents.Should().Contain(expectedUrl);
             result.Contents.Should().NotContain(otherHost);
+        }
+
+        [Test]
+        public void should_write_per_file_nfo_in_shared_folder_even_with_use_movie_nfo()
+        {
+            GivenSharedFolder();
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieMetadata = true, UseMovieNfo = true };
+
+            var result = Subject.MovieMetadata(_movie, _movieFile);
+
+            result.RelativePath.Should().Be("Bratty Sis - Stepsis Has A New Fetish (2026).nfo");
+            XDocument.Parse(result.Contents).Root.Name.LocalName.Should().Be("movie");
+        }
+
+        [Test]
+        public void should_write_movie_nfo_in_exclusive_folder_with_use_movie_nfo()
+        {
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieMetadata = true, UseMovieNfo = true };
+
+            var result = Subject.MovieMetadata(_movie, _movieFile);
+
+            result.RelativePath.Should().Be("movie.nfo");
+        }
+
+        [Test]
+        public void should_write_per_file_images_in_shared_folder()
+        {
+            GivenSharedFolder();
+            GivenImages();
+
+            var images = Subject.MovieImages(_movie, _movieFile);
+
+            images.Select(i => i.RelativePath).Should().BeEquivalentTo(
+                "Bratty Sis - Stepsis Has A New Fetish (2026)-poster.jpg",
+                "Bratty Sis - Stepsis Has A New Fetish (2026)-fanart.jpg");
+        }
+
+        [Test]
+        public void should_write_no_images_in_shared_folder_without_a_file()
+        {
+            GivenSharedFolder();
+            GivenImages();
+
+            Subject.MovieImages(_movie, null).Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_write_folder_level_images_in_exclusive_folder()
+        {
+            GivenImages();
+
+            var images = Subject.MovieImages(_movie, _movieFile);
+
+            images.Select(i => i.RelativePath).Should().BeEquivalentTo("poster.jpg", "fanart.jpg");
+        }
+
+        [Test]
+        public void should_rename_per_file_image_with_its_video()
+        {
+            GivenSharedFolder();
+
+            var metadataFile = new MetadataFile
+            {
+                MovieFileId = 7,
+                Type = MetadataType.MovieImage,
+                RelativePath = "Old Name-poster.jpg"
+            };
+
+            var path = Subject.GetFilenameAfterMove(_movie, _movieFile, metadataFile);
+
+            path.Should().Be(Path.Combine(_movie.Path, "Bratty Sis - Stepsis Has A New Fetish (2026)-poster.jpg"));
+        }
+
+        [Test]
+        public void should_move_tracked_movie_nfo_to_per_file_nfo_in_shared_folder()
+        {
+            GivenSharedFolder();
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieMetadata = true, UseMovieNfo = true };
+
+            var metadataFile = new MetadataFile { Type = MetadataType.MovieMetadata, RelativePath = "movie.nfo" };
+
+            var path = Subject.GetFilenameAfterMove(_movie, _movieFile, metadataFile);
+
+            path.Should().Be(Path.Combine(_movie.Path, "Bratty Sis - Stepsis Has A New Fetish (2026).nfo"));
+        }
+
+        private void GivenSharedFolder()
+        {
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.IsShared(It.IsAny<Movie>()))
+                  .Returns(true);
+        }
+
+        private void GivenImages()
+        {
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieImages = true };
+
+            _movie.MovieMetadata.Value.Images = new List<MediaCover.MediaCover>
+            {
+                new() { CoverType = MediaCoverTypes.Poster },
+                new() { CoverType = MediaCoverTypes.Fanart }
+            };
+
+            Mocker.GetMock<IMapCoversToLocal>()
+                  .Setup(s => s.GetMovieCoverPath(It.IsAny<int>(), It.IsAny<MediaCoverTypes>()))
+                  .Returns<int, MediaCoverTypes, int?>((_, type, _) => $"/covers/{type.ToString().ToLowerInvariant()}.jpg");
         }
 
         private XElement GetStudioElement()

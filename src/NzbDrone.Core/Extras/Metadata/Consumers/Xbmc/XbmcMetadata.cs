@@ -17,6 +17,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Tags;
 
 namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
@@ -36,14 +37,17 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
         private readonly IDiskProvider _diskProvider;
         private readonly ICreditService _creditService;
         private readonly ITagRepository _tagRepository;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
 
         public XbmcMetadata(IDetectXbmcNfo detectNfo,
                             IDiskProvider diskProvider,
                             IMapCoversToLocal mediaCoverService,
                             ICreditService creditService,
                             ITagRepository tagRepository,
+                            ISceneFolderLayout sceneFolderLayout,
                             Logger logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
             _logger = logger;
             _mediaCoverService = mediaCoverService;
             _diskProvider = diskProvider;
@@ -60,7 +64,18 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
             if (metadataFile.Type == MetadataType.MovieMetadata)
             {
-                return GetMovieMetadataFilename(movieFilePath);
+                return GetMovieMetadataFilename(movie, movieFilePath);
+            }
+
+            // A per-file image (tracked against its video file) keeps its -<type> suffix and follows the video
+            if (metadataFile.Type == MetadataType.MovieImage && metadataFile.MovieFileId > 0)
+            {
+                var match = MovieFileImageRegex.Match(metadataFile.RelativePath);
+
+                if (match.Success)
+                {
+                    return Path.ChangeExtension(movieFilePath, null) + match.Value;
+                }
             }
 
             _logger.Debug("Unknown movie file metadata: {0}", metadataFile.RelativePath);
@@ -402,35 +417,49 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                 }
             }
 
-            var metadataFileName = GetMovieMetadataFilename(movieFile.RelativePath);
+            var metadataFileName = GetMovieMetadataFilename(movie, movieFile.RelativePath);
 
             return string.IsNullOrEmpty(xmlResult) ? null : new MetadataFileResult(metadataFileName, xmlResult.Trim(Environment.NewLine.ToCharArray()));
         }
 
-        public override List<ImageFileResult> MovieImages(Movie movie)
+        public override List<ImageFileResult> MovieImages(Movie movie, MovieFile movieFile)
         {
             if (!Settings.MovieImages)
             {
                 return new List<ImageFileResult>();
             }
 
-            return ProcessMovieImages(movie).ToList();
+            // Shared folder: per-file names (<file>-poster.jpg); nothing without a file to name them after
+            var shared = _sceneFolderLayout.IsShared(movie);
+
+            if (shared && movieFile == null)
+            {
+                return new List<ImageFileResult>();
+            }
+
+            return ProcessMovieImages(movie, shared ? movieFile : null).ToList();
         }
 
-        private IEnumerable<ImageFileResult> ProcessMovieImages(Movie movie)
+        private IEnumerable<ImageFileResult> ProcessMovieImages(Movie movie, MovieFile perFileMovieFile)
         {
             foreach (var image in movie.MovieMetadata.Value.Images)
             {
                 var source = _mediaCoverService.GetMovieCoverPath(movie.Id, image.CoverType);
-                var destination = image.CoverType.ToString().ToLowerInvariant() + Path.GetExtension(source);
+                var type = image.CoverType.ToString().ToLowerInvariant();
+                var extension = Path.GetExtension(source);
+
+                var destination = perFileMovieFile == null
+                    ? type + extension
+                    : Path.ChangeExtension(perFileMovieFile.RelativePath, null) + "-" + type + extension;
 
                 yield return new ImageFileResult(destination, source);
             }
         }
 
-        private string GetMovieMetadataFilename(string movieFilePath)
+        private string GetMovieMetadataFilename(Movie movie, string movieFilePath)
         {
-            if (Settings.UseMovieNfo)
+            // UseMovieNfo is ignored in a shared folder: one movie.nfo would be overwritten by every scene
+            if (Settings.UseMovieNfo && !_sceneFolderLayout.IsShared(movie))
             {
                 return Path.Combine(Path.GetDirectoryName(movieFilePath), "movie.nfo");
             }
@@ -442,7 +471,7 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
         private bool GetExistingWatchedStatus(Movie movie, string movieFilePath)
         {
-            var fullPath = Path.Combine(movie.Path, GetMovieMetadataFilename(movieFilePath));
+            var fullPath = Path.Combine(movie.Path, GetMovieMetadataFilename(movie, movieFilePath));
 
             if (!_diskProvider.FileExists(fullPath))
             {

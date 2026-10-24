@@ -11,18 +11,22 @@ using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 
 namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
 {
     public class RoksboxMetadata : MetadataBase<RoksboxMetadataSettings>
     {
         private readonly IMapCoversToLocal _mediaCoverService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
 
         public RoksboxMetadata(IMapCoversToLocal mediaCoverService,
+                            ISceneFolderLayout sceneFolderLayout,
                             Logger logger)
         {
             _mediaCoverService = mediaCoverService;
+            _sceneFolderLayout = sceneFolderLayout;
             _logger = logger;
         }
 
@@ -129,9 +133,17 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
             return new MetadataFileResult(GetMovieFileMetadataFilename(movieFile.RelativePath), xmlResult.Trim(Environment.NewLine.ToCharArray()));
         }
 
-        public override List<ImageFileResult> MovieImages(Movie movie)
+        public override List<ImageFileResult> MovieImages(Movie movie, MovieFile movieFile)
         {
             if (!Settings.MovieImages)
+            {
+                return new List<ImageFileResult>();
+            }
+
+            // Shared folder: per-file name (<file>.jpg) instead of the folder-named <folder>.jpg
+            var shared = _sceneFolderLayout.IsShared(movie);
+
+            if (shared && movieFile == null)
             {
                 return new List<ImageFileResult>();
             }
@@ -144,7 +156,9 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
             }
 
             var source = _mediaCoverService.GetMovieCoverPath(movie.Id, image.CoverType);
-            var destination = Path.GetFileName(movie.Path) + Path.GetExtension(source);
+            var destination = shared
+                ? GetMovieFileImageFilename(movieFile.RelativePath)
+                : Path.GetFileName(movie.Path) + Path.GetExtension(source);
 
             return new List<ImageFileResult> { new ImageFileResult(destination, source) };
         }

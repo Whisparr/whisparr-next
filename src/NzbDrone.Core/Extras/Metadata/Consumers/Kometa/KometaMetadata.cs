@@ -8,6 +8,7 @@ using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 
 namespace NzbDrone.Core.Extras.Metadata.Consumers.Kometa
 {
@@ -16,12 +17,14 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Kometa
         private static readonly Regex MovieImagesRegex = new (@"^(?:poster|background)\.(?:png|jpe?g)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private readonly IMapCoversToLocal _mediaCoverService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
 
         public override string Name => "Kometa";
 
-        public KometaMetadata(IMapCoversToLocal mediaCoverService)
+        public KometaMetadata(IMapCoversToLocal mediaCoverService, ISceneFolderLayout sceneFolderLayout)
         {
             _mediaCoverService = mediaCoverService;
+            _sceneFolderLayout = sceneFolderLayout;
         }
 
         public override MetadataFile FindMetadataFile(Movie movie, string path)
@@ -54,9 +57,10 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Kometa
             return null;
         }
 
-        public override List<ImageFileResult> MovieImages(Movie movie)
+        public override List<ImageFileResult> MovieImages(Movie movie, MovieFile movieFile)
         {
-            if (!Settings.MovieImages)
+            // Skipped in a shared folder: poster.jpg/background.jpg are folder-level and Kometa has no per-file form
+            if (!Settings.MovieImages || _sceneFolderLayout.IsShared(movie))
             {
                 return new List<ImageFileResult>();
             }

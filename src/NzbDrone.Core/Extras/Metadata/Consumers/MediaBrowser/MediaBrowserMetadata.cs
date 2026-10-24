@@ -11,6 +11,7 @@ using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.ThingiProvider;
 
 namespace NzbDrone.Core.Extras.Metadata.Consumers.MediaBrowser
@@ -18,11 +19,13 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.MediaBrowser
     public class MediaBrowserMetadata : MetadataBase<MediaBrowserMetadataSettings>
     {
         private readonly ILocalizationService _localizationService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
 
-        public MediaBrowserMetadata(ILocalizationService localizationService, Logger logger)
+        public MediaBrowserMetadata(ILocalizationService localizationService, ISceneFolderLayout sceneFolderLayout, Logger logger)
         {
             _localizationService = localizationService;
+            _sceneFolderLayout = sceneFolderLayout;
             _logger = logger;
         }
 
@@ -62,6 +65,12 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.MediaBrowser
                 return null;
             }
 
+            // Skipped in a shared folder: movie.xml is folder-level and the format has no per-file form
+            if (_sceneFolderLayout.IsShared(movie))
+            {
+                return null;
+            }
+
             _logger.Debug("Generating movie.xml for: {0}", movie.Title);
             var sb = new StringBuilder();
             var xws = new XmlWriterSettings();
@@ -95,7 +104,7 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.MediaBrowser
             }
         }
 
-        public override List<ImageFileResult> MovieImages(Movie movie)
+        public override List<ImageFileResult> MovieImages(Movie movie, MovieFile movieFile)
         {
             return new List<ImageFileResult>();
         }
