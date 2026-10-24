@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using NLog;
+using NzbDrone.Common;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaCover;
@@ -17,6 +19,8 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
 {
     public class RoksboxMetadata : MetadataBase<RoksboxMetadataSettings>
     {
+        private static readonly Regex OtherImageSuffixRegex = new (@"-(?:thumb|poster|banner|fanart|clearart|discart|keyart|landscape|logo|backdrop|clearlogo)$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
         private readonly IMapCoversToLocal _mediaCoverService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
@@ -84,7 +88,13 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
 
                 if (extension == ".jpg")
                 {
-                    if (Path.GetFileNameWithoutExtension(filename).Equals(parentdir.Name, StringComparison.InvariantCultureIgnoreCase) &&
+                    var name = Path.GetFileNameWithoutExtension(filename);
+
+                    // A shared folder has no folder-named jpg: the image is the per-file <file>.jpg (not another consumer's -poster/-thumb)
+                    var isImageName = name.Equals(parentdir.Name, StringComparison.InvariantCultureIgnoreCase) ||
+                                      (_sceneFolderLayout.IsShared(movie) && !OtherImageSuffixRegex.IsMatch(name));
+
+                    if (isImageName &&
                         !path.GetParentName().Equals("metadata", StringComparison.InvariantCultureIgnoreCase))
                     {
                         metadata.Type = MetadataType.MovieImage;

@@ -195,11 +195,79 @@ namespace NzbDrone.Core.Extras.Metadata
                         }
                     }
                 }
+
+                movedFiles.AddRange(MoveFolderLevelImages(consumer, movie, renamedFiles, GetMetadataFilesForConsumer(consumer, metadataFiles)));
             }
 
             _metadataFileService.Upsert(movedFiles);
 
             return movedFiles;
+        }
+
+        // Organise into a shared folder: tracked folder-level images (poster.jpg, folder.jpg, <folder>.jpg) move
+        // beside the video under the per-file name the consumer now writes. Untracked files are never touched.
+        private List<MetadataFile> MoveFolderLevelImages(IMetadata consumer, Movie movie, List<RenamedMovieFile> renamedFiles, List<MetadataFile> consumerFiles)
+        {
+            var moved = new List<MetadataFile>();
+            var folderImages = consumerFiles.Where(m => m.Type == MetadataType.MovieImage && m.MovieFileId == 0).ToList();
+            var renamedFile = renamedFiles.FirstOrDefault();
+
+            if (folderImages.Empty() || renamedFile == null || !_sceneFolderLayout.IsShared(movie))
+            {
+                return moved;
+            }
+
+            var candidates = consumer.MovieImages(movie, renamedFile.MovieFile);
+
+            foreach (var image in folderImages)
+            {
+                var target = MatchPerFileImage(candidates, image.RelativePath);
+
+                if (target == null)
+                {
+                    continue;
+                }
+
+                var existingFileName = GetPreviousPath(image.RelativePath, renamedFile.PreviousPath, renamedFile.PreviousRelativePath);
+                var newFileName = Path.Combine(movie.Path, target.RelativePath);
+
+                if (newFileName.PathEquals(existingFileName))
+                {
+                    continue;
+                }
+
+                if (_diskProvider.FileExists(newFileName))
+                {
+                    _logger.Warn("Metadata image not moved, there is already a file at the destination: {0}", newFileName);
+                    continue;
+                }
+
+                try
+                {
+                    _diskProvider.MoveFile(existingFileName, newFileName);
+                    image.RelativePath = target.RelativePath;
+                    image.MovieFileId = renamedFile.MovieFile.Id;
+                    moved.Add(image);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Unable to move metadata image after rename: {0}", existingFileName);
+                }
+            }
+
+            return moved;
+        }
+
+        private static ImageFileResult MatchPerFileImage(List<ImageFileResult> candidates, string oldRelativePath)
+        {
+            if (candidates.Count == 1)
+            {
+                return candidates[0];
+            }
+
+            var oldName = Path.GetFileNameWithoutExtension(oldRelativePath);
+
+            return candidates.FirstOrDefault(c => Path.GetFileNameWithoutExtension(c.RelativePath).EndsWith("-" + oldName, StringComparison.OrdinalIgnoreCase));
         }
 
         public override bool CanImportFile(LocalMovie localMovie, MovieFile movieFile, string path, string extension, bool readOnly)

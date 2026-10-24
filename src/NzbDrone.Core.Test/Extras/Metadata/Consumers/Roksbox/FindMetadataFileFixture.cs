@@ -1,10 +1,12 @@
 using System.IO;
 using FizzWare.NBuilder;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Consumers.Roksbox;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -53,6 +55,26 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Roksbox
         public void should_not_return_metadata_if_image_file_is_a_thumb()
         {
             var path = Path.Combine(_movie.Path, "the.movie.2011-thumb.jpg");
+
+            Subject.FindMetadataFile(_movie, path).Should().BeNull();
+        }
+
+        [Test]
+        public void should_return_movie_image_for_per_file_jpg_in_shared_folder()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+
+            var path = Path.Combine(_movie.Path, "the.movie.2011.jpg");
+
+            Subject.FindMetadataFile(_movie, path).Type.Should().Be(MetadataType.MovieImage);
+        }
+
+        [Test]
+        public void should_not_claim_other_consumers_image_in_shared_folder()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+
+            var path = Path.Combine(_movie.Path, "the.movie.2011-poster.jpg");
 
             Subject.FindMetadataFile(_movie, path).Should().BeNull();
         }
