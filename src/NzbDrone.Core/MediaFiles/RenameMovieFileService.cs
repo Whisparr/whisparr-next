@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -12,6 +13,7 @@ using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles
 {
@@ -33,6 +35,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IBuildFileNames _filenameBuilder;
         private readonly IDiskProvider _diskProvider;
         private readonly IBuildMoviePaths _buildMoviePaths;
+        private readonly IRootFolderService _rootFolderService;
         private readonly Logger _logger;
 
         public RenameMovieFileService(IMovieService movieService,
@@ -42,6 +45,7 @@ namespace NzbDrone.Core.MediaFiles
                                       IBuildFileNames filenameBuilder,
                                       IDiskProvider diskProvider,
                                       IBuildMoviePaths buildMoviePaths,
+                                      IRootFolderService rootFolderService,
                                       Logger logger)
         {
             _movieService = movieService;
@@ -51,6 +55,7 @@ namespace NzbDrone.Core.MediaFiles
             _filenameBuilder = filenameBuilder;
             _diskProvider = diskProvider;
             _buildMoviePaths = buildMoviePaths;
+            _rootFolderService = rootFolderService;
             _logger = logger;
         }
 
@@ -150,7 +155,7 @@ namespace NzbDrone.Core.MediaFiles
 
                 if (!movieFilePath.PathEquals(newPath, StringComparison.Ordinal))
                 {
-                    yield return new RenameMovieFilePreview
+                    var preview = new RenameMovieFilePreview
                     {
                         MovieId = movie.Id,
                         MovieFileId = file.Id,
@@ -158,6 +163,19 @@ namespace NzbDrone.Core.MediaFiles
 
                         NewPath = movie.Path.GetRelativePath(newPath)
                     };
+
+                    if (!Path.GetDirectoryName(movieFilePath).PathEquals(Path.GetDirectoryName(newPath), StringComparison.Ordinal))
+                    {
+                        var rootFolder = _rootFolderService.GetBestRootFolderPath(movieFilePath);
+
+                        if (rootFolder.IsNotNullOrWhiteSpace())
+                        {
+                            preview.ExistingRootRelativePath = rootFolder.GetRelativePath(movieFilePath);
+                            preview.NewRootRelativePath = rootFolder.GetRelativePath(newPath);
+                        }
+                    }
+
+                    yield return preview;
                 }
             }
         }
@@ -214,9 +232,46 @@ namespace NzbDrone.Core.MediaFiles
                 _diskProvider.RemoveEmptySubfolders(movie.Path);
 
                 _eventAggregator.PublishEvent(new MovieRenamedEvent(movie, renamed));
+
+                // After the event, so the extras have left the old folders
+                RemoveOldFolders(renamed, movie);
             }
 
             return renamed;
+        }
+
+        private void RemoveOldFolders(List<RenamedMovieFile> renamed, Movie movie)
+        {
+            var oldFolders = renamed.Select(r => Path.GetDirectoryName(r.PreviousPath))
+                                    .Where(f => f.IsNotNullOrWhiteSpace() && f.PathNotEquals(movie.Path))
+                                    .Distinct(PathEqualityComparer.Instance)
+                                    .ToList();
+
+            foreach (var oldFolder in oldFolders)
+            {
+                if (!_diskProvider.FolderExists(oldFolder))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _diskProvider.RemoveEmptySubfolders(oldFolder);
+
+                    if (_diskProvider.FolderEmpty(oldFolder))
+                    {
+                        _diskProvider.DeleteFolder(oldFolder, false);
+                    }
+                    else
+                    {
+                        _logger.Info("Left {0} in place, it still holds files", oldFolder);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Unable to remove old folder {0}", oldFolder);
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Disk;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Commands;
@@ -12,6 +13,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -185,6 +187,187 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Mocker.GetMock<IMediaFileService>()
                   .Verify(v => v.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Never());
+        }
+
+        private string _rootFolder;
+        private string _studioFolder;
+        private string _oldFolder;
+
+        private (Movie Movie, MovieFile File) GivenSceneInOwnFolder()
+        {
+            _rootFolder = "/lib".AsOsAgnostic();
+            _studioFolder = Path.Combine(_rootFolder, "scenes", "Shady Spa");
+            _oldFolder = Path.Combine(_studioFolder, "2020 - Buffy [id]");
+
+            var movie = Builder<Movie>.CreateNew()
+                                      .With(m => m.Id = 7)
+                                      .With(m => m.Path = _oldFolder)
+                                      .Build();
+
+            var file = Builder<MovieFile>.CreateNew()
+                                         .With(f => f.Id = 70)
+                                         .With(f => f.MovieId = 7)
+                                         .With(f => f.RelativePath = "s1.mp4")
+                                         .Build();
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<Movie> { movie });
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<MovieFile> { file });
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<MovieFile> { file });
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.GetBestRootFolderPath(It.IsAny<string>(), null))
+                  .Returns(_rootFolder);
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                  .Setup(s => s.BuildPath(movie, false))
+                  .Returns(_studioFolder);
+
+            return (movie, file);
+        }
+
+        private void GivenFlatNaming()
+        {
+            Mocker.GetMock<IBuildFileNames>()
+                  .Setup(s => s.BuildFileName(It.IsAny<Movie>(), It.IsAny<MovieFile>(), null, null, false))
+                  .Returns("Buffy - 2020");
+
+            Mocker.GetMock<IBuildFileNames>()
+                  .Setup(s => s.BuildFilePath(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<string>()))
+                  .Returns<Movie, string, string>((m, name, ext) => Path.Combine(m.Path, name + ext));
+        }
+
+        private void GivenMoveRenamesToStudioFolder(MovieFile file)
+        {
+            Mocker.GetMock<IMoveMovieFiles>()
+                  .Setup(s => s.MoveMovieFile(file, It.IsAny<Movie>(), true))
+                  .Callback<MovieFile, Movie, bool>((f, m, r) => f.RelativePath = "Buffy - 2020.mp4")
+                  .Returns(file);
+        }
+
+        [Test]
+        public void rename_removes_old_folder_when_empty()
+        {
+            var (_, file) = GivenSceneInOwnFolder();
+            GivenMoveRenamesToStudioFolder(file);
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(_oldFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderEmpty(_oldFolder)).Returns(true);
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.RemoveEmptySubfolders(_oldFolder), Times.Once());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(_oldFolder, false), Times.Once());
+        }
+
+        [Test]
+        public void rename_removes_old_folder_after_the_sidecars_have_moved()
+        {
+            var (_, file) = GivenSceneInOwnFolder();
+            GivenMoveRenamesToStudioFolder(file);
+
+            var calls = new List<string>();
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(_oldFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderEmpty(_oldFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.DeleteFolder(_oldFolder, false)).Callback(() => calls.Add("delete"));
+            Mocker.GetMock<IEventAggregator>()
+                  .Setup(s => s.PublishEvent(It.IsAny<MovieRenamedEvent>()))
+                  .Callback(() => calls.Add("event"));
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            calls.Should().Equal("event", "delete");
+        }
+
+        [Test]
+        public void rename_leaves_old_folder_with_untracked_files()
+        {
+            var (_, file) = GivenSceneInOwnFolder();
+            GivenMoveRenamesToStudioFolder(file);
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(_oldFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderEmpty(_oldFolder)).Returns(false);
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void rename_does_not_remove_the_scene_folder_when_it_did_not_change()
+        {
+            var (movie, file) = GivenSceneInOwnFolder();
+            movie.Path = _studioFolder;
+            file.RelativePath = "old.mp4";
+
+            Mocker.GetMock<IMoveMovieFiles>()
+                  .Setup(s => s.MoveMovieFile(file, It.IsAny<Movie>(), true))
+                  .Callback<MovieFile, Movie, bool>((f, m, r) => f.RelativePath = "Buffy - 2020.mp4")
+                  .Returns(file);
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void rename_skips_when_destination_exists_and_keeps_both_files()
+        {
+            var (_, file) = GivenSceneInOwnFolder();
+
+            Mocker.GetMock<IMoveMovieFiles>()
+                  .Setup(s => s.MoveMovieFile(file, It.IsAny<Movie>(), true))
+                  .Throws(new FileAlreadyExistsException("exists", "/lib/scenes/Shady Spa/Buffy - 2020.mp4"));
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<IEventAggregator>().Verify(v => v.PublishEvent(It.IsAny<MovieRenamedEvent>()), Times.Never());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+            file.RelativePath.Should().Be("s1.mp4");
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void preview_paths_are_root_relative_when_folder_changes()
+        {
+            var (movie, _) = GivenSceneInOwnFolder();
+            GivenFlatNaming();
+
+            var previews = Subject.GetRenamePreviews(new List<int> { 7 });
+
+            previews.Should().ContainSingle();
+            previews[0].ExistingRootRelativePath.Should().Be(Path.Combine("scenes", "Shady Spa", "2020 - Buffy [id]", "s1.mp4"));
+            previews[0].NewRootRelativePath.Should().Be(Path.Combine("scenes", "Shady Spa", "Buffy - 2020.mp4"));
+
+            // The movie-relative paths V3 reads are untouched
+            previews[0].ExistingPath.Should().Be("s1.mp4");
+            movie.Path.Should().Be(_studioFolder);
+        }
+
+        [Test]
+        public void preview_paths_stay_movie_relative_when_folder_unchanged()
+        {
+            var (movie, _) = GivenSceneInOwnFolder();
+            movie.Path = _studioFolder;
+            GivenFlatNaming();
+
+            var previews = Subject.GetRenamePreviews(new List<int> { 7 });
+
+            previews.Should().ContainSingle();
+            previews[0].ExistingRootRelativePath.Should().BeNull();
+            previews[0].NewRootRelativePath.Should().BeNull();
+            previews[0].ExistingPath.Should().Be("s1.mp4");
+            previews[0].NewPath.Should().Be("Buffy - 2020.mp4");
         }
 
         private void GivenPreviewNaming()

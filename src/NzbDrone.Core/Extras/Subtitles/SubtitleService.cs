@@ -67,14 +67,16 @@ namespace NzbDrone.Core.Extras.Subtitles
             return Enumerable.Empty<SubtitleFile>();
         }
 
-        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<MovieFile> movieFiles)
+        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<RenamedMovieFile> renamedFiles)
         {
             var subtitleFiles = _subtitleFileService.GetFilesByMovie(movie.Id);
 
             var movedFiles = new List<SubtitleFile>();
 
-            foreach (var movieFile in movieFiles)
+            foreach (var renamedFile in renamedFiles)
             {
+                var movieFile = renamedFile.MovieFile;
+
                 var groupedExtraFilesForMovieFile = subtitleFiles.Where(m => m.MovieFileId == movieFile.Id)
                                                             .GroupBy(s => s.AggregateString).ToList();
 
@@ -87,7 +89,7 @@ namespace NzbDrone.Core.Extras.Subtitles
                     {
                         var suffix = GetSuffix(subtitleFile.Language, copy, subtitleFile.LanguageTags, groupCount > 1);
 
-                        movedFiles.AddIfNotNull(MoveFile(movie, movieFile, subtitleFile, suffix));
+                        movedFiles.AddIfNotNull(MoveFile(movie, movieFile, subtitleFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath, suffix));
 
                         copy++;
                     }

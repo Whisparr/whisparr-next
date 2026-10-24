@@ -19,7 +19,7 @@ namespace NzbDrone.Core.Extras.Files
         IEnumerable<ExtraFile> CreateAfterMovieScan(Movie movie, List<MovieFile> movieFiles);
         IEnumerable<ExtraFile> CreateAfterMovieImport(Movie movie, MovieFile movieFile);
         IEnumerable<ExtraFile> CreateAfterMovieFolder(Movie movie, string movieFolder);
-        IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<MovieFile> movieFiles);
+        IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<RenamedMovieFile> renamedFiles);
         bool CanImportFile(LocalMovie localMovie, MovieFile movieFile, string path, string extension, bool readOnly);
         IEnumerable<ExtraFile> ImportFiles(LocalMovie localMovie, MovieFile movieFile, List<string> files, bool isReadOnly);
     }
@@ -48,7 +48,7 @@ namespace NzbDrone.Core.Extras.Files
         public abstract IEnumerable<ExtraFile> CreateAfterMovieScan(Movie movie, List<MovieFile> movieFiles);
         public abstract IEnumerable<ExtraFile> CreateAfterMovieImport(Movie movie, MovieFile movieFile);
         public abstract IEnumerable<ExtraFile> CreateAfterMovieFolder(Movie movie, string movieFolder);
-        public abstract IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<MovieFile> movieFiles);
+        public abstract IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<RenamedMovieFile> renamedFiles);
         public abstract bool CanImportFile(LocalMovie localMovie, MovieFile movieFile, string path, string extension, bool readOnly);
         public abstract IEnumerable<ExtraFile> ImportFiles(LocalMovie localMovie, MovieFile movieFile, List<string> files, bool isReadOnly);
 
@@ -91,7 +91,37 @@ namespace NzbDrone.Core.Extras.Files
             };
         }
 
-        protected TExtraFile MoveFile(Movie movie, MovieFile movieFile, TExtraFile extraFile, string fileNameSuffix = null)
+        /// <summary>
+        /// Where an extra sat before its video was renamed. The extra's relative path is relative to the scene
+        /// folder the video was in then, not to the (possibly already updated) movie path.
+        /// </summary>
+        protected static string GetPreviousPath(string extraRelativePath, string previousVideoPath, string previousRelativePath)
+        {
+            var previousVideoFolder = Path.GetDirectoryName(previousVideoPath);
+
+            if (previousRelativePath.IsNullOrWhiteSpace())
+            {
+                return Path.Combine(previousVideoFolder, Path.GetFileName(extraRelativePath));
+            }
+
+            var extraFolder = Path.GetDirectoryName(extraRelativePath) ?? string.Empty;
+            var previousVideoRelativeFolder = Path.GetDirectoryName(previousRelativePath) ?? string.Empty;
+
+            // Sat next to the video
+            if (string.Equals(extraFolder, previousVideoRelativeFolder, StringComparison.Ordinal))
+            {
+                return Path.Combine(previousVideoFolder, Path.GetFileName(extraRelativePath));
+            }
+
+            // Otherwise resolve against the old scene folder: the video's previous path minus its relative path
+            var previousSceneFolder = previousVideoPath.EndsWith(previousRelativePath, StringComparison.OrdinalIgnoreCase)
+                ? previousVideoPath.Substring(0, previousVideoPath.Length - previousRelativePath.Length).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                : previousVideoFolder;
+
+            return Path.Combine(previousSceneFolder, extraRelativePath);
+        }
+
+        protected TExtraFile MoveFile(Movie movie, MovieFile movieFile, TExtraFile extraFile, string previousVideoPath, string previousRelativePath, string fileNameSuffix = null)
         {
             _logger.Trace("Renaming extra file: {0}", extraFile);
 
@@ -105,11 +135,17 @@ namespace NzbDrone.Core.Extras.Files
 
             filenameBuilder.Append(extraFile.Extension);
 
-            var existingFileName = Path.Combine(movie.Path, extraFile.RelativePath);
+            var existingFileName = GetPreviousPath(extraFile.RelativePath, previousVideoPath, previousRelativePath);
             var newFileName = Path.Combine(newFolder, filenameBuilder.ToString());
 
             if (newFileName.PathNotEquals(existingFileName))
             {
+                if (_diskProvider.FileExists(newFileName))
+                {
+                    _logger.Warn("Extra file not moved, there is already a file at the destination: {0}", newFileName);
+                    return null;
+                }
+
                 try
                 {
                     _logger.Trace("Renaming extra file: {0} to {1}", extraFile, newFileName);

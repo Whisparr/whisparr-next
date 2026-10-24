@@ -26,8 +26,10 @@ namespace Whisparr.Api.V5.Movies
             {
                 MovieId = model.MovieId,
                 MovieFileId = model.MovieFileId,
-                ExistingPath = model.ExistingPath,
-                NewPath = model.NewPath
+
+                // Root-relative when the folder changes, so the preview shows the move
+                ExistingPath = model.ExistingRootRelativePath ?? model.ExistingPath,
+                NewPath = model.NewRootRelativePath ?? model.NewPath
             };
         }
 

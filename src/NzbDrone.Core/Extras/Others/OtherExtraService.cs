@@ -61,18 +61,20 @@ namespace NzbDrone.Core.Extras.Others
             return Enumerable.Empty<ExtraFile>();
         }
 
-        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<MovieFile> movieFiles)
+        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<RenamedMovieFile> renamedFiles)
         {
             var extraFiles = _otherExtraFileService.GetFilesByMovie(movie.Id);
             var movedFiles = new List<OtherExtraFile>();
 
-            foreach (var movieFile in movieFiles)
+            foreach (var renamedFile in renamedFiles)
             {
+                var movieFile = renamedFile.MovieFile;
+
                 var extraFilesForMovieFile = extraFiles.Where(m => m.MovieFileId == movieFile.Id).ToList();
 
                 foreach (var extraFile in extraFilesForMovieFile)
                 {
-                    movedFiles.AddIfNotNull(MoveFile(movie, movieFile, extraFile));
+                    movedFiles.AddIfNotNull(MoveFile(movie, movieFile, extraFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath));
                 }
             }
 

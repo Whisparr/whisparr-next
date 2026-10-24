@@ -8,6 +8,7 @@ using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Subtitles;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
@@ -207,6 +208,87 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
             results.Count.Should().Be(1);
 
             results[0].RelativePath.AsOsAgnostic().PathEquals(expectedOutputPath.AsOsAgnostic()).Should().Be(true);
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        private RenamedMovieFile GivenRenameIntoStudioFolder(string subtitleRelativePath, string previousRelativePath = "s1.mp4")
+        {
+            var studioFolder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
+            var oldSceneFolder = Path.Combine(studioFolder, "2020 - Buffy [id]");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "2020 - Buffy [id].mp4";
+
+            var subtitle = new SubtitleFile
+            {
+                MovieId = _movie.Id,
+                MovieFileId = _movieFile.Id,
+                RelativePath = subtitleRelativePath.AsOsAgnostic(),
+                Extension = ".srt",
+                Language = Language.English
+            };
+
+            Mocker.GetMock<ISubtitleFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<SubtitleFile> { subtitle });
+
+            return new RenamedMovieFile
+            {
+                MovieFile = _movieFile,
+                PreviousRelativePath = previousRelativePath.AsOsAgnostic(),
+                PreviousPath = Path.Combine(oldSceneFolder, previousRelativePath.AsOsAgnostic())
+            };
+        }
+
+        [Test]
+        public void subtitle_moves_with_video_when_rename_changes_folder()
+        {
+            var renamed = GivenRenameIntoStudioFolder("s1.en.srt");
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.MoveFile(
+                      Path.Combine(@"C:\lib\scenes\Shady Spa\2020 - Buffy [id]".AsOsAgnostic(), "s1.en.srt"),
+                      Path.Combine(@"C:\lib\scenes\Shady Spa".AsOsAgnostic(), "2020 - Buffy [id].en.srt"),
+                      false),
+                      Times.Once());
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().Be("2020 - Buffy [id].en.srt");
+        }
+
+        [Test]
+        public void subtitle_in_a_subfolder_is_resolved_against_the_old_scene_folder()
+        {
+            var renamed = GivenRenameIntoStudioFolder(@"Subs\s1.en.srt");
+
+            Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.MoveFile(
+                      Path.Combine(@"C:\lib\scenes\Shady Spa\2020 - Buffy [id]".AsOsAgnostic(), "Subs", "s1.en.srt"),
+                      Path.Combine(@"C:\lib\scenes\Shady Spa".AsOsAgnostic(), "2020 - Buffy [id].en.srt"),
+                      false),
+                      Times.Once());
+        }
+
+        [Test]
+        public void subtitle_is_not_moved_over_an_existing_file()
+        {
+            var renamed = GivenRenameIntoStudioFolder("s1.en.srt");
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(Path.Combine(@"C:\lib\scenes\Shady Spa".AsOsAgnostic(), "2020 - Buffy [id].en.srt")))
+                  .Returns(true);
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            results.Should().BeEmpty();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
 
             ExceptionVerification.ExpectedWarns(1);
         }

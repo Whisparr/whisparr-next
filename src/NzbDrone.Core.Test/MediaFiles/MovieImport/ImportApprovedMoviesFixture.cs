@@ -141,6 +141,26 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
         }
 
         [Test]
+        public void import_collision_is_rejected_not_overwritten()
+        {
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
+                  .Throws(new DestinationAlreadyExistsException("exists"));
+
+            var results = Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
+
+            results.Should().ContainSingle();
+            results[0].Result.Should().Be(ImportResultType.Skipped);
+            results[0].Errors.Should().ContainSingle().Which.Should().Contain("Destination already exists");
+
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), true), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
         public void should_publish_MovieImportedEvent_for_new_downloads()
         {
             Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);

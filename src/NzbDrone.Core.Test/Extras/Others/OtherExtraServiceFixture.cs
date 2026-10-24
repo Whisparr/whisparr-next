@@ -3,7 +3,9 @@ using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Others;
 using NzbDrone.Core.MediaFiles;
@@ -198,6 +200,47 @@ namespace NzbDrone.Core.Test.Extras.Others
 
             results.Count.Should().Be(1);
             results[0].RelativePath.AsOsAgnostic().PathEquals("Movie Title - 2022.mka".AsOsAgnostic()).Should().Be(true);
+        }
+
+        [Test]
+        public void other_extra_moves_with_video_when_rename_changes_folder()
+        {
+            var studioFolder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
+            var oldSceneFolder = Path.Combine(studioFolder, "2020 - Buffy [id]");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "2020 - Buffy [id].mp4";
+
+            var extra = new OtherExtraFile
+            {
+                MovieId = _movie.Id,
+                MovieFileId = _movieFile.Id,
+                RelativePath = "s1.nfo",
+                Extension = ".nfo"
+            };
+
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<OtherExtraFile> { extra });
+
+            var renamed = new RenamedMovieFile
+            {
+                MovieFile = _movieFile,
+                PreviousRelativePath = "s1.mp4",
+                PreviousPath = Path.Combine(oldSceneFolder, "s1.mp4")
+            };
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.MoveFile(
+                      Path.Combine(oldSceneFolder, "s1.nfo"),
+                      Path.Combine(studioFolder, "2020 - Buffy [id].nfo"),
+                      false),
+                      Times.Once());
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().Be("2020 - Buffy [id].nfo");
         }
     }
 }

@@ -17,7 +17,7 @@ namespace NzbDrone.Core.Extras
 {
     public interface IExtraService
     {
-        void MoveFilesAfterRename(Movie movie, MovieFile movieFile);
+        void MoveFilesAfterRename(Movie movie, RenamedMovieFile renamedFile);
         void ImportMovie(LocalMovie localMovie, MovieFile movieFile, bool isReadOnly);
     }
 
@@ -140,24 +140,24 @@ namespace NzbDrone.Core.Extras
             }
         }
 
-        public void MoveFilesAfterRename(Movie movie, MovieFile movieFile)
+        public void MoveFilesAfterRename(Movie movie, RenamedMovieFile renamedFile)
         {
-            var movieFiles = new List<MovieFile> { movieFile };
+            var renamedFiles = new List<RenamedMovieFile> { renamedFile };
 
             foreach (var extraFileManager in _extraFileManagers)
             {
-                extraFileManager.MoveFilesAfterRename(movie, movieFiles);
+                extraFileManager.MoveFilesAfterRename(movie, renamedFiles);
             }
         }
 
         public void Handle(MovieRenamedEvent message)
         {
             var movie = message.Movie;
-            var movieFiles = GetMovieFiles(movie.Id);
+            var renamedFiles = message.RenamedFiles;
 
             foreach (var extraFileManager in _extraFileManagers)
             {
-                extraFileManager.MoveFilesAfterRename(movie, movieFiles);
+                extraFileManager.MoveFilesAfterRename(movie, renamedFiles);
             }
         }
 

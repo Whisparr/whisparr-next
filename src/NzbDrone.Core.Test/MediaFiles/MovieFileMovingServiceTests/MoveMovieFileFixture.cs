@@ -1,5 +1,6 @@
 using System;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
@@ -95,6 +96,70 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieFileMovingServiceTests
                   .Verify(s => s.PublishEvent<MovieFolderCreatedEvent>(It.Is<MovieFolderCreatedEvent>(p =>
                       p.MovieFolder.IsNotNullOrWhiteSpace())),
                       Times.Once());
+        }
+
+        private string GivenFlatStudioFolder()
+        {
+            var studioFolder = @"C:\Test\Movies\Shady Spa".AsOsAgnostic();
+            var destination = System.IO.Path.Combine(studioFolder, "Buffy - 2020.mp4");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "incoming.mp4";
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                  .Setup(s => s.BuildPath(It.IsAny<Movie>(), false))
+                  .Returns(studioFolder);
+
+            Mocker.GetMock<IBuildFileNames>()
+                  .Setup(s => s.BuildFilePath(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<string>()))
+                  .Returns(destination);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderExists(studioFolder))
+                  .Returns(true);
+
+            Mocker.GetMock<IImportScript>()
+                  .Setup(s => s.TryImport(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LocalMovie>(), It.IsAny<MovieFile>(), It.IsAny<TransferMode>()))
+                  .Returns(ScriptImportDecision.DeferMove);
+
+            return destination;
+        }
+
+        [Test]
+        public void import_into_flat_folder_with_siblings_places_file_in_studio_folder()
+        {
+            var destination = GivenFlatStudioFolder();
+
+            Subject.MoveMovieFile(_movieFile, _localMovie);
+
+            _movieFile.RelativePath.Should().Be("Buffy - 2020.mp4");
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), destination, TransferMode.Move, false), Times.Once());
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Once());
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.Never());
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void import_collision_is_never_transferred_with_overwrite()
+        {
+            var destination = GivenFlatStudioFolder();
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Setup(s => s.TransferFile(It.IsAny<string>(), destination, TransferMode.Move, false))
+                  .Throws(new DestinationAlreadyExistsException("exists"));
+
+            Assert.Throws<DestinationAlreadyExistsException>(() => Subject.MoveMovieFile(_movieFile, _localMovie));
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), true), Times.Never());
         }
 
         [Test]

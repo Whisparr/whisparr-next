@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
@@ -172,7 +173,12 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                             if (localMovie.FileNameBeforeRename != movieFile.RelativePath)
                             {
-                                _extraService.MoveFilesAfterRename(localMovie.Movie, movieFile);
+                                _extraService.MoveFilesAfterRename(localMovie.Movie, new RenamedMovieFile
+                                {
+                                    MovieFile = movieFile,
+                                    PreviousRelativePath = localMovie.FileNameBeforeRename,
+                                    PreviousPath = Path.Combine(localMovie.Movie.Path, localMovie.FileNameBeforeRename)
+                                });
                             }
                         }
 

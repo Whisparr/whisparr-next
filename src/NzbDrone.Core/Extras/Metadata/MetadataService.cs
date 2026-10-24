@@ -152,7 +152,7 @@ namespace NzbDrone.Core.Extras.Metadata
             return files;
         }
 
-        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<MovieFile> movieFiles)
+        public override IEnumerable<ExtraFile> MoveFilesAfterRename(Movie movie, List<RenamedMovieFile> renamedFiles)
         {
             var metadataFiles = _metadataFileService.GetFilesByMovie(movie.Id);
             var movedFiles = new List<MetadataFile>();
@@ -161,14 +161,15 @@ namespace NzbDrone.Core.Extras.Metadata
             // (Xbmc's EpisodeImage is more than just the extension)
             foreach (var consumer in _metadataFactory.GetAvailableProviders())
             {
-                foreach (var movieFile in movieFiles)
+                foreach (var renamedFile in renamedFiles)
                 {
+                    var movieFile = renamedFile.MovieFile;
                     var metadataFilesForConsumer = GetMetadataFilesForConsumer(consumer, metadataFiles).Where(m => m.MovieFileId == movieFile.Id).ToList();
 
                     foreach (var metadataFile in metadataFilesForConsumer)
                     {
                         var newFileName = consumer.GetFilenameAfterMove(movie, movieFile, metadataFile);
-                        var existingFileName = Path.Combine(movie.Path, metadataFile.RelativePath);
+                        var existingFileName = GetPreviousPath(metadataFile.RelativePath, renamedFile.PreviousPath, renamedFile.PreviousRelativePath);
 
                         if (newFileName.PathNotEquals(existingFileName))
                         {
