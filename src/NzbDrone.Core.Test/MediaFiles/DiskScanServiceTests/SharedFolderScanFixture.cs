@@ -205,13 +205,9 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(It.IsAny<string>())).Returns(false);
             Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_s1.Id)).Returns(new List<MovieFile> { s1Missing });
             Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_s2.Id)).Returns(new List<MovieFile> { s2Tracked });
-            Mocker.GetMock<ISceneFolderLayout>()
-                  .Setup(s => s.GetItemsInFolder(_folder))
-                  .Returns(new List<MoviePathEntry>
-                  {
-                      new() { Id = _s1.Id, Path = _folder, ItemType = ItemType.Scene },
-                      new() { Id = _s2.Id, Path = _folder, ItemType = ItemType.Scene }
-                  });
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files.Where(f => f != InFolder("s2.mp4")).ToList());
             Mocker.GetMock<IVideoHashService>()
                   .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
                   .Returns("same");
@@ -223,6 +219,35 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             s1Missing.RelativePath.Should().Be("s1.mp4");
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(s1Missing), Times.Never());
+        }
+
+        [Test]
+        public void relink_in_shared_folder_never_takes_a_nested_items_tracked_file()
+        {
+            var s1Missing = new MovieFile { Id = 1, MovieId = _s1.Id, RelativePath = "s1.mp4", OsHash = "same" };
+            var nestedFile = Path.Combine(_folder, "Nested Movie", "movie.mp4");
+
+            GivenFiles(nestedFile);
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(It.IsAny<string>())).Returns(false);
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_s1.Id)).Returns(new List<MovieFile> { s1Missing });
+
+            // The nested item (path below the scanned folder) tracks the file; the any-item filter knows it
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files.Where(f => f != nestedFile).ToList());
+            Mocker.GetMock<IVideoHashService>()
+                  .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
+                  .Returns("same");
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Returns(new List<ImportDecision>());
+
+            Subject.Scan(_s1);
+
+            s1Missing.RelativePath.Should().Be("s1.mp4");
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(s1Missing), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()), Times.AtLeastOnce());
         }
 
         [Test]

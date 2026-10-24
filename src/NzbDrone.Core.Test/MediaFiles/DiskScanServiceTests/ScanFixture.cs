@@ -958,6 +958,27 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void rejected_unknown_file_in_exclusive_folder_matching_lost_entry_is_relinked()
+        {
+            GivenSceneWithLostEntries();
+
+            var path = GivenNewFileOnDisk("moved-in.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            // An exclusive folder decides every file: this one is rejected, so nothing imports it
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), _movie, false))
+                  .Returns(new List<ImportDecision>
+                  {
+                      new(new Parser.Model.LocalMovie { Movie = _movie, Path = path }, new ImportRejection(ImportRejectionReason.Unknown, "not this scene"))
+                  });
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(path, "bbbbbbbbbbbbbbbb", 100), Times.Once());
+        }
+
+        [Test]
         public void file_that_was_imported_is_not_checked_against_lost_entries()
         {
             GivenSceneWithLostEntries();

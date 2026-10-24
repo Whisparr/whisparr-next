@@ -174,7 +174,15 @@ namespace NzbDrone.Core.MediaFiles
 
                 var shared = movie.Path.IsNotNullOrWhiteSpace() && _sceneFolderLayout.IsShared(movie);
 
-                RelinkRenamedFiles(movie, mediaFileList, shared);
+                if (shared)
+                {
+                    // R2: movie lock (held), then the folder lock, so a sibling's import can't claim the same file meanwhile
+                    RunInFolderLock(movie.Path, () => RelinkRenamedFiles(movie, mediaFileList, true));
+                }
+                else
+                {
+                    RelinkRenamedFiles(movie, mediaFileList, false);
+                }
 
                 RecordLostFiles(movie, mediaFileList);
                 CleanMediaFiles(movie, mediaFileList);
@@ -420,13 +428,8 @@ namespace NzbDrone.Core.MediaFiles
 
             if (shared)
             {
-                // A sibling's tracked file is not up for re-linking, even when its hash matches
-                var siblingFiles = _sceneFolderLayout.GetItemsInFolder(movie.Path)
-                    .Where(i => i.Id != movie.Id)
-                    .SelectMany(i => _mediaFileService.GetFilesByMovie(i.Id).Select(f => Path.Combine(i.Path, f.RelativePath)))
-                    .ToList();
-
-                newFiles = newFiles.Except(siblingFiles, PathEqualityComparer.Instance).ToList();
+                // No item's tracked file is up for re-linking (siblings, nested items, an item above), even when its hash matches
+                newFiles = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, newFiles);
             }
 
             if (newFiles.Count == 0)
@@ -533,7 +536,9 @@ namespace NzbDrone.Core.MediaFiles
         {
             // Only what no item tracks is unowned, whatever the layout
             var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles);
-            var decided = new HashSet<string>(decisions.Select(d => d.LocalMovie.Path), PathEqualityComparer.Instance);
+
+            // Only approved decisions are claimed (imported, so tracked); a rejected file is still unowned
+            var decided = new HashSet<string>(decisions.Where(d => d.Approved).Select(d => d.LocalMovie.Path), PathEqualityComparer.Instance);
 
             foreach (var path in candidates.Where(c => !decided.Contains(c)))
             {
