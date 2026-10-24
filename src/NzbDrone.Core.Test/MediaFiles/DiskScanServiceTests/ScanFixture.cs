@@ -12,6 +12,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.LostFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
@@ -860,6 +861,127 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<IEventAggregator>()
                 .Verify(v => v.PublishEvent(It.Is<MovieScannedEvent>(c => c.Movie != null && c.PossibleExtraFiles.Count == 0)), Times.Once());
+        }
+
+        private void GivenSceneWithLostEntries()
+        {
+            _movie.MovieMetadata = new MovieMetadata { ItemType = ItemType.Scene };
+            Mocker.GetMock<ILostMovieFileService>().Setup(s => s.Any()).Returns(true);
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), _movie, false))
+                  .Returns(new List<ImportDecision>());
+        }
+
+        [Test]
+        public void missing_owned_file_is_recorded_when_no_in_folder_relink()
+        {
+            GivenSceneWithLostEntries();
+
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row });
+
+            var order = new List<string>();
+            Mocker.GetMock<ILostMovieFileService>()
+                  .Setup(s => s.Record(_movie, row))
+                  .Callback(() => order.Add("record"));
+            Mocker.GetMock<IMediaFileTableCleanupService>()
+                  .Setup(s => s.Clean(_movie, It.IsAny<List<string>>()))
+                  .Callback(() => order.Add("clean"));
+
+            Subject.Scan(_movie);
+
+            // Recorded before Clean deletes the row
+            order.Should().Equal("record", "clean");
+        }
+
+        [Test]
+        public void relinked_file_is_not_recorded_as_lost()
+        {
+            GivenSceneWithLostEntries();
+
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            var newPath = GivenNewFileOnDisk("new.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row }, newPath);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.Record(It.IsAny<Movie>(), It.IsAny<MovieFile>()), Times.Never());
+        }
+
+        [Test]
+        public void missing_file_of_a_movie_is_not_recorded()
+        {
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row });
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.Record(It.IsAny<Movie>(), It.IsAny<MovieFile>()), Times.Never());
+        }
+
+        [Test]
+        public void unowned_unidentified_file_matching_lost_entry_is_relinked_during_another_scenes_scan()
+        {
+            GivenSceneWithLostEntries();
+
+            var path = GivenNewFileOnDisk("moved-in.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files);
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(_movie, It.IsAny<List<string>>()))
+                  .Returns(new List<ImportDecision>());
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(path, "bbbbbbbbbbbbbbbb", 100), Times.Once());
+        }
+
+        [Test]
+        public void unknown_file_in_exclusive_folder_matching_lost_entry_is_relinked()
+        {
+            GivenSceneWithLostEntries();
+
+            var path = GivenNewFileOnDisk("moved-in.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(path, "bbbbbbbbbbbbbbbb", 100), Times.Once());
+        }
+
+        [Test]
+        public void file_that_was_imported_is_not_checked_against_lost_entries()
+        {
+            GivenSceneWithLostEntries();
+
+            var path = GivenNewFileOnDisk("claimed.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), _movie, false))
+                  .Returns(new List<ImportDecision> { new(new Parser.Model.LocalMovie { Movie = _movie, Path = path }) });
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
+        }
+
+        [Test]
+        public void does_not_hash_candidates_when_nothing_was_lost()
+        {
+            GivenSceneWithLostEntries();
+            Mocker.GetMock<ILostMovieFileService>().Setup(s => s.Any()).Returns(false);
+
+            var path = GivenNewFileOnDisk("moved-in.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
         }
     }
 }

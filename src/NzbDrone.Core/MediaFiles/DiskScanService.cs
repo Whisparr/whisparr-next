@@ -14,6 +14,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.LostFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Commands;
@@ -49,6 +50,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IVideoHashService _videoHashService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly ISharedFolderScanner _sharedFolderScanner;
+        private readonly ILostMovieFileService _lostMovieFileService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -59,6 +61,8 @@ namespace NzbDrone.Core.MediaFiles
         // movie lock. Entries are never removed: dropping one while a waiter holds it would let two scans in at once.
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> FolderLocks = new ConcurrentDictionary<string, SemaphoreSlim>(PathEqualityComparer.Instance);
 
+        // Every dependency is a distinct collaborator resolved by DI
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public DiskScanService(IDiskProvider diskProvider,
                                IMakeImportDecision importDecisionMaker,
                                IImportApprovedMovie importApprovedMovies,
@@ -72,9 +76,11 @@ namespace NzbDrone.Core.MediaFiles
                                IVideoHashService videoHashService,
                                ISceneFolderLayout sceneFolderLayout,
                                ISharedFolderScanner sharedFolderScanner,
+                               ILostMovieFileService lostMovieFileService,
                                IEventAggregator eventAggregator,
                                Logger logger)
         {
+            _lostMovieFileService = lostMovieFileService;
             _sceneFolderLayout = sceneFolderLayout;
             _sharedFolderScanner = sharedFolderScanner;
             _diskProvider = diskProvider;
@@ -154,6 +160,7 @@ namespace NzbDrone.Core.MediaFiles
                         _logger.Debug("Movie's folder doesn't exist: {0}", movie.Path);
                     }
 
+                    RecordLostFiles(movie, new List<string>());
                     CleanMediaFiles(movie, new List<string>());
                     CompletedScanning(movie, new List<string>());
 
@@ -169,6 +176,7 @@ namespace NzbDrone.Core.MediaFiles
 
                 RelinkRenamedFiles(movie, mediaFileList, shared);
 
+                RecordLostFiles(movie, mediaFileList);
                 CleanMediaFiles(movie, mediaFileList);
 
                 var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
@@ -190,6 +198,8 @@ namespace NzbDrone.Core.MediaFiles
                     _logger.Trace("Import decisions complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
                     _importApprovedMovies.Import(decisions, false);
                 }
+
+                RelinkLostFiles(movie, unmappedFiles, decisions, shared);
 
                 // Update existing files that have a different file size
                 var fileInfoStopwatch = Stopwatch.StartNew();
@@ -447,6 +457,77 @@ namespace NzbDrone.Core.MediaFiles
                 _mediaFileService.Update(row);
 
                 _logger.Info("Re-linked {0} to {1} by oshash", oldRelativePath, row.RelativePath);
+            }
+        }
+
+        private static bool IsScene(Movie movie)
+        {
+            return movie.MovieMetadata?.Value?.ItemType == ItemType.Scene;
+        }
+
+        /// <summary>
+        /// Remembers the oshash of each scene file that is gone from disk (and wasn't re-linked in its folder), so a later
+        /// scan can follow it if another tool moved it to a different library folder. Runs before the rows are deleted.
+        /// </summary>
+        private void RecordLostFiles(Movie movie, List<string> mediaFileList)
+        {
+            if (!IsScene(movie))
+            {
+                return;
+            }
+
+            try
+            {
+                var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
+
+                foreach (var file in _mediaFileService.GetFilesByMovie(movie.Id))
+                {
+                    var path = Path.Combine(movie.Path, file.RelativePath);
+
+                    if (file.OsHash != null && !onDisk.Contains(path) && !_diskProvider.FileExists(path))
+                    {
+                        _lostMovieFileService.Record(movie, file);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Unable to remember the missing files of {0}", movie);
+            }
+        }
+
+        /// <summary>
+        /// Files in this scene's folder that nothing claimed may be a file StashApp moved here from another scene's
+        /// folder: re-link them, in place, to the scene that lost a file with the same oshash and size.
+        /// </summary>
+        private void RelinkLostFiles(Movie movie, List<string> unmappedFiles, List<ImportDecision> decisions, bool shared)
+        {
+            if (!IsScene(movie) || unmappedFiles.Count == 0 || !_lostMovieFileService.Any())
+            {
+                return;
+            }
+
+            // A shared folder holds siblings' files too: only what no item tracks is unowned
+            var candidates = shared ? _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles) : unmappedFiles;
+            var decided = new HashSet<string>(decisions.Select(d => d.LocalMovie.Path), PathEqualityComparer.Instance);
+
+            foreach (var path in candidates.Where(c => !decided.Contains(c)))
+            {
+                try
+                {
+                    var (osHash, _) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
+
+                    if (osHash.IsNullOrWhiteSpace())
+                    {
+                        continue;
+                    }
+
+                    _lostMovieFileService.TryRelink(path, osHash, _diskProvider.GetFileSize(path));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Unable to check {0} against lost files", path);
+                }
             }
         }
 

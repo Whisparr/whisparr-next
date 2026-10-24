@@ -27,6 +27,7 @@ using NzbDrone.Core.Jobs;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.LostFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
@@ -195,6 +196,8 @@ namespace NzbDrone.Core.Datastore
                   .RegisterModel()
                   .Ignore(e => e.QualityProfileId)
                   .Ignore(e => e.ForeignId);
+
+            Mapper.Entity<LostMovieFile>("LostMovieFiles").RegisterModel();
         }
 
         private static void RegisterMappers()
