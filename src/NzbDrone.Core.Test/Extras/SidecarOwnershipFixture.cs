@@ -107,11 +107,7 @@ namespace NzbDrone.Core.Test.Extras
         public void parsed_scene_overrides_name_match()
         {
             var files = new List<MovieFile> { _file1, _file2 };
-            var path = Sidecar("Title.en.srt");
-
-            Mocker.GetMock<IParsingService>()
-                  .Setup(s => s.ParseMinimalPathMovieInfo(path))
-                  .Returns(new ParsedMovieInfo());
+            var path = Sidecar("Movie.Title.2022.en.srt");
 
             Mocker.GetMock<IMovieService>()
                   .Setup(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()))
@@ -128,6 +124,20 @@ namespace NzbDrone.Core.Test.Extras
 
             Subject.FindOwner(_scene1, Sidecar("movie.nfo"), files).Should().BeNull();
             Subject.FindOwner(_scene1, Sidecar("poster.jpg"), files).Should().BeNull();
+        }
+
+        [Test]
+        public void generic_sidecar_in_studio_folder_does_not_resolve_scene_via_folder_name()
+        {
+            var folder = @"C:\Test\Scenes\Movie.Title.2022".AsOsAgnostic();
+            var files = new List<MovieFile> { _file1, _file2 };
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()))
+                  .Returns(_scene1);
+
+            Subject.FindOwner(_scene1, Path.Combine(folder, "movie.nfo"), files).Should().BeNull();
+            Subject.FindOwner(_scene1, Path.Combine(folder, "poster.jpg"), files).Should().BeNull();
         }
 
         [Test]

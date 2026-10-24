@@ -8,6 +8,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Others;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
@@ -65,6 +66,23 @@ namespace NzbDrone.Core.Test.Extras.Others
             results.Count.Should().Be(1);
 
             results[0].RelativePath.AsOsAgnostic().PathEquals(expectedOutputPath.AsOsAgnostic()).Should().Be(true);
+        }
+
+        [Test]
+        public void shared_folder_import_skips_title_year_fallback()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            var files = new List<string>
+            {
+                Path.Combine(_releaseFolder, @"Movie.Title.2022\thumb.jpg").AsOsAgnostic(),
+                Path.Combine(_releaseFolder, "Movie.Title.2022.nfo").AsOsAgnostic()
+            };
+
+            var results = Subject.ImportFiles(_localMovie, _movieFile, files, true).ToList();
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().EndWith(".nfo");
         }
 
         [Test]

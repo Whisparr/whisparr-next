@@ -5,7 +5,6 @@ using System.Linq;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
-using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Extras
 {
@@ -46,17 +45,14 @@ namespace NzbDrone.Core.Extras
 
     public class SidecarOwnership : ISidecarOwnership
     {
-        private readonly IParsingService _parsingService;
         private readonly IMovieService _movieService;
         private readonly IMediaFileService _mediaFileService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
 
-        public SidecarOwnership(IParsingService parsingService,
-                                IMovieService movieService,
+        public SidecarOwnership(IMovieService movieService,
                                 IMediaFileService mediaFileService,
                                 ISceneFolderLayout sceneFolderLayout)
         {
-            _parsingService = parsingService;
             _movieService = movieService;
             _mediaFileService = mediaFileService;
             _sceneFolderLayout = sceneFolderLayout;
@@ -73,7 +69,9 @@ namespace NzbDrone.Core.Extras
         public MovieFile FindOwner(Movie movie, string sidecarPath, List<MovieFile> folderFiles)
         {
             // v2's way: the sidecar's own name identifies the item.
-            var parsed = _parsingService.ParseMinimalPathMovieInfo(sidecarPath);
+            // Only the file name is parsed; ParseMinimalPathMovieInfo falls back to the folder name,
+            // which in a shared folder would resolve a generic name like movie.nfo to a scene.
+            var parsed = Parser.Parser.ParseMovieTitle(Path.GetFileName(sidecarPath), true);
 
             if (parsed != null)
             {

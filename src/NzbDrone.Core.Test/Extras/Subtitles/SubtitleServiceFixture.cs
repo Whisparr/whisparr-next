@@ -11,6 +11,7 @@ using NzbDrone.Core.Extras.Subtitles;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
@@ -87,6 +88,22 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
             results.Count.Should().Be(1);
 
             results[0].RelativePath.AsOsAgnostic().PathEquals(expectedOutputPath.AsOsAgnostic()).Should().Be(true);
+        }
+
+        [Test]
+        public void shared_folder_import_skips_title_year_fallback()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            var files = new List<string>
+            {
+                Path.Combine(_releaseFolder, @"Subs\Movie.Title.2022\2_en.srt").AsOsAgnostic(),
+                Path.Combine(_releaseFolder, "Movie.Title.2022.en.srt").AsOsAgnostic()
+            };
+
+            var results = Subject.ImportFiles(_localMovie, _movieFile, files, true).ToList();
+
+            results.Should().ContainSingle();
         }
 
         [Test]

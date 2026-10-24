@@ -12,6 +12,7 @@ using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -23,6 +24,7 @@ namespace NzbDrone.Core.Extras.Subtitles
         private readonly IDetectSample _detectSample;
         private readonly ISubtitleFileService _subtitleFileService;
         private readonly IMediaFileAttributeService _mediaFileAttributeService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
 
         public SubtitleService(IConfigService configService,
@@ -31,9 +33,11 @@ namespace NzbDrone.Core.Extras.Subtitles
                                IDetectSample detectSample,
                                ISubtitleFileService subtitleFileService,
                                IMediaFileAttributeService mediaFileAttributeService,
+                               ISceneFolderLayout sceneFolderLayout,
                                Logger logger)
             : base(configService, diskProvider, diskTransferService, logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
             _diskProvider = diskProvider;
             _detectSample = detectSample;
             _subtitleFileService = subtitleFileService;
@@ -111,6 +115,7 @@ namespace NzbDrone.Core.Extras.Subtitles
             var sourceFileName = Path.GetFileNameWithoutExtension(sourcePath);
 
             var matchingFiles = new List<string>();
+            var shared = _sceneFolderLayout.IsShared(localMovie.Movie);
 
             foreach (var file in filteredFiles)
             {
@@ -120,6 +125,12 @@ namespace NzbDrone.Core.Extras.Subtitles
                     if (SidecarName.SidecarNameMatches(Path.GetFileNameWithoutExtension(file), sourceFileName))
                     {
                         matchingFiles.Add(file);
+                        continue;
+                    }
+
+                    // A shared folder's sidecars are matched by name only; title and year can't tell its scenes apart
+                    if (shared)
+                    {
                         continue;
                     }
 

@@ -10,6 +10,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 
 namespace NzbDrone.Core.Extras.Others
@@ -19,6 +20,7 @@ namespace NzbDrone.Core.Extras.Others
         private readonly IDiskProvider _diskProvider;
         private readonly IOtherExtraFileService _otherExtraFileService;
         private readonly IMediaFileAttributeService _mediaFileAttributeService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
 
         public OtherExtraService(IConfigService configService,
@@ -26,9 +28,11 @@ namespace NzbDrone.Core.Extras.Others
                                  IDiskTransferService diskTransferService,
                                  IOtherExtraFileService otherExtraFileService,
                                  IMediaFileAttributeService mediaFileAttributeService,
+                                 ISceneFolderLayout sceneFolderLayout,
                                  Logger logger)
             : base(configService, diskProvider, diskTransferService, logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
             _diskProvider = diskProvider;
             _otherExtraFileService = otherExtraFileService;
             _mediaFileAttributeService = mediaFileAttributeService;
@@ -90,6 +94,7 @@ namespace NzbDrone.Core.Extras.Others
             var sourceFolder = _diskProvider.GetParentFolder(sourcePath);
             var sourceFileName = Path.GetFileNameWithoutExtension(sourcePath);
             var matchingFiles = new List<string>();
+            var shared = _sceneFolderLayout.IsShared(localMovie.Movie);
             var hasNfo = false;
 
             foreach (var file in filteredFiles)
@@ -111,6 +116,12 @@ namespace NzbDrone.Core.Extras.Others
                     if (SidecarName.SidecarNameMatches(Path.GetFileNameWithoutExtension(file), sourceFileName))
                     {
                         matchingFiles.Add(file);
+                        continue;
+                    }
+
+                    // A shared folder's sidecars are matched by name only; title and year can't tell its scenes apart
+                    if (shared)
+                    {
                         continue;
                     }
 
