@@ -36,6 +36,7 @@ namespace NzbDrone.Core.Movies
         PagingSpec<Movie> MoviesWhereCutoffUnmet(PagingSpec<Movie> pagingSpec, List<QualitiesBelowCutoff> qualitiesBelowCutoff, HashSet<int> movieTags = null, List<int> quality = null);
         Movie FindByPath(string path);
         Dictionary<int, string> AllMoviePaths();
+        List<MoviePathEntry> AllMoviePathEntries();
         List<int> AllMovieIds();
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
@@ -386,6 +387,16 @@ namespace NzbDrone.Core.Movies
             {
                 var strSql = "SELECT \"Id\" AS \"Key\", \"Path\" AS \"Value\" FROM \"Movies\"";
                 return conn.Query<KeyValuePair<int, string>>(strSql).ToDictionary(x => x.Key, x => x.Value);
+            }
+        }
+
+        public List<MoviePathEntry> AllMoviePathEntries()
+        {
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<MoviePathEntry>(
+                    "SELECT \"Movies\".\"Id\", \"Movies\".\"Path\", \"MovieMetadata\".\"ItemType\" " +
+                    "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\"").ToList();
             }
         }
 

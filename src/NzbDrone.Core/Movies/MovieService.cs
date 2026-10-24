@@ -46,6 +46,7 @@ namespace NzbDrone.Core.Movies
         List<Movie> GetByPerformerForeignId(string performerForeignId);
         Movie FindByPath(string path);
         Dictionary<int, string> AllMoviePaths();
+        List<MoviePathEntry> AllMoviePathEntries();
         List<int> AllMovieIds();
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
@@ -330,6 +331,12 @@ namespace NzbDrone.Core.Movies
         public Dictionary<int, string> AllMoviePaths()
         {
             return _movieRepository.AllMoviePaths();
+        }
+
+        /// <summary> Get the id, path and item type of every movie and scene. </summary>
+        public List<MoviePathEntry> AllMoviePathEntries()
+        {
+            return _movieRepository.AllMoviePathEntries();
         }
 
         /// <summary> Get a list of all movie IDs in the repository. </summary>
