@@ -108,7 +108,7 @@ namespace NzbDrone.Core.Extras.Others
                     }
 
                     // Filename match
-                    if (Path.GetFileNameWithoutExtension(file).StartsWith(sourceFileName, StringComparison.InvariantCultureIgnoreCase))
+                    if (SidecarName.SidecarNameMatches(Path.GetFileNameWithoutExtension(file), sourceFileName))
                     {
                         matchingFiles.Add(file);
                         continue;

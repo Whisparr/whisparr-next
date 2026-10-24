@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Extras.Subtitles
@@ -13,15 +14,21 @@ namespace NzbDrone.Core.Extras.Subtitles
     {
         private readonly IExtraFileService<SubtitleFile> _subtitleFileService;
         private readonly IParsingService _parsingService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly ISidecarOwnership _sidecarOwnership;
         private readonly Logger _logger;
 
         public ExistingSubtitleImporter(IExtraFileService<SubtitleFile> subtitleFileService,
                                         IParsingService parsingService,
+                                        ISceneFolderLayout sceneFolderLayout,
+                                        ISidecarOwnership sidecarOwnership,
                                         Logger logger)
             : base(subtitleFileService)
         {
             _subtitleFileService = subtitleFileService;
             _parsingService = parsingService;
+            _sceneFolderLayout = sceneFolderLayout;
+            _sidecarOwnership = sidecarOwnership;
             _logger = logger;
         }
 
@@ -34,12 +41,30 @@ namespace NzbDrone.Core.Extras.Subtitles
             var subtitleFiles = new List<SubtitleFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
+            var shared = _sceneFolderLayout.IsShared(movie);
+            var folderFiles = shared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+
             foreach (var possibleSubtitleFile in filterResult.FilesOnDisk)
             {
                 var extension = Path.GetExtension(possibleSubtitleFile);
 
                 if (SubtitleFileExtensions.Extensions.Contains(extension))
                 {
+                    var movieFileId = movie.MovieFileId;
+
+                    if (shared)
+                    {
+                        var owner = _sidecarOwnership.FindOwner(movie, possibleSubtitleFile, folderFiles);
+
+                        if (owner == null)
+                        {
+                            _logger.Debug("Subtitle file: {0} is not owned by {1}", possibleSubtitleFile, movie);
+                            continue;
+                        }
+
+                        movieFileId = owner.Id;
+                    }
+
                     var minimalInfo = _parsingService.ParseMinimalPathMovieInfo(possibleSubtitleFile);
 
                     if (minimalInfo == null)
@@ -51,7 +76,7 @@ namespace NzbDrone.Core.Extras.Subtitles
                     var subtitleFile = new SubtitleFile
                     {
                         MovieId = movie.Id,
-                        MovieFileId = movie.MovieFileId,
+                        MovieFileId = movieFileId,
                         RelativePath = movie.Path.GetRelativePath(possibleSubtitleFile),
                         Language = LanguageParser.ParseSubtitleLanguage(possibleSubtitleFile),
                         LanguageTags = LanguageParser.ParseLanguageTags(possibleSubtitleFile),

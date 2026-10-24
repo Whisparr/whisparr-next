@@ -90,6 +90,24 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
         }
 
         [Test]
+        public void should_not_import_subtitle_of_a_sibling_whose_name_extends_ours()
+        {
+            // A neutral folder, so the title/year fallback can't match by folder name
+            _releaseFolder = @"C:\Test\Unsorted Movies\Studio".AsOsAgnostic();
+            _localMovie.Path = Path.Combine(_releaseFolder, "Title.mkv").AsOsAgnostic();
+
+            var files = new List<string>
+            {
+                Path.Combine(_releaseFolder, "Title.en.srt").AsOsAgnostic(),
+                Path.Combine(_releaseFolder, "Title 2.en.srt").AsOsAgnostic()
+            };
+
+            var results = Subject.ImportFiles(_localMovie, _movieFile, files, true).ToList();
+
+            results.Should().ContainSingle();
+        }
+
+        [Test]
         public void should_import_multiple_subtitle_files_per_language()
         {
             var files = new List<string>

@@ -117,7 +117,7 @@ namespace NzbDrone.Core.Extras.Subtitles
                 try
                 {
                     // Filename match
-                    if (Path.GetFileNameWithoutExtension(file).StartsWithIgnoreCase(sourceFileName))
+                    if (SidecarName.SidecarNameMatches(Path.GetFileNameWithoutExtension(file), sourceFileName))
                     {
                         matchingFiles.Add(file);
                         continue;

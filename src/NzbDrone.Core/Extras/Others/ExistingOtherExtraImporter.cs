@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
 
 namespace NzbDrone.Core.Extras.Others
@@ -13,15 +14,21 @@ namespace NzbDrone.Core.Extras.Others
     {
         private readonly IExtraFileService<OtherExtraFile> _otherExtraFileService;
         private readonly IParsingService _parsingService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly ISidecarOwnership _sidecarOwnership;
         private readonly Logger _logger;
 
         public ExistingOtherExtraImporter(IExtraFileService<OtherExtraFile> otherExtraFileService,
                                           IParsingService parsingService,
+                                          ISceneFolderLayout sceneFolderLayout,
+                                          ISidecarOwnership sidecarOwnership,
                                           Logger logger)
             : base(otherExtraFileService)
         {
             _otherExtraFileService = otherExtraFileService;
             _parsingService = parsingService;
+            _sceneFolderLayout = sceneFolderLayout;
+            _sidecarOwnership = sidecarOwnership;
             _logger = logger;
         }
 
@@ -34,6 +41,9 @@ namespace NzbDrone.Core.Extras.Others
             var extraFiles = new List<OtherExtraFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
+            var shared = _sceneFolderLayout.IsShared(movie);
+            var folderFiles = shared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+
             foreach (var possibleExtraFile in filterResult.FilesOnDisk)
             {
                 var extension = Path.GetExtension(possibleExtraFile);
@@ -42,6 +52,21 @@ namespace NzbDrone.Core.Extras.Others
                 {
                     _logger.Debug("No extension for file: {0}", possibleExtraFile);
                     continue;
+                }
+
+                var movieFileId = movie.MovieFileId;
+
+                if (shared)
+                {
+                    var owner = _sidecarOwnership.FindOwner(movie, possibleExtraFile, folderFiles);
+
+                    if (owner == null)
+                    {
+                        _logger.Debug("Extra file: {0} is not owned by {1}", possibleExtraFile, movie);
+                        continue;
+                    }
+
+                    movieFileId = owner.Id;
                 }
 
                 var minimalInfo = _parsingService.ParseMinimalPathMovieInfo(possibleExtraFile);
@@ -55,7 +80,7 @@ namespace NzbDrone.Core.Extras.Others
                 var extraFile = new OtherExtraFile
                 {
                     MovieId = movie.Id,
-                    MovieFileId = movie.MovieFileId,
+                    MovieFileId = movieFileId,
                     RelativePath = movie.Path.GetRelativePath(possibleExtraFile),
                     Extension = extension
                 };
