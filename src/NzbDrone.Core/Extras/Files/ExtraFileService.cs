@@ -104,10 +104,12 @@ namespace NzbDrone.Core.Extras.Files
         {
             var movieFile = message.MovieFile;
 
-            if (message.Reason == DeleteMediaFileReason.NoLinkedEpisodes
-                || message.MovieFile.MovieId == 0)
+            var deleteFromDisk = message.Reason == DeleteMediaFileReason.Manual
+                                 || message.Reason == DeleteMediaFileReason.Upgrade;
+
+            if (!deleteFromDisk || message.MovieFile.MovieId == 0)
             {
-                _logger.Debug("Removing movie file from DB as part of cleanup routine, not deleting extra files from disk.");
+                _logger.Debug("Removing movie file from DB, not deleting extra files from disk.");
             }
             else
             {
