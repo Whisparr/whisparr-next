@@ -52,6 +52,30 @@ namespace NzbDrone.Core.Extras.Files
         public abstract bool CanImportFile(LocalMovie localMovie, MovieFile movieFile, string path, string extension, bool readOnly);
         public abstract IEnumerable<ExtraFile> ImportFiles(LocalMovie localMovie, MovieFile movieFile, List<string> files, bool isReadOnly);
 
+        /// <summary>
+        /// The extras that move with a renamed video: the ones linked to it, plus rows an earlier scan left without a
+        /// link (null or 0) when it is the movie's only file and, in a shared folder, the file owns the sidecar.
+        /// </summary>
+        protected static List<TExtraFile> GetExtrasForRenamedFile(IEnumerable<TExtraFile> extraFiles, MovieFile movieFile, bool isOnlyFile, Func<TExtraFile, bool> isOwnedByFile)
+        {
+            var result = new List<TExtraFile>();
+
+            foreach (var extraFile in extraFiles)
+            {
+                if (extraFile.MovieFileId == movieFile.Id)
+                {
+                    result.Add(extraFile);
+                }
+                else if (isOnlyFile && (extraFile.MovieFileId ?? 0) == 0 && isOwnedByFile(extraFile))
+                {
+                    extraFile.MovieFileId = movieFile.Id;
+                    result.Add(extraFile);
+                }
+            }
+
+            return result;
+        }
+
         protected TExtraFile ImportFile(Movie movie, MovieFile movieFile, string path, bool readOnly, string extension, string fileNameSuffix = null)
         {
             var movieFilePath = Path.Combine(movie.Path, movieFile.RelativePath);

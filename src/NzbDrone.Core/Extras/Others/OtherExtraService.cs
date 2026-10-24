@@ -21,6 +21,8 @@ namespace NzbDrone.Core.Extras.Others
         private readonly IOtherExtraFileService _otherExtraFileService;
         private readonly IMediaFileAttributeService _mediaFileAttributeService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly IMediaFileService _mediaFileService;
+        private readonly ISidecarOwnership _sidecarOwnership;
         private readonly Logger _logger;
 
         public OtherExtraService(IConfigService configService,
@@ -29,10 +31,14 @@ namespace NzbDrone.Core.Extras.Others
                                  IOtherExtraFileService otherExtraFileService,
                                  IMediaFileAttributeService mediaFileAttributeService,
                                  ISceneFolderLayout sceneFolderLayout,
+                                 IMediaFileService mediaFileService,
+                                 ISidecarOwnership sidecarOwnership,
                                  Logger logger)
             : base(configService, diskProvider, diskTransferService, logger)
         {
             _sceneFolderLayout = sceneFolderLayout;
+            _mediaFileService = mediaFileService;
+            _sidecarOwnership = sidecarOwnership;
             _diskProvider = diskProvider;
             _otherExtraFileService = otherExtraFileService;
             _mediaFileAttributeService = mediaFileAttributeService;
@@ -66,11 +72,17 @@ namespace NzbDrone.Core.Extras.Others
             var extraFiles = _otherExtraFileService.GetFilesByMovie(movie.Id);
             var movedFiles = new List<OtherExtraFile>();
 
+            var isShared = _sceneFolderLayout.IsShared(movie);
+            var onlyFileId = _mediaFileService.GetFilesByMovie(movie.Id) is { Count: 1 } files ? files[0].Id : 0;
+            var folderFiles = isShared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+
             foreach (var renamedFile in renamedFiles)
             {
                 var movieFile = renamedFile.MovieFile;
 
-                var extraFilesForMovieFile = extraFiles.Where(m => m.MovieFileId == movieFile.Id).ToList();
+                bool IsOwned(OtherExtraFile e) => !isShared || _sidecarOwnership.FindOwner(movie, Path.Combine(movie.Path, e.RelativePath), folderFiles)?.Id == movieFile.Id;
+
+                var extraFilesForMovieFile = GetExtrasForRenamedFile(extraFiles, movieFile, onlyFileId == movieFile.Id, IsOwned);
 
                 foreach (var extraFile in extraFilesForMovieFile)
                 {

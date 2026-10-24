@@ -25,6 +25,8 @@ namespace NzbDrone.Core.Extras.Subtitles
         private readonly ISubtitleFileService _subtitleFileService;
         private readonly IMediaFileAttributeService _mediaFileAttributeService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly IMediaFileService _mediaFileService;
+        private readonly ISidecarOwnership _sidecarOwnership;
         private readonly Logger _logger;
 
         public SubtitleService(IConfigService configService,
@@ -34,10 +36,14 @@ namespace NzbDrone.Core.Extras.Subtitles
                                ISubtitleFileService subtitleFileService,
                                IMediaFileAttributeService mediaFileAttributeService,
                                ISceneFolderLayout sceneFolderLayout,
+                               IMediaFileService mediaFileService,
+                               ISidecarOwnership sidecarOwnership,
                                Logger logger)
             : base(configService, diskProvider, diskTransferService, logger)
         {
             _sceneFolderLayout = sceneFolderLayout;
+            _mediaFileService = mediaFileService;
+            _sidecarOwnership = sidecarOwnership;
             _diskProvider = diskProvider;
             _detectSample = detectSample;
             _subtitleFileService = subtitleFileService;
@@ -73,11 +79,17 @@ namespace NzbDrone.Core.Extras.Subtitles
 
             var movedFiles = new List<SubtitleFile>();
 
+            var isShared = _sceneFolderLayout.IsShared(movie);
+            var onlyFileId = _mediaFileService.GetFilesByMovie(movie.Id) is { Count: 1 } files ? files[0].Id : 0;
+            var folderFiles = isShared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+
             foreach (var renamedFile in renamedFiles)
             {
                 var movieFile = renamedFile.MovieFile;
 
-                var groupedExtraFilesForMovieFile = subtitleFiles.Where(m => m.MovieFileId == movieFile.Id)
+                bool IsOwned(SubtitleFile s) => !isShared || _sidecarOwnership.FindOwner(movie, Path.Combine(movie.Path, s.RelativePath), folderFiles)?.Id == movieFile.Id;
+
+                var groupedExtraFilesForMovieFile = GetExtrasForRenamedFile(subtitleFiles, movieFile, onlyFileId == movieFile.Id, IsOwned)
                                                             .GroupBy(s => s.AggregateString).ToList();
 
                 foreach (var group in groupedExtraFilesForMovieFile)

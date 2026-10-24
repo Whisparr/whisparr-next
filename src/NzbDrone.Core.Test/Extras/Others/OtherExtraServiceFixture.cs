@@ -242,5 +242,37 @@ namespace NzbDrone.Core.Test.Extras.Others
             results.Should().ContainSingle();
             results[0].RelativePath.Should().Be("2020 - Buffy [id].nfo");
         }
+
+        [TestCase(null)]
+        [TestCase(0)]
+        public void other_extra_without_a_file_link_moves_when_the_movie_has_one_file(int? linkedFileId)
+        {
+            var studioFolder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
+            var oldSceneFolder = Path.Combine(studioFolder, "2020 - Buffy [id]");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "2020 - Buffy [id].mp4";
+
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<OtherExtraFile>
+                  {
+                      new() { MovieId = _movie.Id, MovieFileId = linkedFileId, RelativePath = "s1.nfo", Extension = ".nfo" }
+                  });
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_movie.Id)).Returns(new List<MovieFile> { _movieFile });
+
+            var renamed = new RenamedMovieFile
+            {
+                MovieFile = _movieFile,
+                PreviousRelativePath = "s1.mp4",
+                PreviousPath = Path.Combine(oldSceneFolder, "s1.mp4")
+            };
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().Be("2020 - Buffy [id].nfo");
+            results[0].MovieFileId.Should().Be(_movieFile.Id);
+        }
     }
 }

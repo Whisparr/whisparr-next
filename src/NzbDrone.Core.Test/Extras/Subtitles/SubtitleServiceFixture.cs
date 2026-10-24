@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.Extras.Subtitles;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
@@ -254,6 +255,53 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
                       Path.Combine(@"C:\lib\scenes\Shady Spa".AsOsAgnostic(), "2020 - Buffy [id].en.srt"),
                       false),
                       Times.Once());
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().Be("2020 - Buffy [id].en.srt");
+        }
+
+        [TestCase(null)]
+        [TestCase(0)]
+        public void subtitle_without_a_file_link_moves_when_the_movie_has_one_file(int? linkedFileId)
+        {
+            var renamed = GivenRenameIntoStudioFolder("s1.en.srt");
+
+            Mocker.GetMock<ISubtitleFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<SubtitleFile>
+                  {
+                      new() { MovieId = _movie.Id, MovieFileId = linkedFileId, RelativePath = "s1.en.srt", Extension = ".srt", Language = Language.English }
+                  });
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_movie.Id)).Returns(new List<MovieFile> { _movieFile });
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            results.Should().ContainSingle();
+            results[0].RelativePath.Should().Be("2020 - Buffy [id].en.srt");
+            results[0].MovieFileId.Should().Be(_movieFile.Id);
+        }
+
+        [Test]
+        public void unlinked_subtitle_in_a_shared_folder_moves_only_when_the_file_owns_it()
+        {
+            var renamed = GivenRenameIntoStudioFolder("s1.en.srt");
+            var other = new SubtitleFile { MovieId = _movie.Id, MovieFileId = null, RelativePath = "other.en.srt", Extension = ".srt", Language = Language.English };
+
+            Mocker.GetMock<ISubtitleFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<SubtitleFile>
+                  {
+                      new() { MovieId = _movie.Id, MovieFileId = null, RelativePath = "s1.en.srt", Extension = ".srt", Language = Language.English },
+                      other
+                  });
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(_movie.Id)).Returns(new List<MovieFile> { _movieFile });
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+            Mocker.GetMock<ISidecarOwnership>().Setup(s => s.GetFolderFiles(_movie)).Returns(new List<MovieFile> { _movieFile });
+            Mocker.GetMock<ISidecarOwnership>()
+                  .Setup(s => s.FindOwner(_movie, It.IsAny<string>(), It.IsAny<List<MovieFile>>()))
+                  .Returns<Movie, string, List<MovieFile>>((m, p, f) => Path.GetFileName(p) == "s1.en.srt" ? _movieFile : null);
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
 
             results.Should().ContainSingle();
             results[0].RelativePath.Should().Be("2020 - Buffy [id].en.srt");

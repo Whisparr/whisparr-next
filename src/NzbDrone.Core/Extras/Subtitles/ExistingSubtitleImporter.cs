@@ -4,6 +4,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
@@ -22,8 +23,9 @@ namespace NzbDrone.Core.Extras.Subtitles
                                         IParsingService parsingService,
                                         ISceneFolderLayout sceneFolderLayout,
                                         ISidecarOwnership sidecarOwnership,
+                                        IMediaFileService mediaFileService,
                                         Logger logger)
-            : base(subtitleFileService)
+            : base(subtitleFileService, mediaFileService)
         {
             _subtitleFileService = subtitleFileService;
             _parsingService = parsingService;
@@ -50,7 +52,7 @@ namespace NzbDrone.Core.Extras.Subtitles
 
                 if (SubtitleFileExtensions.Extensions.Contains(extension))
                 {
-                    var movieFileId = movie.MovieFileId;
+                    var movieFileId = shared ? 0 : GetCurrentMovieFileId(movie);
 
                     if (shared)
                     {

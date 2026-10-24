@@ -4,6 +4,7 @@ using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 
 namespace NzbDrone.Core.Extras
@@ -12,13 +13,27 @@ namespace NzbDrone.Core.Extras
         where TExtraFile : ExtraFile, new()
     {
         private readonly IExtraFileService<TExtraFile> _extraFileService;
+        private readonly IMediaFileService _mediaFileService;
 
-        public ImportExistingExtraFilesBase(IExtraFileService<TExtraFile> extraFileService)
+        public ImportExistingExtraFilesBase(IExtraFileService<TExtraFile> extraFileService, IMediaFileService mediaFileService)
         {
             _extraFileService = extraFileService;
+            _mediaFileService = mediaFileService;
         }
 
         public abstract int Order { get; }
+
+        /// <summary>
+        /// The file an extra in an exclusive folder belongs to. The movie a scan publishes was loaded before the scan
+        /// imported its video, so its MovieFileId can be stale; the tracked files are the truth.
+        /// </summary>
+        protected int GetCurrentMovieFileId(Movie movie)
+        {
+            var files = _mediaFileService.GetFilesByMovie(movie.Id);
+
+            return files is { Count: 1 } ? files[0].Id : movie.MovieFileId;
+        }
+
         public abstract IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename);
 
         public virtual ImportExistingExtraFileFilterResult<TExtraFile> FilterAndClean(Movie movie, List<string> filesOnDisk, List<string> importedFiles, bool keepExistingEntries)

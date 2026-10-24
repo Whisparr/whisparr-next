@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.Extras.Subtitles;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
@@ -25,8 +26,9 @@ namespace NzbDrone.Core.Extras.Metadata
                                         IParsingService parsingService,
                                         ISceneFolderLayout sceneFolderLayout,
                                         ISidecarOwnership sidecarOwnership,
+                                        IMediaFileService mediaFileService,
                                         Logger logger)
-        : base(metadataFileService)
+        : base(metadataFileService, mediaFileService)
         {
             _metadataFileService = metadataFileService;
             _parsingService = parsingService;
@@ -57,7 +59,7 @@ namespace NzbDrone.Core.Extras.Metadata
                     continue;
                 }
 
-                var movieFileId = movie.MovieFileId;
+                var movieFileId = shared ? 0 : GetCurrentMovieFileId(movie);
 
                 if (shared)
                 {

@@ -212,6 +212,19 @@ namespace NzbDrone.Core.Test.Extras
             _upserted[0].MovieFileId.Should().Be(99);
             Mocker.GetMock<ISidecarOwnership>().Verify(s => s.FindOwner(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<List<MovieFile>>()), Times.Never);
         }
+
+        [Test]
+        public void exclusive_folder_links_to_the_current_file_when_the_scanned_movie_is_stale()
+        {
+            // The scan publishes the movie it loaded before it imported the video, so MovieFileId is still 0
+            _movie.MovieFileId = 0;
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MovieFile> { new() { Id = 7, MovieId = 1 } });
+
+            Subject.ProcessFiles(_movie, new List<string> { Path.Combine(_folder, "s1.en.srt") }, new List<string>(), null).ToList();
+
+            _upserted.Should().ContainSingle();
+            _upserted[0].MovieFileId.Should().Be(7);
+        }
     }
 
     [TestFixture]
@@ -269,6 +282,18 @@ namespace NzbDrone.Core.Test.Extras
 
             _upserted.Should().ContainSingle();
             _upserted[0].MovieFileId.Should().Be(99);
+        }
+
+        [Test]
+        public void exclusive_folder_links_to_the_current_file_when_the_scanned_movie_is_stale()
+        {
+            _movie.MovieFileId = 0;
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MovieFile> { new() { Id = 7, MovieId = 1 } });
+
+            Subject.ProcessFiles(_movie, new List<string> { Path.Combine(_folder, "s1-poster.jpg") }, new List<string>(), null).ToList();
+
+            _upserted.Should().ContainSingle();
+            _upserted[0].MovieFileId.Should().Be(7);
         }
     }
 
@@ -339,6 +364,18 @@ namespace NzbDrone.Core.Test.Extras
 
             _upserted.Should().ContainSingle();
             _upserted[0].MovieFileId.Should().Be(99);
+        }
+
+        [Test]
+        public void exclusive_folder_links_to_the_current_file_when_the_scanned_movie_is_stale()
+        {
+            _movie.MovieFileId = 0;
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MovieFile> { new() { Id = 7, MovieId = 1 } });
+
+            Subject.ProcessFiles(_movie, new List<string> { Path.Combine(_folder, "poster.jpg") }, new List<string>(), null).ToList();
+
+            _upserted.Should().ContainSingle();
+            _upserted[0].MovieFileId.Should().Be(7);
         }
     }
 }
