@@ -1,8 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
-using DryIoc.ImTools;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -197,29 +196,13 @@ namespace NzbDrone.Core.MediaFiles
         {
             if (message.DeleteFiles)
             {
-                var movieIds = message.Movies.Map(m => m.Id).ToList();
-                var allMovies = _movieService.FindByIds(movieIds);
+                var allMoviePaths = _movieService.AllMoviePaths();
 
                 foreach (var movie in message.Movies)
                 {
-                    foreach (var s in allMovies)
+                    if (IsPathUsedByAnotherMovie(movie, allMoviePaths))
                     {
-                        if (s.Id == movie.Id)
-                        {
-                            continue;
-                        }
-
-                        if (movie.Path.IsParentPath(s.Path))
-                        {
-                            _logger.Error("Movie path: '{0}' is a parent of another movie, not deleting files.", movie.Path);
-                            return;
-                        }
-
-                        if (movie.Path.PathEquals(s.Path))
-                        {
-                            _logger.Error("Movie path: '{0}' is the same as another movie, not deleting files.", movie.Path);
-                            return;
-                        }
+                        continue;
                     }
 
                     if (_diskProvider.FolderExists(movie.Path))
@@ -230,6 +213,31 @@ namespace NzbDrone.Core.MediaFiles
 
                 _eventAggregator.PublishEvent(new DeleteCompletedEvent());
             }
+        }
+
+        private bool IsPathUsedByAnotherMovie(Movie movie, Dictionary<int, string> allMoviePaths)
+        {
+            foreach (var other in allMoviePaths)
+            {
+                if (other.Key == movie.Id)
+                {
+                    continue;
+                }
+
+                if (movie.Path.IsParentPath(other.Value))
+                {
+                    _logger.Error("Movie path: '{0}' is a parent of another movie, not deleting files.", movie.Path);
+                    return true;
+                }
+
+                if (movie.Path.PathEquals(other.Value))
+                {
+                    _logger.Error("Movie path: '{0}' is the same as another movie, not deleting files.", movie.Path);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         [EventHandleOrder(EventHandleOrder.Last)]
