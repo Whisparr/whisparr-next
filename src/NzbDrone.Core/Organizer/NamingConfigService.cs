@@ -1,3 +1,5 @@
+using NzbDrone.Core.Messaging.Events;
+
 namespace NzbDrone.Core.Organizer
 {
     public interface INamingConfigService
@@ -10,9 +12,12 @@ namespace NzbDrone.Core.Organizer
     {
         private readonly INamingConfigRepository _repository;
 
-        public NamingConfigService(INamingConfigRepository repository)
+        private readonly IEventAggregator _eventAggregator;
+
+        public NamingConfigService(INamingConfigRepository repository, IEventAggregator eventAggregator)
         {
             _repository = repository;
+            _eventAggregator = eventAggregator;
         }
 
         public NamingConfig GetConfig()
@@ -39,6 +44,7 @@ namespace NzbDrone.Core.Organizer
         public void Save(NamingConfig namingConfig)
         {
             _repository.Upsert(namingConfig);
+            _eventAggregator.PublishEvent(new NamingConfigSavedEvent());
         }
     }
 }

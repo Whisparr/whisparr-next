@@ -3,8 +3,10 @@ using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -22,15 +24,15 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileServiceTests
             _folder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
             _movieFolder = @"C:\lib\scenes\Shady Spa\Some Movie".AsOsAgnostic();
 
-            Mocker.GetMock<IMovieRepository>()
-                  .Setup(s => s.AllMoviePathEntries())
-                  .Returns(new List<MoviePathEntry>
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsTouchingFolder(It.IsAny<string>()))
+                  .Returns((string folder) => new List<MoviePathEntry>
                   {
                       new() { Id = 1, Path = _folder, ItemType = ItemType.Scene },
                       new() { Id = 2, Path = _folder, ItemType = ItemType.Scene },
                       new() { Id = 9, Path = _movieFolder, ItemType = ItemType.Movie },
                       new() { Id = 50, Path = @"C:\lib\scenes\Other Studio".AsOsAgnostic(), ItemType = ItemType.Scene }
-                  });
+                  }.Where(e => e.Path.PathEquals(folder) || folder.IsParentPath(e.Path) || e.Path.IsParentPath(folder)).ToList());
 
             Mocker.GetMock<IMediaFileRepository>()
                   .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
@@ -70,6 +72,16 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileServiceTests
                   .Verify(v => v.GetFilesByMovies(It.Is<IEnumerable<int>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { 1, 2, 9 }))), Times.Once());
             Mocker.GetMock<IMediaFileRepository>()
                   .Verify(v => v.GetAllFiles(), Times.Never());
+        }
+
+        [Test]
+        public void should_take_item_paths_from_the_layout_cache_never_the_movie_table()
+        {
+            Subject.FilterFilesTrackedByAnyItem(_folder, new List<string> { System.IO.Path.Combine(_folder, "s1.mp4") });
+            Subject.FilterFilesTrackedByAnyItem(_folder, new List<string> { System.IO.Path.Combine(_folder, "s1.mp4") });
+
+            Mocker.GetMock<IMovieRepository>().Verify(v => v.AllMoviePathEntries(), Times.Never());
+            Mocker.GetMock<ISceneFolderLayout>().Verify(v => v.GetItemsTouchingFolder(_folder), Times.Exactly(2));
         }
 
         [Test]

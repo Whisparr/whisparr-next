@@ -19,6 +19,9 @@ namespace NzbDrone.Core.Organizer
         bool IsShared(Movie movie);
         List<MoviePathEntry> GetItemsInFolder(string folder);
 
+        // Items whose folder is, sits inside, or contains the given folder. Read from the cached path index.
+        List<MoviePathEntry> GetItemsTouchingFolder(string folder);
+
         // True when another item's folder is, or sits inside, the given folder.
         bool HoldsOtherItems(int movieId, string folder);
     }
@@ -30,14 +33,19 @@ namespace NzbDrone.Core.Organizer
                                      IHandle<MovieEditedEvent>,
                                      IHandle<MoviesBulkEditedEvent>,
                                      IHandle<MovieMovedEvent>,
-                                     IHandle<MovieRenamedEvent>
+                                     IHandle<MovieRenamedEvent>,
+                                     IHandle<MovieFileAddedEvent>,
+                                     IHandle<NamingConfigSavedEvent>
     {
         private static readonly Regex TokenRegex = new(@"\{[^}]+\}", RegexOptions.Compiled, RegexDefaults.Timeout);
         private static readonly char[] PathSeparators = { '/', '\\' };
+        private static readonly string[] SceneLevelPrefixes = { "Scene ", "Scene.", "Scene-", "Scene_", "Release ", "Release.", "Release-", "Release_", "Movie ", "Movie.", "Movie-", "Movie_", "Original ", "Original.", "Original-", "Original_" };
+        private static readonly string[] SceneLevelIds = { "StashId", "TmdbId", "ImdbId" };
 
         private readonly IMovieService _movieService;
         private readonly INamingConfigService _namingConfigService;
         private readonly ICached<List<MoviePathEntry>> _pathCache;
+        private readonly ICached<bool> _flatCache;
 
         public SceneFolderLayout(IMovieService movieService,
                                  INamingConfigService namingConfigService,
@@ -46,10 +54,12 @@ namespace NzbDrone.Core.Organizer
             _movieService = movieService;
             _namingConfigService = namingConfigService;
             _pathCache = cacheManager.GetCache<List<MoviePathEntry>>(GetType());
+            _flatCache = cacheManager.GetCache<bool>(GetType(), "flat");
         }
 
-        // A format is flat when its last path segment (the folder the files land in) names
-        // no token, or only Studio tokens, so every scene of a studio shares one folder.
+        // A format is flat unless its last path segment (the folder the files land in) names a
+        // scene-identifying token. Anything else, including unrecognised tokens, is the safe
+        // "shared" default for deletes and moves.
         public static bool FormatIsFlat(string sceneFolderFormat)
         {
             var lastSegment = (sceneFolderFormat ?? string.Empty)
@@ -61,9 +71,15 @@ namespace NzbDrone.Core.Organizer
                 return true;
             }
 
-            return TokenRegex.Matches(lastSegment)
+            return !TokenRegex.Matches(lastSegment)
                 .Select(m => m.Value.Trim('{', '}').TrimStart('[', '('))
-                .All(name => name.StartsWith("Studio", StringComparison.Ordinal));
+                .Any(IsSceneIdentifyingToken);
+        }
+
+        private static bool IsSceneIdentifyingToken(string name)
+        {
+            return SceneLevelPrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)) ||
+                   SceneLevelIds.Any(i => name.StartsWith(i, StringComparison.OrdinalIgnoreCase));
         }
 
         public bool IsFlatFormat(string sceneFolderFormat)
@@ -73,7 +89,7 @@ namespace NzbDrone.Core.Organizer
 
         public bool IsFlat()
         {
-            return FormatIsFlat(_namingConfigService.GetConfig().SceneFolderFormat);
+            return _flatCache.Get("flat", () => FormatIsFlat(_namingConfigService.GetConfig().SceneFolderFormat), TimeSpan.FromMinutes(5));
         }
 
         public bool IsShared(Movie movie)
@@ -102,6 +118,14 @@ namespace NzbDrone.Core.Organizer
         {
             return AllPathEntries()
                 .Where(e => e.Path.IsNotNullOrWhiteSpace() && e.Path.PathEquals(folder))
+                .ToList();
+        }
+
+        public List<MoviePathEntry> GetItemsTouchingFolder(string folder)
+        {
+            return AllPathEntries()
+                .Where(e => e.Path.IsNotNullOrWhiteSpace() &&
+                            (e.Path.PathEquals(folder) || folder.IsParentPath(e.Path) || e.Path.IsParentPath(folder)))
                 .ToList();
         }
 
@@ -145,6 +169,17 @@ namespace NzbDrone.Core.Organizer
         public void Handle(MovieRenamedEvent message)
         {
             _pathCache.Clear();
+        }
+
+        // An import can recompute Movie.Path while saving the new file without any edit event.
+        public void Handle(MovieFileAddedEvent message)
+        {
+            _pathCache.Clear();
+        }
+
+        public void Handle(NamingConfigSavedEvent message)
+        {
+            _flatCache.Clear();
         }
 
         private List<MoviePathEntry> AllPathEntries()

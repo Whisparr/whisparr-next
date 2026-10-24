@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Organizer;
@@ -31,6 +34,8 @@ namespace NzbDrone.Core.Test.OrganizerTests
         [TestCase("{Studio Title}")]
         [TestCase("{Studio Network}/{Studio TitleSlug}")]
         [TestCase("scenes/Literal")]
+        [TestCase("{Studio Title}/{Quality Title}")]
+        [TestCase("{Studio Title}/{Quality Title} {Custom Formats}")]
         public void format_is_flat(string format)
         {
             SceneFolderLayout.FormatIsFlat(format).Should().BeTrue();
@@ -40,6 +45,12 @@ namespace NzbDrone.Core.Test.OrganizerTests
         [TestCase("{Studio Title}/{Scene Title}")]
         [TestCase("{Studio Title}/{StashId}")]
         [TestCase("{Studio Title}/{Release Date}")]
+        [TestCase("{Studio Title}/{Release Year}")]
+        [TestCase("{Studio Title}/{Movie Title} ({Movie Year})")]
+        [TestCase("{Studio Title}/{Original Title}")]
+        [TestCase("{Studio Title}/{Studio Title} {(TmdbId)}")]
+        [TestCase("{Studio Title}/{[ImdbId]}")]
+        [TestCase("{Studio Title}/{Studio Title}-{[Scene ForeignId]}")]
         public void format_is_not_flat(string format)
         {
             SceneFolderLayout.FormatIsFlat(format).Should().BeFalse();
@@ -53,13 +64,58 @@ namespace NzbDrone.Core.Test.OrganizerTests
         }
 
         [Test]
-        public void is_flat_should_read_current_naming_config()
+        public void is_flat_should_read_current_naming_config_after_it_is_saved()
         {
             Subject.IsFlat().Should().BeFalse();
 
             _namingConfig.SceneFolderFormat = FlatFormat;
+            Subject.Handle(new NamingConfigSavedEvent());
 
             Subject.IsFlat().Should().BeTrue();
+        }
+
+        [Test]
+        public void is_flat_should_not_read_the_naming_config_on_a_second_call()
+        {
+            GivenEntries(Entry(1, "/media/scenes/Studio/A", ItemType.Scene));
+
+            Subject.IsFlat();
+            Subject.IsFlat();
+            Subject.IsShared(GivenItem(1, "/media/scenes/Studio/A", ItemType.Scene));
+
+            Mocker.GetMock<INamingConfigService>().Verify(s => s.GetConfig(), Times.Once());
+        }
+
+        [Test]
+        public void path_cache_is_cleared_on_movie_file_added_event()
+        {
+            GivenEntries(Entry(1, "/media/scenes/Studio/A", ItemType.Scene));
+
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile()));
+            Subject.GetItemsInFolder("/media/scenes/Studio/A");
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+        }
+
+        [Test]
+        public void get_items_touching_folder_returns_items_in_under_and_above_the_folder_from_the_cache()
+        {
+            GivenEntries(
+                Entry(1, "/media/scenes/Studio", ItemType.Scene),
+                Entry(2, "/media/scenes/Studio/Movie", ItemType.Movie),
+                Entry(3, "/media/scenes", ItemType.Scene),
+                Entry(4, "/media/other", ItemType.Scene),
+                Entry(5, null, ItemType.Scene));
+
+            Subject.GetItemsTouchingFolder("/media/scenes/Studio").Select(e => e.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+            Subject.GetItemsTouchingFolder("/media/scenes/Studio");
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Once());
         }
 
         [Test]

@@ -11,6 +11,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Organizer;
 
 namespace NzbDrone.Core.MediaFiles
 {
@@ -47,12 +48,15 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMovieRepository _movieRepository;
         private readonly IEventAggregator _eventAggregator;
         private readonly ICacheManager _cacheManager;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
 
         public MediaFileService(IMediaFileRepository mediaFileRepository,
                                 IMovieRepository movieRepository,
                                 ICacheManager cacheManager,
-                                IEventAggregator eventAggregator)
+                                IEventAggregator eventAggregator,
+                                ISceneFolderLayout sceneFolderLayout)
         {
+            _sceneFolderLayout = sceneFolderLayout;
             _mediaFileRepository = mediaFileRepository;
             _movieRepository = movieRepository;
             _eventAggregator = eventAggregator;
@@ -224,9 +228,7 @@ namespace NzbDrone.Core.MediaFiles
         // Only the rows of items whose path is the folder, inside it or an ancestor of it are read, never the whole table.
         public List<string> FilterFilesTrackedByAnyItem(string folder, List<string> files)
         {
-            var moviePaths = _movieRepository.AllMoviePathEntries()
-                .Where(e => e.Path.IsNotNullOrWhiteSpace() &&
-                            (e.Path.PathEquals(folder) || folder.IsParentPath(e.Path) || e.Path.IsParentPath(folder)))
+            var moviePaths = _sceneFolderLayout.GetItemsTouchingFolder(folder)
                 .ToDictionary(e => e.Id, e => e.Path);
 
             if (moviePaths.Count == 0)
