@@ -176,10 +176,13 @@
   - `movie_may_not_share_path_with_a_movie`: invalid (unchanged).
   - Ancestor:
     - a scene path that's an ancestor of another scene's path is valid;
-    - a scene path that's an ancestor of a movie's path is invalid;
+    - a scene path that's an ancestor of a movie's path is valid. This is the studio that has both: scenes flat in `scenes/Shady Spa`, a movie in `scenes/Shady Spa/Some Movie`;
     - a movie path that's an ancestor of anything is invalid.
+  - `scene_added_after_movie_nested_in_studio_folder_is_valid`: entries hold a movie at `/lib/scenes/Shady Spa/Some Movie`, and the scene's path is `/lib/scenes/Shady Spa`.
 - [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.** A conflict exists unless both the instance and the other entry are scenes.
+- [ ] **Step 3: Implement.**
+  - **Equal paths** conflict unless both items are scenes.
+  - **Ancestor** conflicts only when the instance is a movie. A scene may contain any item's folder.
 - [ ] **Step 4: Run the Core and Api tests.** Expected: PASS.
 - [ ] **Step 5: Commit.** `New: Allow scenes to share or nest folders with other scenes`
 
@@ -208,6 +211,7 @@
     - `rescan_of_s1_does_not_import_s2_file_as_s1`. Files on disk are `s1.mp4` and `s2.mp4`. The scanner identifies `s2.mp4` → S2 and `s1.mp4` → S1. Assert every `ImportDecision` passed to `Import` has `LocalMovie.Movie.Id` equal to the scene that file identified as, and that no decision attaches `s2.mp4` to S1.
     - `rescan_of_s1_leaves_unidentified_file_alone`: an `unknown.mp4` gives no decision and no `MovieFile`.
     - `rescan_of_studio_scene_ignores_files_in_nested_old_scene_folder_owned_by_other_scene` (Review Focus 2): `/lib/scenes/Shady Spa/old S3 folder/s3.mp4` identifies as S3, whose path is that sub-folder. No decision is made for it from S1's scan.
+    - `rescan_of_flat_scene_ignores_movie_files_in_nested_movie_folder`: the movie at `/lib/scenes/Shady Spa/Some Movie` has a tracked `movie.mp4` and an untracked `movie-extra.mp4`. S1's scan makes no decision for either file.
     - `exclusive_folder_still_imports_any_file_as_the_scene` (Review Focus 5): per-scene folder, `IsShared` false, an odd name `a8f3c0de.mp4`. Assert the existing `GetImportDecisions(files, movie, false)` path is used, unchanged.
     - `unmapped_cleanup_only_removes_rows_for_owned_files`. An unmapped `MovieFile` row with `OriginalFilePath` `/lib/scenes/Shady Spa/s2.mp4` exists while scanning S1, and S1 doesn't own that file. Assert it isn't deleted.
     - `relink_in_shared_folder_only_considers_unowned_files`. S1's file is missing, and S2's tracked file happens to share the oshash (synthetic). Assert S1 isn't re-pointed to S2's file.
@@ -338,6 +342,7 @@
   - `deleting_scene_in_shared_folder_recycles_only_its_owned_files`: `DeleteFile` once for each owned path; `DeleteFolder` never; siblings' paths are never passed.
   - `deleting_last_scene_in_flat_folder_with_unknown_files_keeps_folder` (Review Focus 3): the owned files are recycled, `FolderEmpty` is false, and the folder isn't deleted.
   - `deleting_last_scene_in_flat_folder_removes_folder_when_empty`
+  - `deleting_scene_keeps_nested_movie_folder`: the movie sits at `/lib/scenes/Shady Spa/Some Movie`. Only the scene's files are recycled, and the movie folder is never recycled or deleted.
   - `moving_scene_in_shared_folder_moves_owned_files_one_by_one`: `TransferFile` for each owned file and extra; `TransferFolder` never; `movie.Path` becomes the destination.
   - `moving_scene_in_exclusive_folder_still_moves_folder`: unchanged.
 - [ ] **Step 2: Run.** Expected: FAIL.

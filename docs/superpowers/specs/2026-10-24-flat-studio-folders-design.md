@@ -139,7 +139,7 @@ Working today: organising video files into the flat folder (the file and `Movie.
 
 ### Path validation
 
-- **`MoviePathValidator` and `MovieAncestorValidator`** let a scene share or nest under another *scene's* path. A scene still may not share a path with a movie, and a movie may not share a path with anything.
+- **`MoviePathValidator` and `MovieAncestorValidator`** let a scene share a path with another scene, and let a scene's folder contain any item's folder. That covers a studio that has both: scenes flat in `scenes/Shady Spa`, a movie in `scenes/Shady Spa/Some Movie`. A scene still may not have the same path as a movie, and a movie's folder may not equal or contain any other item's folder.
   - This applies wherever those validators run: `AddMovieValidator`, the V5 and V3 movie controllers, and `RootFolderController`.
   - Root folder ancestor rules stay as they are.
 - **Naming validation (`ValidMainSceneFolderFormat`)** drops the scene-title-token requirement. It keeps the illegal-character check and the studio-token check (`ValidSceneFolderFormat`).
