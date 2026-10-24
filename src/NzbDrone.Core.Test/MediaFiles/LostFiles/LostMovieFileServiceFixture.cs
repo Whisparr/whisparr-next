@@ -39,6 +39,9 @@ namespace NzbDrone.Core.Test.MediaFiles.LostFiles
 
             Mocker.GetMock<ILostMovieFileRepository>().Setup(s => s.FindByHash(Hash, Size)).Returns(new List<LostMovieFile> { _entry });
             Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(7)).Returns(_movie);
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(It.IsAny<string>(), It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files);
             Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(7)).Returns(() => _movieFiles);
             Mocker.GetMock<IRootFolderService>().Setup(s => s.GetBestRootFolderPath(It.IsAny<string>(), null)).Returns(@"C:\lib".AsOsAgnostic());
             Mocker.GetMock<IMakeImportDecision>()
@@ -48,6 +51,11 @@ namespace NzbDrone.Core.Test.MediaFiles.LostFiles
                   .Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), false, null, ImportMode.Auto))
                   .Returns<List<ImportDecision>, bool, Core.Download.DownloadClientItem, ImportMode>((decisions, _, _, _) =>
                   {
+                      if (decisions.Count == 0)
+                      {
+                          return new List<ImportResult>();
+                      }
+
                       _movieFiles = new List<MovieFile> { new() { MovieId = 7, RelativePath = decisions[0].LocalMovie.Movie.Path.GetRelativePath(decisions[0].LocalMovie.Path) } };
 
                       return decisions.Select(d => new ImportResult(d)).ToList();
@@ -139,9 +147,66 @@ namespace NzbDrone.Core.Test.MediaFiles.LostFiles
         }
 
         [Test]
+        public void does_not_relink_file_tracked_by_another_item()
+        {
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(It.IsAny<string>(), It.IsAny<List<string>>()))
+                  .Returns(new List<string>());
+
+            Subject.TryRelink(_newPath, Hash, Size).Should().BeNull();
+
+            VerifyNothingRelinked();
+            Mocker.GetMock<IMovieService>().Verify(v => v.UpdateMovie(It.IsAny<Movie>()), Times.Never());
+        }
+
+        [Test]
+        public void saves_new_movie_path_before_the_import_runs()
+        {
+            var savedPaths = new List<string>();
+            string pathDuringImport = null;
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.UpdateMovie(It.IsAny<Movie>()))
+                  .Callback<Movie>(m => savedPaths.Add(m.Path));
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), false))
+                  .Callback(() => pathDuringImport = savedPaths.LastOrDefault())
+                  .Returns(new List<ImportDecision>());
+
+            Subject.TryRelink(_newPath, Hash, Size);
+
+            pathDuringImport.Should().Be(Path.GetDirectoryName(_newPath));
+        }
+
+        [Test]
+        public void restores_and_saves_old_path_when_the_import_throws()
+        {
+            var previousPath = _movie.Path;
+            var savedPaths = new List<string>();
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.UpdateMovie(It.IsAny<Movie>()))
+                  .Callback<Movie>(m => savedPaths.Add(m.Path));
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), false))
+                  .Throws(new InvalidOperationException());
+
+            Action act = () => Subject.TryRelink(_newPath, Hash, Size);
+
+            act.Should().Throw<InvalidOperationException>();
+            _movie.Path.Should().Be(previousPath);
+            savedPaths[^1].Should().Be(previousPath);
+        }
+
+        [Test]
         public void keeps_entry_and_movie_path_when_import_does_not_approve_the_file()
         {
             var previousPath = _movie.Path;
+            var savedPaths = new List<string>();
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.UpdateMovie(It.IsAny<Movie>()))
+                  .Callback<Movie>(m => savedPaths.Add(m.Path));
 
             Mocker.GetMock<IMakeImportDecision>()
                   .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), false))
@@ -153,7 +218,9 @@ namespace NzbDrone.Core.Test.MediaFiles.LostFiles
             Subject.TryRelink(_newPath, Hash, Size).Should().BeNull();
 
             _movie.Path.Should().Be(previousPath);
-            Mocker.GetMock<IMovieService>().Verify(v => v.UpdateMovie(It.IsAny<Movie>()), Times.Never());
+
+            // Saved with the new path for the import, then saved again with the old one
+            savedPaths.Should().Equal(Path.GetDirectoryName(_newPath), previousPath);
             Mocker.GetMock<ILostMovieFileRepository>().Verify(v => v.Delete(It.IsAny<LostMovieFile>()), Times.Never());
         }
 

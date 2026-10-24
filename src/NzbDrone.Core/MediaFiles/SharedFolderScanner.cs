@@ -20,6 +20,10 @@ namespace NzbDrone.Core.MediaFiles
         // Import decisions for the files in the folder that identify as an in-library scene whose Path is movie.Path,
         // siblings included. Everything else is dropped: nothing is searched online, moved, added or recorded as unmapped.
         List<ImportDecision> IdentifyOwned(Movie movie, List<string> unmappedVideoFiles);
+
+        // True the first time an unowned file is offered for a lost-file check, then false for 10 minutes (or until it
+        // changes on disk), so a file nobody claims is hashed at most once per window.
+        bool TryBeginLostFileCheck(string file);
     }
 
     public class SharedFolderScanner : ISharedFolderScanner
@@ -111,6 +115,20 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return result;
+        }
+
+        public bool TryBeginLostFileCheck(string file)
+        {
+            var key = "lost|" + CacheKey(file);
+
+            if (_unidentifiedCache.Find(key) != null)
+            {
+                return false;
+            }
+
+            _unidentifiedCache.Set(key, "1", UnidentifiedLifetime);
+
+            return true;
         }
 
         private Dictionary<int, Movie> GetScenesInFolder(Movie movie)

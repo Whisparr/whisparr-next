@@ -358,16 +358,27 @@ namespace NzbDrone.Core.MediaFiles
         // Shared folder: identify what this scene (or a sibling) owns and import it, one scan per folder at a time.
         private List<ImportDecision> IdentifyAndImportOwned(Movie movie, List<string> unmappedFiles)
         {
-            var folderLock = FolderLocks.GetOrAdd(movie.Path, _ => new SemaphoreSlim(1, 1));
+            List<ImportDecision> decisions = null;
 
-            _logger.Trace("Acquiring folder scan lock for {0}", movie.Path);
+            RunInFolderLock(movie.Path, () =>
+            {
+                decisions = _sharedFolderScanner.IdentifyOwned(movie, unmappedFiles);
+                _importApprovedMovies.Import(decisions, false);
+            });
+
+            return decisions;
+        }
+
+        // Always taken after the movie lock (R2)
+        private void RunInFolderLock(string folder, Action action)
+        {
+            var folderLock = FolderLocks.GetOrAdd(folder, _ => new SemaphoreSlim(1, 1));
+
+            _logger.Trace("Acquiring folder scan lock for {0}", folder);
             folderLock.Wait();
             try
             {
-                var decisions = _sharedFolderScanner.IdentifyOwned(movie, unmappedFiles);
-                _importApprovedMovies.Import(decisions, false);
-
-                return decisions;
+                action();
             }
             finally
             {
@@ -380,7 +391,7 @@ namespace NzbDrone.Core.MediaFiles
                     // Shouldn't happen, but guard against releasing too many times.
                 }
 
-                _logger.Trace("Released folder scan lock for {0}", movie.Path);
+                _logger.Trace("Released folder scan lock for {0}", folder);
             }
         }
 
@@ -507,14 +518,33 @@ namespace NzbDrone.Core.MediaFiles
                 return;
             }
 
-            // A shared folder holds siblings' files too: only what no item tracks is unowned
-            var candidates = shared ? _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles) : unmappedFiles;
+            if (shared)
+            {
+                // Under the folder lock a sibling's scan can't claim the same file meanwhile
+                RunInFolderLock(movie.Path, () => RelinkLostFilesLocked(movie, unmappedFiles, decisions));
+            }
+            else
+            {
+                RelinkLostFilesLocked(movie, unmappedFiles, decisions);
+            }
+        }
+
+        private void RelinkLostFilesLocked(Movie movie, List<string> unmappedFiles, List<ImportDecision> decisions)
+        {
+            // Only what no item tracks is unowned, whatever the layout
+            var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles);
             var decided = new HashSet<string>(decisions.Select(d => d.LocalMovie.Path), PathEqualityComparer.Instance);
 
             foreach (var path in candidates.Where(c => !decided.Contains(c)))
             {
                 try
                 {
+                    // Each unowned file is hashed at most once per cache window
+                    if (!_sharedFolderScanner.TryBeginLostFileCheck(path))
+                    {
+                        continue;
+                    }
+
                     var (osHash, _) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
 
                     if (osHash.IsNullOrWhiteSpace())

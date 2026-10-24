@@ -222,6 +222,30 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void lost_file_check_begins_once_per_window_and_again_when_the_file_changed()
+        {
+            var file = F("unowned.mp4");
+
+            Subject.TryBeginLostFileCheck(file).Should().BeTrue();
+            Subject.TryBeginLostFileCheck(file).Should().BeFalse();
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFileSize(file)).Returns(999);
+
+            Subject.TryBeginLostFileCheck(file).Should().BeTrue();
+        }
+
+        [Test]
+        public void lost_file_check_does_not_hide_the_file_from_identification()
+        {
+            var file = F("unknown.mp4");
+
+            Subject.TryBeginLostFileCheck(file).Should().BeTrue();
+            Subject.IdentifyOwned(_s1, new List<string> { file });
+
+            Mocker.GetMock<IParsingService>().Verify(v => v.ParseMinimalPathMovieInfo(file), Times.Once());
+        }
+
+        [Test]
         public void ignores_files_tracked_by_any_item()
         {
             Mocker.GetMock<IMediaFileService>()

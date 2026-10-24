@@ -867,6 +867,10 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         {
             _movie.MovieMetadata = new MovieMetadata { ItemType = ItemType.Scene };
             Mocker.GetMock<ILostMovieFileService>().Setup(s => s.Any()).Returns(true);
+            Mocker.GetMock<ISharedFolderScanner>().Setup(s => s.TryBeginLostFileCheck(It.IsAny<string>())).Returns(true);
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files);
             Mocker.GetMock<IMakeImportDecision>()
                   .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), _movie, false))
                   .Returns(new List<ImportDecision>());
@@ -967,6 +971,38 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Subject.Scan(_movie);
 
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
+        }
+
+        [Test]
+        public void file_tracked_by_another_item_is_not_a_relink_candidate_in_an_exclusive_folder()
+        {
+            GivenSceneWithLostEntries();
+
+            var path = GivenNewFileOnDisk("tracked.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns(new List<string>());
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
+        }
+
+        [Test]
+        public void file_checked_within_the_window_is_not_hashed_again()
+        {
+            GivenSceneWithLostEntries();
+            Mocker.GetMock<ISharedFolderScanner>().Setup(s => s.TryBeginLostFileCheck(It.IsAny<string>())).Returns(false);
+
+            var path = GivenNewFileOnDisk("moved-in.mkv", "bbbbbbbbbbbbbbbb");
+            GivenRowsAndDisk(new List<MovieFile>(), path);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(path), Times.Never());
             Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
         }
 

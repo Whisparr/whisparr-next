@@ -105,28 +105,56 @@ namespace NzbDrone.Core.MediaFiles.LostFiles
                 return null;
             }
 
+            var folder = path.GetParentPath();
+
+            // Defence in depth: a file any item already tracks is never handed to a second scene
+            if (_mediaFileService.FilterFilesTrackedByAnyItem(folder, new List<string> { path }).Count == 0)
+            {
+                return null;
+            }
+
             var previousPath = movie.Path;
 
             // The lost row kept no quality or media info, so the file goes through the normal existing-file import
             // for this one scene, which fills both. It runs as not-a-new-download: nothing is moved or copied.
-            movie.Path = path.GetParentPath();
+            // The new path is saved first: handlers fired during the import may re-read the movie from the DB.
+            movie.Path = folder;
+            _movieService.UpdateMovie(movie);
 
-            var decisions = _importDecisionMaker.GetImportDecisions(new List<string> { path }, movie, false);
-            var results = _importApprovedMovies.Import(decisions, false);
+            bool imported;
 
-            if (results.All(r => r.Result != ImportResultType.Imported))
+            try
             {
-                movie.Path = previousPath;
+                var decisions = _importDecisionMaker.GetImportDecisions(new List<string> { path }, movie, false);
+                var results = _importApprovedMovies.Import(decisions, false);
+
+                imported = results.Any(r => r.Result == ImportResultType.Imported);
+            }
+            catch
+            {
+                RestorePath(movie, previousPath);
+
+                throw;
+            }
+
+            if (!imported)
+            {
+                RestorePath(movie, previousPath);
 
                 return null;
             }
 
-            _movieService.UpdateMovie(movie);
             _repository.Delete(entry);
 
             _logger.Info("Re-linked {0} to {1} by oshash; it was {2} before it went missing", path, movie, entry.RelativePath);
 
             return _mediaFileService.GetFilesByMovie(movie.Id).FirstOrDefault();
+        }
+
+        private void RestorePath(Movie movie, string previousPath)
+        {
+            movie.Path = previousPath;
+            _movieService.UpdateMovie(movie);
         }
 
         public void Handle(MoviesDeletedEvent message)
