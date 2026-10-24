@@ -16,6 +16,7 @@ using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
@@ -106,6 +107,41 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<IMediaFileTableCleanupService>()
                 .Verify(v => v.Clean(It.IsAny<Movie>(), It.IsAny<List<string>>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_sweep_empty_subfolders_when_folder_holds_other_items()
+        {
+            GivenMovieFolder();
+
+            Mocker.GetMock<IConfigService>()
+                  .Setup(s => s.DeleteEmptyFolders)
+                  .Returns(true);
+
+            // A sibling scene shares the folder, and a movie's (empty) folder is nested in it
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.HoldsOtherItems(_movie.Id, _movie.Path))
+                  .Returns(true);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.RemoveEmptySubfolders(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_sweep_empty_subfolders_when_folder_holds_no_other_items()
+        {
+            GivenMovieFolder();
+
+            Mocker.GetMock<IConfigService>()
+                  .Setup(s => s.DeleteEmptyFolders)
+                  .Returns(true);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.RemoveEmptySubfolders(_movie.Path), Times.Once());
         }
 
         [Test]

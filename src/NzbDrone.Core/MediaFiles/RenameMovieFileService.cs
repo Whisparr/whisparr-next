@@ -36,6 +36,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IDiskProvider _diskProvider;
         private readonly IBuildMoviePaths _buildMoviePaths;
         private readonly IRootFolderService _rootFolderService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly Logger _logger;
 
         public RenameMovieFileService(IMovieService movieService,
@@ -46,8 +47,10 @@ namespace NzbDrone.Core.MediaFiles
                                       IDiskProvider diskProvider,
                                       IBuildMoviePaths buildMoviePaths,
                                       IRootFolderService rootFolderService,
+                                      ISceneFolderLayout sceneFolderLayout,
                                       Logger logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
             _movieService = movieService;
             _mediaFileService = mediaFileService;
             _movieFileMover = movieFileMover;
@@ -229,7 +232,11 @@ namespace NzbDrone.Core.MediaFiles
 
             if (renamed.Any())
             {
-                _diskProvider.RemoveEmptySubfolders(movie.Path);
+                // Sweeping empty subfolders would remove another item's (still empty) folder
+                if (!_sceneFolderLayout.HoldsOtherItems(movie.Id, movie.Path))
+                {
+                    _diskProvider.RemoveEmptySubfolders(movie.Path);
+                }
 
                 _eventAggregator.PublishEvent(new MovieRenamedEvent(movie, renamed));
 
@@ -256,7 +263,10 @@ namespace NzbDrone.Core.MediaFiles
 
                 try
                 {
-                    _diskProvider.RemoveEmptySubfolders(oldFolder);
+                    if (!_sceneFolderLayout.HoldsOtherItems(movie.Id, oldFolder))
+                    {
+                        _diskProvider.RemoveEmptySubfolders(oldFolder);
+                    }
 
                     if (_diskProvider.FolderEmpty(oldFolder))
                     {

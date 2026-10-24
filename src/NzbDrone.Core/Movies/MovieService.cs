@@ -412,9 +412,10 @@ namespace NzbDrone.Core.Movies
         public void DeleteMovie(int movieId, bool deleteFiles, bool addImportListExclusion = false)
         {
             var movie = _movieRepository.Get(movieId);
+            var ownedFilePaths = CaptureOwnedFilePaths(new List<Movie> { movie }, deleteFiles);
 
             _movieRepository.Delete(movieId);
-            _eventAggregator.PublishEvent(new MoviesDeletedEvent(new List<Movie> { movie }, deleteFiles, addImportListExclusion));
+            _eventAggregator.PublishEvent(new MoviesDeletedEvent(new List<Movie> { movie }, deleteFiles, addImportListExclusion, ownedFilePaths));
             _logger.Info("Deleted movie {0}", movie);
 
             RemoveMovieResourcesCache($"{movieId}");
@@ -428,16 +429,31 @@ namespace NzbDrone.Core.Movies
         public void DeleteMovies(List<int> movieIds, bool deleteFiles, bool addImportListExclusion = false)
         {
             var moviesToDelete = _movieRepository.Get(movieIds).ToList();
+            var ownedFilePaths = CaptureOwnedFilePaths(moviesToDelete, deleteFiles);
 
             _movieRepository.DeleteMany(movieIds);
 
-            _eventAggregator.PublishEvent(new MoviesDeletedEvent(moviesToDelete, deleteFiles, addImportListExclusion));
+            _eventAggregator.PublishEvent(new MoviesDeletedEvent(moviesToDelete, deleteFiles, addImportListExclusion, ownedFilePaths));
 
             foreach (var movie in moviesToDelete)
             {
                 RemoveMovieResourcesCache($"{movie.Id}");
                 _logger.Info("Deleted movie {0}", movie);
             }
+        }
+
+        private Dictionary<int, List<string>> CaptureOwnedFilePaths(List<Movie> movies, bool deleteFiles)
+        {
+            if (!deleteFiles)
+            {
+                return new Dictionary<int, List<string>>();
+            }
+
+            var deleting = new MoviesDeletingEvent(movies);
+
+            _eventAggregator.PublishEvent(deleting);
+
+            return deleting.OwnedFilePaths;
         }
 
         /// <summary> Get a list of all movies in the repository. </summary>

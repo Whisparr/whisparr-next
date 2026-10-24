@@ -1,8 +1,13 @@
 using System.IO;
+using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
+using NzbDrone.Core.Extras.Metadata.Files;
+using NzbDrone.Core.Extras.Others;
+using NzbDrone.Core.Extras.Subtitles;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Commands;
@@ -18,6 +23,11 @@ namespace NzbDrone.Core.Movies
         private readonly IDiskProvider _diskProvider;
         private readonly IDiskTransferService _diskTransferService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly IMediaFileService _mediaFileService;
+        private readonly ISubtitleFileService _subtitleFileService;
+        private readonly IOtherExtraFileService _otherExtraFileService;
+        private readonly IMetadataFileService _metadataFileService;
         private readonly Logger _logger;
 
         public MoveMovieService(IMovieService movieService,
@@ -25,8 +35,18 @@ namespace NzbDrone.Core.Movies
                                  IDiskProvider diskProvider,
                                  IDiskTransferService diskTransferService,
                                  IEventAggregator eventAggregator,
+                                 ISceneFolderLayout sceneFolderLayout,
+                                 IMediaFileService mediaFileService,
+                                 ISubtitleFileService subtitleFileService,
+                                 IOtherExtraFileService otherExtraFileService,
+                                 IMetadataFileService metadataFileService,
                                  Logger logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
+            _mediaFileService = mediaFileService;
+            _subtitleFileService = subtitleFileService;
+            _otherExtraFileService = otherExtraFileService;
+            _metadataFileService = metadataFileService;
             _movieService = movieService;
             _filenameBuilder = filenameBuilder;
             _diskProvider = diskProvider;
@@ -67,7 +87,15 @@ namespace NzbDrone.Core.Movies
             try
             {
                 _diskProvider.CreateFolder(new DirectoryInfo(destinationPath).Parent.FullName);
-                _diskTransferService.TransferFolder(sourcePath, destinationPath, TransferMode.Move);
+
+                if (IsSharedAtSource(movie, sourcePath))
+                {
+                    MoveOwnedFiles(movie, sourcePath, destinationPath);
+                }
+                else
+                {
+                    _diskTransferService.TransferFolder(sourcePath, destinationPath, TransferMode.Move);
+                }
 
                 _logger.ProgressInfo("{0} moved successfully to {1}", movie.Title, destinationPath);
 
@@ -78,6 +106,59 @@ namespace NzbDrone.Core.Movies
                 _logger.Error(ex, "Unable to move movie from '{0}' to '{1}'. Try moving files manually", sourcePath, destinationPath);
 
                 RevertPath(movie.Id, sourcePath);
+            }
+        }
+
+        // The movie already carries its new path, so judge sharing against the folder it is leaving.
+        private bool IsSharedAtSource(Movie movie, string sourcePath)
+        {
+            var currentPath = movie.Path;
+
+            movie.Path = sourcePath;
+
+            try
+            {
+                return _sceneFolderLayout.IsShared(movie);
+            }
+            finally
+            {
+                movie.Path = currentPath;
+            }
+        }
+
+        // A shared folder holds other scenes' files, so only this scene's files and extras move.
+        private void MoveOwnedFiles(Movie movie, string sourcePath, string destinationPath)
+        {
+            var relativePaths = _mediaFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath)
+                .Concat(_subtitleFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                .Concat(_otherExtraFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                .Concat(_metadataFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                .Where(p => p.IsNotNullOrWhiteSpace())
+                .Distinct();
+
+            foreach (var relativePath in relativePaths)
+            {
+                var source = Path.Combine(sourcePath, relativePath);
+                var destination = Path.Combine(destinationPath, relativePath);
+
+                if (!_diskProvider.FileExists(source))
+                {
+                    continue;
+                }
+
+                if (_diskProvider.FileExists(destination))
+                {
+                    _logger.Warn("Not moving '{0}': '{1}' already exists", source, destination);
+                    continue;
+                }
+
+                _diskProvider.CreateFolder(Path.GetDirectoryName(destination));
+                _diskTransferService.TransferFile(source, destination, TransferMode.Move);
+            }
+
+            if (_diskProvider.FolderExists(sourcePath) && _diskProvider.FolderEmpty(sourcePath))
+            {
+                _diskProvider.DeleteFolder(sourcePath, true);
             }
         }
 

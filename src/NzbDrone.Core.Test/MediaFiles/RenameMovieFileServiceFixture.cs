@@ -268,6 +268,29 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void rename_in_shared_folder_does_not_sweep_folders_holding_other_items()
+        {
+            var (movie, file) = GivenSceneInOwnFolder();
+            movie.Path = _studioFolder;
+            file.RelativePath = "old.mp4";
+
+            Mocker.GetMock<IMoveMovieFiles>()
+                  .Setup(s => s.MoveMovieFile(file, It.IsAny<Movie>(), true))
+                  .Callback<MovieFile, Movie, bool>((f, m, r) => f.RelativePath = "Buffy - 2020.mp4")
+                  .Returns(file);
+
+            // A sibling scene shares the folder and a movie sits in a folder nested under it
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.HoldsOtherItems(7, It.IsAny<string>()))
+                  .Returns(true);
+
+            Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.RemoveEmptySubfolders(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
         public void rename_removes_old_folder_after_the_sidecars_have_moved()
         {
             var (_, file) = GivenSceneInOwnFolder();

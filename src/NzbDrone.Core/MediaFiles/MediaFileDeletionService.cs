@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using NLog;
 using NzbDrone.Common.Disk;
@@ -8,6 +9,9 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.Extras.Metadata.Files;
+using NzbDrone.Core.Extras.Others;
+using NzbDrone.Core.Extras.Subtitles;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging;
@@ -15,6 +19,7 @@ using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.MediaFiles
@@ -27,9 +32,15 @@ namespace NzbDrone.Core.MediaFiles
 
     public class MediaFileDeletionService : IDeleteMediaFiles,
                                             IExecute<DeleteMovieFilesCommand>,
+                                            IHandle<MoviesDeletingEvent>,
                                             IHandleAsync<MoviesDeletedEvent>,
                                             IHandle<MovieFileDeletedEvent>
     {
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly ISubtitleFileService _subtitleFileService;
+        private readonly IOtherExtraFileService _otherExtraFileService;
+        private readonly IMetadataFileService _metadataFileService;
+
         private readonly IDiskProvider _diskProvider;
         private readonly IRecycleBinProvider _recycleBinProvider;
         private readonly IMediaFileService _mediaFileService;
@@ -48,8 +59,16 @@ namespace NzbDrone.Core.MediaFiles
                                         IConfigService configService,
                                         ICommandResultReporter commandResultReporter,
                                         IEventAggregator eventAggregator,
+                                        ISceneFolderLayout sceneFolderLayout,
+                                        ISubtitleFileService subtitleFileService,
+                                        IOtherExtraFileService otherExtraFileService,
+                                        IMetadataFileService metadataFileService,
                                         Logger logger)
         {
+            _sceneFolderLayout = sceneFolderLayout;
+            _subtitleFileService = subtitleFileService;
+            _otherExtraFileService = otherExtraFileService;
+            _metadataFileService = metadataFileService;
             _diskProvider = diskProvider;
             _recycleBinProvider = recycleBinProvider;
             _mediaFileService = mediaFileService;
@@ -192,6 +211,28 @@ namespace NzbDrone.Core.MediaFiles
             _eventAggregator.PublishEvent(new DeleteCompletedEvent());
         }
 
+        public void Handle(MoviesDeletingEvent message)
+        {
+            foreach (var movie in message.Movies)
+            {
+                if (!_sceneFolderLayout.IsShared(movie))
+                {
+                    continue;
+                }
+
+                var relativePaths = _mediaFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath)
+                    .Concat(_subtitleFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                    .Concat(_otherExtraFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath))
+                    .Concat(_metadataFileService.GetFilesByMovie(movie.Id).Select(f => f.RelativePath));
+
+                message.OwnedFilePaths[movie.Id] = relativePaths
+                    .Where(p => p.IsNotNullOrWhiteSpace())
+                    .Select(p => Path.Combine(movie.Path, p))
+                    .Distinct()
+                    .ToList();
+            }
+        }
+
         public void HandleAsync(MoviesDeletedEvent message)
         {
             if (message.DeleteFiles)
@@ -200,6 +241,13 @@ namespace NzbDrone.Core.MediaFiles
 
                 foreach (var movie in message.Movies)
                 {
+                    // A scene in a shared folder owns only its own files; the folder is never recycled
+                    if (message.OwnedFilePaths.TryGetValue(movie.Id, out var ownedPaths))
+                    {
+                        RecycleOwnedFiles(movie, ownedPaths);
+                        continue;
+                    }
+
                     if (IsPathUsedByAnotherMovie(movie, allMoviePaths))
                     {
                         continue;
@@ -212,6 +260,51 @@ namespace NzbDrone.Core.MediaFiles
                 }
 
                 _eventAggregator.PublishEvent(new DeleteCompletedEvent());
+            }
+        }
+
+        private void RecycleOwnedFiles(Movie movie, List<string> ownedPaths)
+        {
+            var parentFolders = new HashSet<string>();
+
+            foreach (var fullPath in ownedPaths)
+            {
+                if (!_diskProvider.FileExists(fullPath))
+                {
+                    continue;
+                }
+
+                _logger.Info("Deleting scene file: {0}", fullPath);
+
+                var parentFolder = fullPath.GetParentPath();
+                var subfolder = movie.Path.GetParentPath().GetRelativePath(parentFolder);
+
+                _recycleBinProvider.DeleteFile(fullPath, subfolder);
+
+                parentFolders.Add(parentFolder);
+            }
+
+            if (!_diskProvider.FolderExists(movie.Path))
+            {
+                return;
+            }
+
+            // Walk up from each emptied subfolder. The shared folder itself is never swept for
+            // empty subfolders, since an empty one may belong to a nested movie.
+            foreach (var parent in parentFolders)
+            {
+                var folder = parent;
+
+                while (movie.Path.IsParentPath(folder) && _diskProvider.FolderExists(folder) && _diskProvider.FolderEmpty(folder))
+                {
+                    _diskProvider.DeleteFolder(folder, true);
+                    folder = folder.GetParentPath();
+                }
+            }
+
+            if (_diskProvider.FolderEmpty(movie.Path))
+            {
+                _diskProvider.DeleteFolder(movie.Path, true);
             }
         }
 
@@ -246,9 +339,11 @@ namespace NzbDrone.Core.MediaFiles
             if (_configService.DeleteEmptyFolders)
             {
                 string moviePath = null;
+                var movieId = 0;
                 if (message.MovieFile.Movie != null)
                 {
                     var movie = message.MovieFile.Movie;
+                    movieId = movie.Id;
                     moviePath = movie.Path;
                     var folder = message.MovieFile.Path.GetParentPath();
 
@@ -256,7 +351,7 @@ namespace NzbDrone.Core.MediaFiles
                     {
                         if (_diskProvider.FolderExists(folder))
                         {
-                            _diskProvider.RemoveEmptySubfolders(folder);
+                            SweepEmptySubfolders(movieId, folder);
                         }
 
                         folder = folder.GetParentPath();
@@ -267,12 +362,21 @@ namespace NzbDrone.Core.MediaFiles
                     moviePath = message.MovieFile.OriginalFilePath.GetParentPath();
                 }
 
-                _diskProvider.RemoveEmptySubfolders(moviePath);
+                SweepEmptySubfolders(movieId, moviePath);
 
                 if (_diskProvider.FolderEmpty(moviePath))
                 {
                     _diskProvider.DeleteFolder(moviePath, true);
                 }
+            }
+        }
+
+        // An empty subfolder may be another item's own folder, so a folder that holds one is not swept
+        private void SweepEmptySubfolders(int movieId, string folder)
+        {
+            if (!_sceneFolderLayout.HoldsOtherItems(movieId, folder))
+            {
+                _diskProvider.RemoveEmptySubfolders(folder);
             }
         }
 

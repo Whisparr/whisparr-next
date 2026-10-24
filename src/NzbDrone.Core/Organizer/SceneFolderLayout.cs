@@ -18,6 +18,9 @@ namespace NzbDrone.Core.Organizer
         bool IsFlat();
         bool IsShared(Movie movie);
         List<MoviePathEntry> GetItemsInFolder(string folder);
+
+        // True when another item's folder is, or sits inside, the given folder.
+        bool HoldsOtherItems(int movieId, string folder);
     }
 
     public class SceneFolderLayout : ISceneFolderLayout,
@@ -100,6 +103,13 @@ namespace NzbDrone.Core.Organizer
             return AllPathEntries()
                 .Where(e => e.Path.IsNotNullOrWhiteSpace() && e.Path.PathEquals(folder))
                 .ToList();
+        }
+
+        public bool HoldsOtherItems(int movieId, string folder)
+        {
+            return AllPathEntries().Any(e => e.Id != movieId &&
+                                             e.Path.IsNotNullOrWhiteSpace() &&
+                                             (e.Path.PathEquals(folder) || folder.IsParentPath(e.Path)));
         }
 
         public void Handle(MovieAddedEvent message)

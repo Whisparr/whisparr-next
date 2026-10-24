@@ -2,9 +2,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Extras.Metadata.Files;
+using NzbDrone.Core.Extras.Others;
+using NzbDrone.Core.Extras.Subtitles;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Organizer;
@@ -112,6 +117,87 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Mocker.GetMock<IDiskTransferService>()
                   .Verify(v => v.TransferFolder(_bulkCommand.Movies.First().SourcePath, expectedPath, TransferMode.Move), Times.Once());
+        }
+
+        private void GivenSharedSceneWithFiles()
+        {
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.IsShared(It.IsAny<Movie>()))
+                  .Returns(true);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<MovieFile> { new MovieFile { RelativePath = "scene one.mp4" } });
+
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<OtherExtraFile> { new OtherExtraFile { RelativePath = "scene one.jpg" } });
+
+            Mocker.GetMock<ISubtitleFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<SubtitleFile>());
+
+            Mocker.GetMock<IMetadataFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<MetadataFile>());
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(It.IsAny<string>()))
+                  .Returns<string>(p => p.StartsWith(_command.SourcePath));
+        }
+
+        [Test]
+        public void moving_scene_in_shared_folder_moves_owned_files_one_by_one()
+        {
+            GivenSharedSceneWithFiles();
+            _movie.Path = _command.DestinationPath;
+
+            Subject.Execute(_command);
+
+            _movie.Path.Should().Be(_command.DestinationPath);
+
+            var transfer = Mocker.GetMock<IDiskTransferService>();
+
+            transfer.Verify(v => v.TransferFile(Path.Combine(_command.SourcePath, "scene one.mp4"), Path.Combine(_command.DestinationPath, "scene one.mp4"), TransferMode.Move, false), Times.Once());
+            transfer.Verify(v => v.TransferFile(Path.Combine(_command.SourcePath, "scene one.jpg"), Path.Combine(_command.DestinationPath, "scene one.jpg"), TransferMode.Move, false), Times.Once());
+            transfer.Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Exactly(2));
+            transfer.Verify(v => v.TransferFolder(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>()), Times.Never());
+        }
+
+        [Test]
+        public void moving_scene_in_shared_folder_does_not_overwrite_existing_destination_file()
+        {
+            GivenSharedSceneWithFiles();
+
+            var existing = Path.Combine(_command.DestinationPath, "scene one.mp4");
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(It.IsAny<string>()))
+                  .Returns<string>(p => p.StartsWith(_command.SourcePath) || p == existing);
+
+            Subject.Execute(_command);
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), existing, It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Once());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void moving_scene_in_exclusive_folder_still_moves_folder()
+        {
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.IsShared(It.IsAny<Movie>()))
+                  .Returns(false);
+
+            Subject.Execute(_command);
+
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFolder(_command.SourcePath, _command.DestinationPath, TransferMode.Move), Times.Once());
+            Mocker.GetMock<IDiskTransferService>()
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]

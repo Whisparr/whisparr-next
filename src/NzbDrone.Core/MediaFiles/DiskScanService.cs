@@ -232,7 +232,7 @@ namespace NzbDrone.Core.MediaFiles
                 var filesOnDisk = GetNonVideoFiles(movie.Path);
                 var possibleExtraFiles = FilterPaths(movie.Path, filesOnDisk);
 
-                RemoveEmptyMovieFolder(movie.Path);
+                RemoveEmptyMovieFolder(movie);
 
                 // Check if movie is a scene, then cleanup the unmapped scene
                 if (movie.MovieMetadata.Value.ItemType == ItemType.Scene)
@@ -534,11 +534,17 @@ namespace NzbDrone.Core.MediaFiles
             }
         }
 
-        private void RemoveEmptyMovieFolder(string path)
+        private void RemoveEmptyMovieFolder(Movie movie)
         {
+            var path = movie.Path;
+
             if (_configService.DeleteEmptyFolders)
             {
-                _diskProvider.RemoveEmptySubfolders(path);
+                // An empty subfolder may be another item's own folder, so it is not swept
+                if (!_sceneFolderLayout.HoldsOtherItems(movie.Id, path))
+                {
+                    _diskProvider.RemoveEmptySubfolders(path);
+                }
 
                 if (_diskProvider.FolderEmpty(path))
                 {
