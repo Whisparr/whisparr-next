@@ -145,7 +145,33 @@ namespace NzbDrone.Core.Extras.Files
             return Path.Combine(previousSceneFolder, extraRelativePath);
         }
 
-        protected TExtraFile MoveFile(Movie movie, MovieFile movieFile, TExtraFile extraFile, string previousVideoPath, string previousRelativePath, string fileNameSuffix = null)
+        /// <summary>
+        /// A move was skipped, so the file stays where it was. Its row is relative to the (possibly changed) scene
+        /// folder and must not resolve to anything else: keep it when it still points at the file, re-point it when
+        /// the file sits under the new folder, otherwise queue it in <paramref name="orphaned"/> to be dropped.
+        /// Nothing on disk is touched. Returns the row when it was re-pointed and needs saving.
+        /// </summary>
+        protected static TExtraFile KeepSkippedRowValid(Movie movie, TExtraFile extraFile, string existingFileName, List<TExtraFile> orphaned)
+        {
+            if (extraFile.RelativePath.IsNotNullOrWhiteSpace() &&
+                Path.Combine(movie.Path, extraFile.RelativePath).PathEquals(existingFileName))
+            {
+                return null;
+            }
+
+            if (movie.Path.IsParentPath(existingFileName))
+            {
+                extraFile.RelativePath = movie.Path.GetRelativePath(existingFileName);
+
+                return extraFile;
+            }
+
+            orphaned?.Add(extraFile);
+
+            return null;
+        }
+
+        protected TExtraFile MoveFile(Movie movie, MovieFile movieFile, TExtraFile extraFile, string previousVideoPath, string previousRelativePath, string fileNameSuffix = null, List<TExtraFile> orphaned = null)
         {
             _logger.Trace("Renaming extra file: {0}", extraFile);
 
@@ -167,7 +193,8 @@ namespace NzbDrone.Core.Extras.Files
                 if (_diskProvider.FileExists(newFileName))
                 {
                     _logger.Warn("Extra file not moved, there is already a file at the destination: {0}", newFileName);
-                    return null;
+
+                    return KeepSkippedRowValid(movie, extraFile, existingFileName, orphaned);
                 }
 
                 try
@@ -184,6 +211,8 @@ namespace NzbDrone.Core.Extras.Files
                 catch (Exception ex)
                 {
                     _logger.Warn(ex, "Unable to move file after rename: {0}", existingFileName);
+
+                    return KeepSkippedRowValid(movie, extraFile, existingFileName, orphaned);
                 }
             }
 

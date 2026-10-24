@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
@@ -136,29 +138,57 @@ namespace NzbDrone.Core.Movies
                 .Where(p => p.IsNotNullOrWhiteSpace())
                 .Distinct();
 
-            foreach (var relativePath in relativePaths)
+            var plan = relativePaths
+                .Select(p => (Source: Path.Combine(sourcePath, p), Destination: Path.Combine(destinationPath, p)))
+                .Where(m => _diskProvider.FileExists(m.Source))
+                .ToList();
+
+            // The scene's rows are relative to its folder, which is about to change. A file that stays behind would
+            // resolve to whatever sits at the same name in the new folder (another scene's file), so any collision
+            // aborts the whole move before a single file is touched and the caller reverts the path.
+            var collision = plan.FirstOrDefault(m => _diskProvider.FileExists(m.Destination));
+
+            if (collision.Source != null)
             {
-                var source = Path.Combine(sourcePath, relativePath);
-                var destination = Path.Combine(destinationPath, relativePath);
+                throw new IOException($"Not moving '{collision.Source}': '{collision.Destination}' already exists");
+            }
 
-                if (!_diskProvider.FileExists(source))
+            var moved = new List<(string Source, string Destination)>();
+
+            try
+            {
+                foreach (var (source, destination) in plan)
                 {
-                    continue;
+                    _diskProvider.CreateFolder(Path.GetDirectoryName(destination));
+                    _diskTransferService.TransferFile(source, destination, TransferMode.Move);
+                    moved.Add((source, destination));
                 }
-
-                if (_diskProvider.FileExists(destination))
-                {
-                    _logger.Warn("Not moving '{0}': '{1}' already exists", source, destination);
-                    continue;
-                }
-
-                _diskProvider.CreateFolder(Path.GetDirectoryName(destination));
-                _diskTransferService.TransferFile(source, destination, TransferMode.Move);
+            }
+            catch (Exception)
+            {
+                RollBack(moved);
+                throw;
             }
 
             if (_diskProvider.FolderExists(sourcePath) && _diskProvider.FolderEmpty(sourcePath))
             {
                 _diskProvider.DeleteFolder(sourcePath, true);
+            }
+        }
+
+        // Put already-moved files back so the reverted path still describes where everything is.
+        private void RollBack(List<(string Source, string Destination)> moved)
+        {
+            foreach (var (source, destination) in Enumerable.Reverse(moved))
+            {
+                try
+                {
+                    _diskTransferService.TransferFile(destination, source, TransferMode.Move);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Unable to move '{0}' back to '{1}'", destination, source);
+                }
             }
         }
 

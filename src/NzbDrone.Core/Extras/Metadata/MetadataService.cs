@@ -165,6 +165,7 @@ namespace NzbDrone.Core.Extras.Metadata
         {
             var metadataFiles = _metadataFileService.GetFilesByMovie(movie.Id);
             var movedFiles = new List<MetadataFile>();
+            var orphanedFiles = new List<MetadataFile>();
 
             // TODO: Move EpisodeImage and EpisodeMetadata metadata files, instead of relying on consumers to do it
             // (Xbmc's EpisodeImage is more than just the extension)
@@ -191,22 +192,26 @@ namespace NzbDrone.Core.Extras.Metadata
                             catch (Exception ex)
                             {
                                 _logger.Warn(ex, "Unable to move metadata file after rename: {0}", existingFileName);
+
+                                movedFiles.AddIfNotNull(KeepSkippedRowValid(movie, metadataFile, existingFileName, orphanedFiles));
                             }
                         }
                     }
                 }
 
-                movedFiles.AddRange(MoveFolderLevelImages(consumer, movie, renamedFiles, GetMetadataFilesForConsumer(consumer, metadataFiles)));
+                movedFiles.AddRange(MoveFolderLevelImages(consumer, movie, renamedFiles, GetMetadataFilesForConsumer(consumer, metadataFiles), orphanedFiles));
             }
 
             _metadataFileService.Upsert(movedFiles);
+            _metadataFileService.DeleteMany(orphanedFiles.Select(f => f.Id));
 
             return movedFiles;
         }
 
         // Organise into a shared folder: tracked folder-level images (poster.jpg, folder.jpg, <folder>.jpg) move
         // beside the video under the per-file name the consumer now writes. Untracked files are never touched.
-        private List<MetadataFile> MoveFolderLevelImages(IMetadata consumer, Movie movie, List<RenamedMovieFile> renamedFiles, List<MetadataFile> consumerFiles)
+        // A skipped move leaves the file where it was, so its row is re-pointed at it or dropped, never left to resolve into the new folder.
+        private List<MetadataFile> MoveFolderLevelImages(IMetadata consumer, Movie movie, List<RenamedMovieFile> renamedFiles, List<MetadataFile> consumerFiles, List<MetadataFile> orphanedFiles)
         {
             var moved = new List<MetadataFile>();
             var folderImages = consumerFiles.Where(m => m.Type == MetadataType.MovieImage && m.MovieFileId.GetValueOrDefault() == 0).ToList();
@@ -240,23 +245,26 @@ namespace NzbDrone.Core.Extras.Metadata
             foreach (var image in folderImages)
             {
                 var target = MatchPerFileImage(candidates, image.RelativePath);
+                var existingFileName = GetPreviousPath(image.RelativePath, renamedFile.PreviousPath, renamedFile.PreviousRelativePath);
 
                 if (target == null)
                 {
+                    moved.AddIfNotNull(KeepSkippedRowValid(movie, image, existingFileName, orphanedFiles));
                     continue;
                 }
 
-                var existingFileName = GetPreviousPath(image.RelativePath, renamedFile.PreviousPath, renamedFile.PreviousRelativePath);
                 var newFileName = Path.Combine(movie.Path, target.RelativePath);
 
                 if (newFileName.PathEquals(existingFileName))
                 {
+                    moved.AddIfNotNull(KeepSkippedRowValid(movie, image, existingFileName, orphanedFiles));
                     continue;
                 }
 
                 if (_diskProvider.FileExists(newFileName))
                 {
                     _logger.Warn("Metadata image not moved, there is already a file at the destination: {0}", newFileName);
+                    moved.AddIfNotNull(KeepSkippedRowValid(movie, image, existingFileName, orphanedFiles));
                     continue;
                 }
 
@@ -270,6 +278,7 @@ namespace NzbDrone.Core.Extras.Metadata
                 catch (Exception ex)
                 {
                     _logger.Warn(ex, "Unable to move metadata image after rename: {0}", existingFileName);
+                    moved.AddIfNotNull(KeepSkippedRowValid(movie, image, existingFileName, orphanedFiles));
                 }
             }
 

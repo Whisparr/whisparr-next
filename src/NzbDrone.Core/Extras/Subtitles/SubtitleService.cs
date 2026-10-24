@@ -78,6 +78,7 @@ namespace NzbDrone.Core.Extras.Subtitles
             var subtitleFiles = _subtitleFileService.GetFilesByMovie(movie.Id);
 
             var movedFiles = new List<SubtitleFile>();
+            var orphanedFiles = new List<SubtitleFile>();
 
             var isShared = _sceneFolderLayout.IsShared(movie);
             var onlyFileId = _mediaFileService.GetFilesByMovie(movie.Id) is { Count: 1 } files ? files[0].Id : 0;
@@ -101,7 +102,7 @@ namespace NzbDrone.Core.Extras.Subtitles
                     {
                         var suffix = GetSuffix(subtitleFile.Language, copy, subtitleFile.LanguageTags, groupCount > 1);
 
-                        movedFiles.AddIfNotNull(MoveFile(movie, movieFile, subtitleFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath, suffix));
+                        movedFiles.AddIfNotNull(MoveFile(movie, movieFile, subtitleFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath, suffix, orphanedFiles));
 
                         copy++;
                     }
@@ -109,6 +110,7 @@ namespace NzbDrone.Core.Extras.Subtitles
             }
 
             _subtitleFileService.Upsert(movedFiles);
+            _subtitleFileService.DeleteMany(orphanedFiles.Select(f => f.Id));
 
             return movedFiles;
         }

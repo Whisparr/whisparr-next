@@ -243,6 +243,90 @@ namespace NzbDrone.Core.Test.Extras.Others
             results[0].RelativePath.Should().Be("2020 - Buffy [id].nfo");
         }
 
+        [Test]
+        public void skipped_extra_move_never_leaves_a_row_resolving_into_the_new_folder()
+        {
+            var studioFolder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
+            var oldSceneFolder = Path.Combine(@"C:\lib\scenes\Old Studio".AsOsAgnostic(), "2020 - Buffy [id]");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "2020 - Buffy [id].mp4";
+
+            var extra = new OtherExtraFile
+            {
+                Id = 31,
+                MovieId = _movie.Id,
+                MovieFileId = _movieFile.Id,
+                RelativePath = "s1.nfo",
+                Extension = ".nfo"
+            };
+
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<OtherExtraFile> { extra });
+
+            // Something already sits at the destination, so the move is skipped
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(Path.Combine(studioFolder, "2020 - Buffy [id].nfo")))
+                  .Returns(true);
+
+            var renamed = new RenamedMovieFile
+            {
+                MovieFile = _movieFile,
+                PreviousRelativePath = "s1.mp4",
+                PreviousPath = Path.Combine(oldSceneFolder, "s1.mp4")
+            };
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            results.Should().BeEmpty();
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+
+            // "s1.nfo" would now resolve to the studio folder's own s1.nfo, so the row goes (the file stays on disk)
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Verify(v => v.DeleteMany(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(new[] { 31 }))), Times.Once());
+        }
+
+        [Test]
+        public void skipped_extra_move_repoints_row_when_the_file_sits_under_the_new_folder()
+        {
+            var studioFolder = @"C:\lib\scenes\Shady Spa".AsOsAgnostic();
+            var oldSceneFolder = Path.Combine(studioFolder, "2020 - Buffy [id]");
+
+            _movie.Path = studioFolder;
+            _movieFile.RelativePath = "2020 - Buffy [id].mp4";
+
+            var extra = new OtherExtraFile
+            {
+                Id = 31,
+                MovieId = _movie.Id,
+                MovieFileId = _movieFile.Id,
+                RelativePath = "s1.nfo",
+                Extension = ".nfo"
+            };
+
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Returns(new List<OtherExtraFile> { extra });
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FileExists(Path.Combine(studioFolder, "2020 - Buffy [id].nfo")))
+                  .Returns(true);
+
+            var renamed = new RenamedMovieFile
+            {
+                MovieFile = _movieFile,
+                PreviousRelativePath = "s1.mp4",
+                PreviousPath = Path.Combine(oldSceneFolder, "s1.mp4")
+            };
+
+            var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
+
+            results.Should().ContainSingle().Which.RelativePath.Should().Be(Path.Combine("2020 - Buffy [id]", "s1.nfo"));
+            Mocker.GetMock<IOtherExtraFileService>()
+                  .Verify(v => v.DeleteMany(It.Is<IEnumerable<int>>(ids => ids.Any())), Times.Never());
+        }
+
         [TestCase(null)]
         [TestCase(0)]
         public void other_extra_without_a_file_link_moves_when_the_movie_has_one_file(int? linkedFileId)

@@ -333,7 +333,8 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
 
             var results = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).ToList();
 
-            results.Should().BeEmpty();
+            // The file stays put, so its row is re-pointed at it instead of resolving to the colliding file
+            results.Should().ContainSingle().Which.RelativePath.Should().Be(Path.Combine("2020 - Buffy [id]", "s1.en.srt"));
 
             Mocker.GetMock<IDiskProvider>()
                   .Verify(v => v.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());

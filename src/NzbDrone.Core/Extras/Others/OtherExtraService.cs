@@ -71,6 +71,7 @@ namespace NzbDrone.Core.Extras.Others
         {
             var extraFiles = _otherExtraFileService.GetFilesByMovie(movie.Id);
             var movedFiles = new List<OtherExtraFile>();
+            var orphanedFiles = new List<OtherExtraFile>();
 
             var isShared = _sceneFolderLayout.IsShared(movie);
             var onlyFileId = _mediaFileService.GetFilesByMovie(movie.Id) is { Count: 1 } files ? files[0].Id : 0;
@@ -86,11 +87,12 @@ namespace NzbDrone.Core.Extras.Others
 
                 foreach (var extraFile in extraFilesForMovieFile)
                 {
-                    movedFiles.AddIfNotNull(MoveFile(movie, movieFile, extraFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath));
+                    movedFiles.AddIfNotNull(MoveFile(movie, movieFile, extraFile, renamedFile.PreviousPath, renamedFile.PreviousRelativePath, null, orphanedFiles));
                 }
             }
 
             _otherExtraFileService.Upsert(movedFiles);
+            _otherExtraFileService.DeleteMany(orphanedFiles.Select(f => f.Id));
 
             return movedFiles;
         }

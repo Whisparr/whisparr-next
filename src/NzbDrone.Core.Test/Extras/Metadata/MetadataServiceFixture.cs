@@ -172,6 +172,71 @@ namespace NzbDrone.Core.Test.Extras.Metadata
             Mocker.GetMock<IDiskProvider>().Verify(d => d.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void skipped_folder_image_row_never_resolves_to_studio_poster(bool moveThrows)
+        {
+            var oldFolder = @"C:\Test\Scenes\Old Scene Folder".AsOsAgnostic();
+            var poster = new MetadataFile
+            {
+                Id = 7,
+                MovieId = 1,
+                Consumer = nameof(XbmcMetadata),
+                Type = MetadataType.MovieImage,
+                RelativePath = "poster.jpg"
+            };
+
+            GivenXbmcPosterRename(poster);
+
+            if (moveThrows)
+            {
+                Mocker.GetMock<IDiskProvider>()
+                      .Setup(d => d.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                      .Throws<IOException>();
+            }
+            else
+            {
+                Mocker.GetMock<IDiskProvider>()
+                      .Setup(d => d.FileExists(Path.Combine(_movie.Path, "Bratty Sis - Scene (2026)-poster.jpg")))
+                      .Returns(true);
+            }
+
+            var moved = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { RenamedFromOldFolder(oldFolder) });
+
+            // "poster.jpg" would resolve to the studio folder's generic poster: the row must go, the file stays
+            moved.Should().BeEmpty();
+            Mocker.GetMock<IMetadataFileService>()
+                  .Verify(s => s.DeleteMany(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(new[] { 7 }))), Times.Once());
+            Mocker.GetMock<IRecycleBinProvider>()
+                  .Verify(r => r.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void skipped_folder_image_row_is_repointed_when_the_old_file_sits_under_the_new_folder()
+        {
+            var oldFolder = Path.Combine(_movie.Path, "Old Scene Folder");
+            var poster = new MetadataFile
+            {
+                Id = 7,
+                MovieId = 1,
+                Consumer = nameof(XbmcMetadata),
+                Type = MetadataType.MovieImage,
+                RelativePath = "poster.jpg"
+            };
+
+            GivenXbmcPosterRename(poster);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(d => d.FileExists(Path.Combine(_movie.Path, "Bratty Sis - Scene (2026)-poster.jpg")))
+                  .Returns(true);
+
+            var moved = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { RenamedFromOldFolder(oldFolder) }).Cast<MetadataFile>().ToList();
+
+            moved.Should().ContainSingle().Which.RelativePath.Should().Be(Path.Combine("Old Scene Folder", "poster.jpg"));
+            Mocker.GetMock<IMetadataFileService>()
+                  .Verify(s => s.DeleteMany(It.Is<IEnumerable<int>>(ids => ids.Any())), Times.Never());
+        }
+
         [Test]
         public void organise_to_shared_folder_moves_tracked_folder_level_poster()
         {

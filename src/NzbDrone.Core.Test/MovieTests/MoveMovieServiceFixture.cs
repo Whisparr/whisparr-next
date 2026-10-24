@@ -165,9 +165,10 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
-        public void moving_scene_in_shared_folder_does_not_overwrite_existing_destination_file()
+        public void move_collision_does_not_link_row_to_sibling_file()
         {
             GivenSharedSceneWithFiles();
+            _movie.Path = _command.DestinationPath;
 
             var existing = Path.Combine(_command.DestinationPath, "scene one.mp4");
 
@@ -177,12 +178,36 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.Execute(_command);
 
+            // Nothing moves, and the scene's path goes back to the folder its files still sit in.
             Mocker.GetMock<IDiskTransferService>()
-                  .Verify(v => v.TransferFile(It.IsAny<string>(), existing, It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Never());
-            Mocker.GetMock<IDiskTransferService>()
-                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Once());
+                  .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateMovie(It.Is<Movie>(m => m.Path == _command.SourcePath)), Times.Once());
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateMovie(It.Is<Movie>(m => m.Path != _command.SourcePath)), Times.Never());
 
-            ExceptionVerification.ExpectedWarns(1);
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void moving_scene_in_shared_folder_moves_files_back_when_a_later_move_fails()
+        {
+            GivenSharedSceneWithFiles();
+
+            var first = Path.Combine(_command.SourcePath, "scene one.mp4");
+            var second = Path.Combine(_command.SourcePath, "scene one.jpg");
+            var transfer = Mocker.GetMock<IDiskTransferService>();
+
+            transfer.Setup(s => s.TransferFile(second, It.IsAny<string>(), TransferMode.Move, It.IsAny<bool>()))
+                    .Throws<IOException>();
+
+            Subject.Execute(_command);
+
+            transfer.Verify(v => v.TransferFile(Path.Combine(_command.DestinationPath, "scene one.mp4"), first, TransferMode.Move, false), Times.Once());
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateMovie(It.Is<Movie>(m => m.Path == _command.SourcePath)), Times.Once());
+
+            ExceptionVerification.ExpectedErrors(1);
         }
 
         [Test]
