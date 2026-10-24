@@ -345,10 +345,7 @@ namespace NzbDrone.Core.MediaFiles
             return changed;
         }
 
-        /// <summary>
-        /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
-        /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
-        /// </summary>
+        // Shared folder: identify what this scene (or a sibling) owns and import it, one scan per folder at a time.
         private List<ImportDecision> IdentifyAndImportOwned(Movie movie, List<string> unmappedFiles)
         {
             var folderLock = FolderLocks.GetOrAdd(movie.Path, _ => new SemaphoreSlim(1, 1));
@@ -377,6 +374,10 @@ namespace NzbDrone.Core.MediaFiles
             }
         }
 
+        /// <summary>
+        /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
+        /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
+        /// </summary>
         private void RelinkRenamedFiles(Movie movie, List<string> mediaFileList, bool shared)
         {
             var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);

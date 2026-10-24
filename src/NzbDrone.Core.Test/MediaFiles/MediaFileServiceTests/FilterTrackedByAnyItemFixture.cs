@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
@@ -26,11 +28,12 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileServiceTests
                   {
                       new() { Id = 1, Path = _folder, ItemType = ItemType.Scene },
                       new() { Id = 2, Path = _folder, ItemType = ItemType.Scene },
-                      new() { Id = 9, Path = _movieFolder, ItemType = ItemType.Movie }
+                      new() { Id = 9, Path = _movieFolder, ItemType = ItemType.Movie },
+                      new() { Id = 50, Path = @"C:\lib\scenes\Other Studio".AsOsAgnostic(), ItemType = ItemType.Scene }
                   });
 
             Mocker.GetMock<IMediaFileRepository>()
-                  .Setup(s => s.GetAllFiles())
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
                   .Returns(new List<MovieFile>
                   {
                       new() { MovieId = 1, RelativePath = "s1.mp4" },
@@ -52,10 +55,32 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileServiceTests
                 System.IO.Path.Combine(_folder, "s2.mp4")
             };
 
-            Subject.FilterFilesTrackedByAnyItem(files)
+            Subject.FilterFilesTrackedByAnyItem(_folder, files)
                    .Should().BeEquivalentTo(
                        System.IO.Path.Combine(_movieFolder, "movie-extra.mp4"),
                        System.IO.Path.Combine(_folder, "s2.mp4"));
+        }
+
+        [Test]
+        public void should_only_read_rows_of_items_in_the_folder_never_the_whole_table()
+        {
+            Subject.FilterFilesTrackedByAnyItem(_folder, new List<string> { System.IO.Path.Combine(_folder, "s1.mp4") });
+
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Verify(v => v.GetFilesByMovies(It.Is<IEnumerable<int>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { 1, 2, 9 }))), Times.Once());
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Verify(v => v.GetAllFiles(), Times.Never());
+        }
+
+        [Test]
+        public void should_read_no_rows_when_no_item_is_in_the_folder()
+        {
+            var files = new List<string> { System.IO.Path.Combine(@"C:\lib\elsewhere".AsOsAgnostic(), "a.mp4") };
+
+            Subject.FilterFilesTrackedByAnyItem(@"C:\lib\elsewhere".AsOsAgnostic(), files).Should().BeEquivalentTo(files);
+
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Verify(v => v.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Never());
         }
     }
 }

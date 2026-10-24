@@ -48,8 +48,8 @@ namespace NzbDrone.Core.Test.MediaFiles
                   .Returns(new List<Movie> { _s1, _s2 });
 
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.FilterFilesTrackedByAnyItem(It.IsAny<List<string>>()))
-                  .Returns((List<string> files) => files);
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files);
             Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
                   .Returns(new List<MovieFile>());
@@ -225,7 +225,7 @@ namespace NzbDrone.Core.Test.MediaFiles
         public void ignores_files_tracked_by_any_item()
         {
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.FilterFilesTrackedByAnyItem(It.IsAny<List<string>>()))
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<string>());
 
             Subject.IdentifyOwned(_s1, new List<string> { F("tracked.mp4") }).Should().BeEmpty();

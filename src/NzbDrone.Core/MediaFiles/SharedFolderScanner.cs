@@ -68,7 +68,7 @@ namespace NzbDrone.Core.MediaFiles
             var result = new List<ImportDecision>();
 
             // Files any item already tracks (movies included) are never candidates; unmapped rows don't count
-            var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(unmappedVideoFiles);
+            var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedVideoFiles);
             var keys = candidates.ToDictionary(f => f, CacheKey, PathEqualityComparer.Instance);
 
             candidates = candidates.Where(f => _unidentifiedCache.Find(keys[f]) == null).ToList();

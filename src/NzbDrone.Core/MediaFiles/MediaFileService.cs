@@ -34,7 +34,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetUnmappedFiles();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         List<string> FilterExistingFiles(List<string> files);
-        List<string> FilterFilesTrackedByAnyItem(List<string> files);
+        List<string> FilterFilesTrackedByAnyItem(string folder, List<string> files);
         MovieFile GetMovie(int id);
         List<MovieFile> GetMovies(IEnumerable<int> ids);
         List<MovieFile> GetFilesWithBasePath(string path);
@@ -221,14 +221,21 @@ namespace NzbDrone.Core.MediaFiles
 
         // Drops files a MovieFile row points at, for any item (movies included). Unlike FilterExistingFiles,
         // unmapped rows (MovieId 0) don't count, so those files stay candidates, and nothing is deleted.
-        public List<string> FilterFilesTrackedByAnyItem(List<string> files)
+        // Only the rows of items whose path is the folder, inside it or an ancestor of it are read, never the whole table.
+        public List<string> FilterFilesTrackedByAnyItem(string folder, List<string> files)
         {
             var moviePaths = _movieRepository.AllMoviePathEntries()
-                .Where(e => e.Path.IsNotNullOrWhiteSpace())
+                .Where(e => e.Path.IsNotNullOrWhiteSpace() &&
+                            (e.Path.PathEquals(folder) || folder.IsParentPath(e.Path) || e.Path.IsParentPath(folder)))
                 .ToDictionary(e => e.Id, e => e.Path);
 
-            var tracked = _mediaFileRepository.GetAllFiles()
-                .Where(f => f.MovieId > 0 && f.RelativePath.IsNotNullOrWhiteSpace() && moviePaths.ContainsKey(f.MovieId))
+            if (moviePaths.Count == 0)
+            {
+                return files;
+            }
+
+            var tracked = _mediaFileRepository.GetFilesByMovies(moviePaths.Keys)
+                .Where(f => f.MovieId > 0 && f.RelativePath.IsNotNullOrWhiteSpace())
                 .Select(f => Path.Combine(moviePaths[f.MovieId], f.RelativePath))
                 .ToList();
 
