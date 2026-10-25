@@ -283,5 +283,79 @@ namespace NzbDrone.Api.Test.Authentication
             Mocker.GetMock<IUserService>()
                 .Verify(c => c.Upsert(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
         }
+
+        private void GivenMethod(AuthenticationType method, bool oidcConfigured = false)
+        {
+            var config = Mocker.GetMock<IConfigFileProvider>();
+
+            config.SetupGet(c => c.AuthenticationMethod).Returns(method);
+
+            if (oidcConfigured)
+            {
+                config.SetupGet(c => c.OidcAuthority).Returns("https://idp.example.com");
+                config.SetupGet(c => c.OidcClientId).Returns("whisparr");
+                config.SetupGet(c => c.OidcClientSecret).Returns("s3cret");
+                config.SetupGet(c => c.OidcUserIdentifier).Returns("user@example.com");
+                config.SetupGet(c => c.OidcScopes).Returns("openid");
+            }
+        }
+
+        [TestCase(AuthenticationType.None, false)]
+        [TestCase(AuthenticationType.External, false)]
+        [TestCase(AuthenticationType.Oidc, true)]
+        public void login_should_return_null_when_effective_method_is_not_forms(AuthenticationType method, bool oidcConfigured)
+        {
+            GivenMethod(method, oidcConfigured);
+
+            Subject.Login(_request, "user", "right").Should().BeNull();
+        }
+
+        [Test]
+        public void login_should_work_when_oidc_falls_back_to_forms()
+        {
+            GivenMethod(AuthenticationType.Oidc);
+
+            Subject.Login(_request, "user", "right").Should().NotBeNull();
+        }
+
+        [Test]
+        public void reset_request_should_issue_a_token_for_forms()
+        {
+            GivenMethod(AuthenticationType.Forms);
+
+            Subject.RequestPasswordReset(_request).Should().NotBeNullOrEmpty();
+        }
+
+        [Test]
+        public void reset_request_should_issue_a_token_when_oidc_falls_back_to_forms()
+        {
+            GivenMethod(AuthenticationType.Oidc);
+
+            Subject.RequestPasswordReset(_request).Should().NotBeNullOrEmpty();
+        }
+
+        [TestCase(AuthenticationType.None, false)]
+        [TestCase(AuthenticationType.External, false)]
+        [TestCase(AuthenticationType.Oidc, true)]
+        public void reset_request_should_return_null_when_effective_method_is_not_forms(AuthenticationType method, bool oidcConfigured)
+        {
+            GivenMethod(method, oidcConfigured);
+
+            Subject.RequestPasswordReset(_request).Should().BeNull();
+        }
+
+        [Test]
+        public void reset_should_be_refused_when_oidc_is_configured()
+        {
+            GivenMethod(AuthenticationType.Oidc, true);
+            Mocker.GetMock<IOptions<AuthOptions>>()
+                .Setup(c => c.Value)
+                .Returns(new AuthOptions { ResetToken = "abcdefghijklmnopqrst" });
+
+            Subject.ResetPassword(_request, "abcdefghijklmnopqrst", "whisparr", "newpassword").Should().BeFalse();
+
+            Mocker.GetMock<IUserService>()
+                .Verify(c => c.Upsert(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
     }
 }

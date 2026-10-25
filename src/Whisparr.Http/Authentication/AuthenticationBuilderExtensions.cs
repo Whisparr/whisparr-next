@@ -63,21 +63,7 @@ namespace Whisparr.Http.Authentication
                     options.ExpireTimeSpan = TimeSpan.FromDays(7);
                     options.SlidingExpiration = true;
                     options.Cookie.IsEssential = true;
-                    options.Events.OnValidatePrincipal = context =>
-                    {
-                        var configuredUser = configFileProvider.OidcUserIdentifier;
-
-                        if (configFileProvider.EffectiveAuthenticationMethod() == AuthenticationType.Oidc &&
-                            configuredUser.IsNotNullOrWhiteSpace() &&
-                            string.Equals(context.Principal?.FindFirst("user")?.Value, configuredUser, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return Task.CompletedTask;
-                        }
-
-                        context.RejectPrincipal();
-
-                        return context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                    };
+                    options.Events.OnValidatePrincipal = context => ValidateOidcPrincipal(context, configFileProvider);
 
                     options.Events.OnRedirectToLogin = context => EventOnRedirectCookiesLogin(context, 401);
                     options.Events.OnRedirectToAccessDenied = context => EventOnRedirectCookiesLogin(context, 403);
@@ -236,7 +222,23 @@ namespace Whisparr.Http.Authentication
             }
         }
 
-        private static bool TryAuthorize(IConfigFileProvider configFileProvider, ClaimsPrincipal principal, JsonElement? user)
+        internal static Task ValidateOidcPrincipal(CookieValidatePrincipalContext context, IConfigFileProvider configFileProvider)
+        {
+            var configuredUser = configFileProvider.OidcUserIdentifier;
+
+            if (configFileProvider.EffectiveAuthenticationMethod() == AuthenticationType.Oidc &&
+                configuredUser.IsNotNullOrWhiteSpace() &&
+                string.Equals(context.Principal?.FindFirst("user")?.Value, configuredUser, StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.CompletedTask;
+            }
+
+            context.RejectPrincipal();
+
+            return context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+
+        internal static bool TryAuthorize(IConfigFileProvider configFileProvider, ClaimsPrincipal principal, JsonElement? user)
         {
             var configuredUser = configFileProvider.OidcUserIdentifier;
 
