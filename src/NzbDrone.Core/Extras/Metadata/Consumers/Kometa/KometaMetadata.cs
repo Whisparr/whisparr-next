@@ -21,6 +21,8 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Kometa
 
         public override string Name => "Kometa";
 
+        public override bool SupportsPerFileImages => false;
+
         public KometaMetadata(IMapCoversToLocal mediaCoverService, ISceneFolderLayout sceneFolderLayout)
         {
             _mediaCoverService = mediaCoverService;

@@ -6,6 +6,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.Extras.Metadata.Consumers.Kometa;
 using NzbDrone.Core.Extras.Metadata.Consumers.Xbmc;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaCover;
@@ -81,7 +82,7 @@ namespace NzbDrone.Core.Test.Extras.Metadata
             var files = Subject.CreateAfterMediaCoverUpdate(_movie).Cast<MetadataFile>().ToList();
 
             files.Should().ContainSingle().Which.RelativePath.Should().Be("A.mkv-poster.jpg");
-            files.Single().MovieFileId.Should().Be(0);
+            files.Single().MovieFileId.Should().BeNull();
         }
 
         [Test]
@@ -121,6 +122,57 @@ namespace NzbDrone.Core.Test.Extras.Metadata
         }
 
         [Test]
+        public void organise_to_shared_folder_recycles_tracked_kometa_poster()
+        {
+            var oldFolder = @"C:\Test\Scenes\Old Scene Folder".AsOsAgnostic();
+            var poster = new MetadataFile
+            {
+                Id = 5,
+                MovieId = 1,
+                Consumer = nameof(KometaMetadata),
+                Type = MetadataType.MovieImage,
+                RelativePath = "poster.jpg"
+            };
+
+            var consumer = Mocker.Resolve<KometaMetadata>();
+            consumer.Definition = new MetadataDefinition { Settings = new KometaMetadataSettings { MovieImages = true } };
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            Mocker.GetMock<IMetadataFactory>().Setup(f => f.GetAvailableProviders()).Returns(new List<IMetadata> { consumer });
+            Mocker.GetMock<IMetadataFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MetadataFile> { poster });
+            Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists(Path.Combine(oldFolder, "poster.jpg"))).Returns(true);
+
+            Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { RenamedFromOldFolder(oldFolder) });
+
+            Mocker.GetMock<IRecycleBinProvider>().Verify(r => r.DeleteFile(Path.Combine(oldFolder, "poster.jpg"), It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IMetadataFileService>().Verify(s => s.Delete(5), Times.Once());
+        }
+
+        [Test]
+        public void organise_to_shared_folder_skips_tracked_poster_when_target_exists()
+        {
+            var oldFolder = @"C:\Test\Scenes\Old Scene Folder".AsOsAgnostic();
+            var poster = new MetadataFile
+            {
+                MovieId = 1,
+                Consumer = nameof(XbmcMetadata),
+                Type = MetadataType.MovieImage,
+                RelativePath = "poster.jpg"
+            };
+
+            GivenXbmcPosterRename(poster);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(d => d.FileExists(Path.Combine(_movie.Path, "Bratty Sis - Scene (2026)-poster.jpg")))
+                  .Returns(true);
+
+            var moved = Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { RenamedFromOldFolder(oldFolder) });
+
+            moved.Should().BeEmpty();
+            Mocker.GetMock<IDiskProvider>().Verify(d => d.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
         public void organise_to_shared_folder_moves_tracked_folder_level_poster()
         {
             var oldFolder = @"C:\Test\Scenes\Old Scene Folder".AsOsAgnostic();
@@ -128,7 +180,6 @@ namespace NzbDrone.Core.Test.Extras.Metadata
             var poster = new MetadataFile
             {
                 MovieId = 1,
-                MovieFileId = 0,
                 Consumer = nameof(XbmcMetadata),
                 Type = MetadataType.MovieImage,
                 RelativePath = "poster.jpg"
@@ -165,6 +216,31 @@ namespace NzbDrone.Core.Test.Extras.Metadata
             var row = moved.Cast<MetadataFile>().Single();
             row.RelativePath.Should().Be("Bratty Sis - Scene (2026)-poster.jpg");
             row.MovieFileId.Should().Be(10);
+        }
+
+        private static RenamedMovieFile RenamedFromOldFolder(string oldFolder)
+        {
+            return new RenamedMovieFile
+            {
+                MovieFile = new MovieFile { Id = 10, RelativePath = "Bratty Sis - Scene (2026).mkv" },
+                PreviousPath = Path.Combine(oldFolder, "Old Name.mkv"),
+                PreviousRelativePath = "Old Name.mkv"
+            };
+        }
+
+        private void GivenXbmcPosterRename(MetadataFile poster)
+        {
+            _movie.MovieMetadata.Value.Images = new List<MediaCover.MediaCover> { new() { CoverType = MediaCoverTypes.Poster } };
+
+            var consumer = Mocker.Resolve<XbmcMetadata>();
+            consumer.Definition = new MetadataDefinition { Settings = new XbmcMetadataSettings { MovieImages = true } };
+
+            Mocker.GetMock<IMapCoversToLocal>()
+                  .Setup(s => s.GetMovieCoverPath(It.IsAny<int>(), It.IsAny<MediaCoverTypes>(), It.IsAny<int?>()))
+                  .Returns("/covers/poster.jpg");
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            Mocker.GetMock<IMetadataFactory>().Setup(f => f.GetAvailableProviders()).Returns(new List<IMetadata> { consumer });
+            Mocker.GetMock<IMetadataFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MetadataFile> { poster });
         }
     }
 }

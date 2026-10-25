@@ -209,11 +209,29 @@ namespace NzbDrone.Core.Extras.Metadata
         private List<MetadataFile> MoveFolderLevelImages(IMetadata consumer, Movie movie, List<RenamedMovieFile> renamedFiles, List<MetadataFile> consumerFiles)
         {
             var moved = new List<MetadataFile>();
-            var folderImages = consumerFiles.Where(m => m.Type == MetadataType.MovieImage && m.MovieFileId == 0).ToList();
+            var folderImages = consumerFiles.Where(m => m.Type == MetadataType.MovieImage && m.MovieFileId.GetValueOrDefault() == 0).ToList();
             var renamedFile = renamedFiles.FirstOrDefault();
 
             if (folderImages.Empty() || renamedFile == null || !_sceneFolderLayout.IsShared(movie))
             {
+                return moved;
+            }
+
+            if (!consumer.SupportsPerFileImages)
+            {
+                // No per-file form (Kometa): recycle the old tracked copy and drop its row
+                foreach (var image in folderImages)
+                {
+                    var oldFileName = GetPreviousPath(image.RelativePath, renamedFile.PreviousPath, renamedFile.PreviousRelativePath);
+
+                    if (_diskProvider.FileExists(oldFileName))
+                    {
+                        _recycleBinProvider.DeleteFile(oldFileName);
+                    }
+
+                    _metadataFileService.Delete(image.Id);
+                }
+
                 return moved;
             }
 
@@ -370,7 +388,7 @@ namespace NzbDrone.Core.Extras.Metadata
                                new MetadataFile
                                {
                                    MovieId = movie.Id,
-                                   MovieFileId = perFile ? movieFile.Id : 0,
+                                   MovieFileId = perFile ? movieFile.Id : null,
                                    Consumer = consumer.GetType().Name,
                                    Type = MetadataType.MovieImage,
                                    RelativePath = image.RelativePath,

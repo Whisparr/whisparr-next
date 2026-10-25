@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using FizzWare.NBuilder;
 using FluentAssertions;
@@ -5,6 +6,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Consumers.Roksbox;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Test.Framework;
@@ -62,11 +64,29 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Roksbox
         [Test]
         public void should_return_movie_image_for_per_file_jpg_in_shared_folder()
         {
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            GivenSharedFolderWithOwnFile();
 
             var path = Path.Combine(_movie.Path, "the.movie.2011.jpg");
 
             Subject.FindMetadataFile(_movie, path).Type.Should().Be(MetadataType.MovieImage);
+        }
+
+        [Test]
+        public void shared_folder_does_not_claim_sibling_scene_jpg()
+        {
+            GivenSharedFolderWithOwnFile();
+
+            var path = Path.Combine(_movie.Path, "the.movie.2012.jpg");
+
+            Subject.FindMetadataFile(_movie, path).Should().BeNull();
+        }
+
+        private void GivenSharedFolderWithOwnFile()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<MovieFile> { new() { RelativePath = "the.movie.2011.mkv" } });
         }
 
         [Test]

@@ -23,12 +23,15 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
 
         private readonly IMapCoversToLocal _mediaCoverService;
         private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly IMediaFileService _mediaFileService;
         private readonly Logger _logger;
 
         public RoksboxMetadata(IMapCoversToLocal mediaCoverService,
                             ISceneFolderLayout sceneFolderLayout,
+                            IMediaFileService mediaFileService,
                             Logger logger)
         {
+            _mediaFileService = mediaFileService;
             _mediaCoverService = mediaCoverService;
             _sceneFolderLayout = sceneFolderLayout;
             _logger = logger;
@@ -92,7 +95,7 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
 
                     // A shared folder has no folder-named jpg: the image is the per-file <file>.jpg (not another consumer's -poster/-thumb)
                     var isImageName = name.Equals(parentdir.Name, StringComparison.InvariantCultureIgnoreCase) ||
-                                      (_sceneFolderLayout.IsShared(movie) && !OtherImageSuffixRegex.IsMatch(name));
+                                      (_sceneFolderLayout.IsShared(movie) && !OtherImageSuffixRegex.IsMatch(name) && IsOwnVideoName(movie, name));
 
                     if (isImageName &&
                         !path.GetParentName().Equals("metadata", StringComparison.InvariantCultureIgnoreCase))
@@ -171,6 +174,13 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Roksbox
                 : Path.GetFileName(movie.Path) + Path.GetExtension(source);
 
             return new List<ImageFileResult> { new ImageFileResult(destination, source) };
+        }
+
+        // Shared folder: only this movie's own <file>.jpg, never a sibling scene's
+        private bool IsOwnVideoName(Movie movie, string name)
+        {
+            return _mediaFileService.GetFilesByMovie(movie.Id)
+                                    .Any(f => Path.GetFileNameWithoutExtension(f.RelativePath).Equals(name, StringComparison.OrdinalIgnoreCase));
         }
 
         private string GetMovieFileMetadataFilename(string movieFilePath)
