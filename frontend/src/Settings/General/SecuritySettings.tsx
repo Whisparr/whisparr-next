@@ -10,6 +10,7 @@ import ClipboardButton from 'Components/Link/ClipboardButton';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
 import { icons, inputTypes, kinds } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
+import AuthenticationMethodSettings from './AuthenticationMethodSettings';
 import { GeneralSettingsSectionProps } from './GeneralSettingsProps';
 
 export const authenticationMethodOptions: EnhancedSelectInputValue<string>[] = [
@@ -26,6 +27,12 @@ export const authenticationMethodOptions: EnhancedSelectInputValue<string>[] = [
       return translate('External');
     },
     isHidden: true,
+  },
+  {
+    key: 'oidc',
+    get value() {
+      return translate('Oidc');
+    },
   },
   {
     key: 'basic',
@@ -123,9 +130,6 @@ function SecuritySettings({
   const {
     authenticationMethod,
     authenticationRequired,
-    username,
-    password,
-    passwordConfirmation,
     apiKey,
     certificateValidation,
     trustedNetworks,
@@ -165,44 +169,10 @@ function SecuritySettings({
         </FormGroup>
       ) : null}
 
-      {authenticationEnabled ? (
-        <FormGroup>
-          <FormLabel>{translate('Username')}</FormLabel>
-
-          <FormInputGroup
-            type={inputTypes.TEXT}
-            name="username"
-            onChange={onInputChange}
-            {...username}
-          />
-        </FormGroup>
-      ) : null}
-
-      {authenticationEnabled ? (
-        <FormGroup>
-          <FormLabel>{translate('Password')}</FormLabel>
-
-          <FormInputGroup
-            type={inputTypes.PASSWORD}
-            name="password"
-            onChange={onInputChange}
-            {...password}
-          />
-        </FormGroup>
-      ) : null}
-
-      {authenticationEnabled ? (
-        <FormGroup>
-          <FormLabel>{translate('PasswordConfirmation')}</FormLabel>
-
-          <FormInputGroup
-            type={inputTypes.PASSWORD}
-            name="passwordConfirmation"
-            onChange={onInputChange}
-            {...passwordConfirmation}
-          />
-        </FormGroup>
-      ) : null}
+      <AuthenticationMethodSettings
+        settings={settings}
+        onInputChange={onInputChange}
+      />
 
       <FormGroup>
         <FormLabel>{translate('ApiKey')}</FormLabel>

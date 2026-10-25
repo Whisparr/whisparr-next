@@ -11,6 +11,7 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import usePrevious from 'Helpers/Hooks/usePrevious';
 import { inputTypes, kinds } from 'Helpers/Props';
+import AuthenticationMethodSettings from 'Settings/General/AuthenticationMethodSettings';
 import {
   authenticationMethodOptions,
   authenticationRequiredOptions,
@@ -38,14 +39,8 @@ export default function AuthenticationRequiredModalContent() {
   } = useManageGeneralSettings();
   const { refetch: refetchStatus } = useSystemStatus();
 
-  const {
-    authenticationMethod,
-    authenticationRequired,
-    username,
-    password,
-    passwordConfirmation,
-    allowedHosts,
-  } = settings;
+  const { authenticationMethod, authenticationRequired, allowedHosts } =
+    settings;
 
   const wasSaving = usePrevious(isSaving);
 
@@ -114,55 +109,11 @@ export default function AuthenticationRequiredModalContent() {
               />
             </FormGroup>
 
-            <FormGroup>
-              <FormLabel>{translate('Username')}</FormLabel>
-
-              <FormInputGroup
-                type={inputTypes.TEXT}
-                name="username"
-                helpTextWarning={
-                  username?.value
-                    ? undefined
-                    : translate('AuthenticationRequiredUsernameHelpTextWarning')
-                }
-                onChange={onInputChange}
-                {...username}
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel>{translate('Password')}</FormLabel>
-
-              <FormInputGroup
-                type={inputTypes.PASSWORD}
-                name="password"
-                helpTextWarning={
-                  password?.value
-                    ? undefined
-                    : translate('AuthenticationRequiredPasswordHelpTextWarning')
-                }
-                onChange={onInputChange}
-                {...password}
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <FormLabel>{translate('PasswordConfirmation')}</FormLabel>
-
-              <FormInputGroup
-                type={inputTypes.PASSWORD}
-                name="passwordConfirmation"
-                helpTextWarning={
-                  passwordConfirmation?.value
-                    ? undefined
-                    : translate(
-                        'AuthenticationRequiredPasswordConfirmationHelpTextWarning'
-                      )
-                }
-                onChange={onInputChange}
-                {...passwordConfirmation}
-              />
-            </FormGroup>
+            <AuthenticationMethodSettings
+              settings={settings}
+              showValidationWarnings={true}
+              onInputChange={onInputChange}
+            />
 
             <FormGroup>
               <FormLabel>{translate('AllowedHosts')}</FormLabel>
