@@ -33,7 +33,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public const string V5LogDb = "whisparr5-log";
 
         private const string LegacyMainDb = "whisparr-main";
-        private const string LegacyLogDb = "whisparr-log";
+        public const string LegacyLogDb = "whisparr-log";
         private const string MainDbVariable = "Whisparr__Postgres__MainDb";
         private const string LogDbVariable = "Whisparr__Postgres__LogDb";
         private const string MainDbConnectionStringVariable = "Whisparr__Postgres__MainDbConnectionString";

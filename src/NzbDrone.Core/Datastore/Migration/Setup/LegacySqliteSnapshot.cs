@@ -32,6 +32,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 return new LegacySqliteSnapshot(LegacyConnections.OpenSqliteReadOnly(path), null);
             }
 
+            // A fresh subfolder every time, so a stale -wal or -shm left in tempDir can never be replayed.
+            tempDir = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
 
             try
@@ -78,7 +80,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             if (_tempDir != null)
             {
-                SQLiteConnection.ClearAllPools();
                 DeleteDir(_tempDir);
             }
         }

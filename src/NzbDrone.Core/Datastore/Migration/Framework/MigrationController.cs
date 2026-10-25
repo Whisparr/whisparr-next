@@ -42,7 +42,7 @@ namespace NzbDrone.Core.Datastore.Migration.Framework
                 _ => throw new NotImplementedException($"Unknown database type: {databaseType}")
             };
 
-            if (migrationContext.DesiredVersion == null)
+            if (migrationContext.DesiredVersion == null && !migrationContext.AllowLegacySource)
             {
                 RefuseLegacyDatabase(connectionString, migrationContext.MigrationType, databaseType);
             }

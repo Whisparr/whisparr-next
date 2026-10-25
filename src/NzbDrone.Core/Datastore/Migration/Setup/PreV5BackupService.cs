@@ -96,8 +96,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 command.ExecuteNonQuery();
             }
 
-            SQLiteConnection.ClearAllPools();
-
             // Truncate mode leaves an empty journal behind once the backup connection closes.
             DeleteFile(target + "-journal");
         }
