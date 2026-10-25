@@ -6,6 +6,8 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.ProgressMessaging;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.Messaging.Commands
@@ -36,6 +38,20 @@ namespace NzbDrone.Core.Test.Messaging.Commands
                   {
                       return commands.SingleOrDefault(e => e.Id == c);
                   });
+        }
+
+        [Test]
+        public void should_set_progress_and_publish_update()
+        {
+            var command = Subject.Push<RefreshMonitoredDownloadsCommand>(new RefreshMonitoredDownloadsCommand());
+            var progress = new CommandProgress { Phase = "Linking files", Done = 1, Total = 10, Percent = 10 };
+
+            Subject.SetProgress(command, progress);
+
+            command.Progress.Should().BeSameAs(progress);
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.Is<CommandUpdatedEvent>(e => e.Command == command)), Times.Once());
         }
 
         [Test]

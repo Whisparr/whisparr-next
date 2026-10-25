@@ -24,6 +24,7 @@ namespace Whisparr.Api.V5.Commands
         public TimeSpan? Duration { get; set; }
         public string Exception { get; set; }
         public CommandTrigger Trigger { get; set; }
+        public CommandProgress Progress { get; set; }
 
         public string ClientUserAgent { get; set; }
 
@@ -110,6 +111,7 @@ namespace Whisparr.Api.V5.Commands
                 Duration = model.Duration,
                 Exception = model.Exception,
                 Trigger = model.Trigger,
+                Progress = model.Progress,
 
                 ClientUserAgent = UserAgentParser.SimplifyUserAgent(model.Body.ClientUserAgent),
 

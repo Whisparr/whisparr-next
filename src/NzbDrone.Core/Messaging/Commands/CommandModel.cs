@@ -18,5 +18,8 @@ namespace NzbDrone.Core.Messaging.Commands
         public string Exception { get; set; }
         public CommandTrigger Trigger { get; set; }
         public string Message { get; set; }
+
+        // Not persisted
+        public CommandProgress Progress { get; set; }
     }
 }

@@ -11,6 +11,7 @@ using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.ProgressMessaging;
 
 namespace NzbDrone.Core.Messaging.Commands
 {
@@ -26,6 +27,7 @@ namespace NzbDrone.Core.Messaging.Commands
         CommandModel Get(int id);
         List<CommandModel> GetStarted();
         void SetMessage(CommandModel command, string message);
+        void SetProgress(CommandModel command, CommandProgress progress);
         void SetResult(CommandModel command, CommandResult result);
         void Start(CommandModel command);
         void Complete(CommandModel command, string message);
@@ -39,6 +41,7 @@ namespace NzbDrone.Core.Messaging.Commands
     {
         private readonly ICommandRepository _repo;
         private readonly KnownTypes _knownTypes;
+        private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
         private readonly CommandQueue _commandQueue;
@@ -46,9 +49,11 @@ namespace NzbDrone.Core.Messaging.Commands
         public CommandQueueManager(ICommandRepository repo,
                                    IServiceFactory serviceFactory,
                                    KnownTypes knownTypes,
+                                   IEventAggregator eventAggregator,
                                    Logger logger)
         {
             _repo = repo;
+            _eventAggregator = eventAggregator;
             _knownTypes = knownTypes;
             _logger = logger;
 
@@ -180,6 +185,12 @@ namespace NzbDrone.Core.Messaging.Commands
         public void SetMessage(CommandModel command, string message)
         {
             command.Message = message;
+        }
+
+        public void SetProgress(CommandModel command, CommandProgress progress)
+        {
+            command.Progress = progress;
+            _eventAggregator.PublishEvent(new CommandUpdatedEvent(command));
         }
 
         public void SetResult(CommandModel command, CommandResult result)
