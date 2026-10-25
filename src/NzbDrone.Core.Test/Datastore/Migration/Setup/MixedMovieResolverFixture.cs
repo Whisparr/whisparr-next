@@ -157,7 +157,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var result = Resolve(MovieMetadataType.TMDB);
 
-            result.Merged.Should().Be(1);
+            result.Merged.Should().Be(0);
             result.Detached.Should().Be(1);
 
             Ids("Movies").Should().Equal(1);
@@ -167,6 +167,63 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             import.OsHash.Should().Be("bb");
             import.RelativePath.Should().Be("Twin (2020)/twin.mp4");
             Count("LegacyMovieSeeds").Should().Be(0);
+        }
+
+        [Test]
+        public void should_detach_second_twin_file_when_first_twin_already_moved_onto_kept_row()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Kept", 2020);
+            AddMovie(2, TpdbMovie, MovieItem, 100, "First Twin", 2020);
+            AddFile(2, "first.mp4", "f1");
+            AddMovie(3, TpdbMovie, MovieItem, 100, "Second Twin", 2020);
+            AddFile(3, "second.mp4", "f2");
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Merged.Should().Be(1);
+            result.Detached.Should().Be(1);
+            result.Skipped.Should().Be(0);
+
+            Ids("Movies").Should().Equal(1);
+            Ids("MovieMetadata").Should().Equal(1);
+            Count("LegacyMovieSeeds").Should().Be(0);
+
+            var file = _connection.QuerySingle<(int Id, int MovieId, string OsHash)>("SELECT \"Id\", \"MovieId\", \"OsHash\" FROM \"MovieFiles\"");
+            file.MovieId.Should().Be(1);
+            file.OsHash.Should().Be("f1");
+            _connection.ExecuteScalar<int>("SELECT \"MovieFileId\" FROM \"Movies\" WHERE \"Id\" = 1").Should().Be(file.Id);
+
+            _connection.QuerySingle<string>("SELECT \"OsHash\" FROM \"ImportFiles\"").Should().Be("f2");
+        }
+
+        [Test]
+        public void should_skip_movie_outside_any_root_folder()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Kept", 2020);
+            AddFile(1, "kept.mp4", "aa");
+            AddMovie(2, TpdbMovie, MovieItem, 555, "Outside", 2019);
+            AddFile(2, "outside.mp4", "bb");
+            AddMovie(3, TpdbMovie, MovieItem, 100, "Outside Twin", 2020);
+            AddFile(3, "twin.mp4", "cc");
+            _connection.Execute("UPDATE \"Movies\" SET \"Path\" = '/elsewhere/Outside (2019)' WHERE \"Id\" = 2");
+            _connection.Execute("UPDATE \"Movies\" SET \"Path\" = '/elsewhere/Outside Twin (2020)' WHERE \"Id\" = 3");
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Kept.Should().Be(1);
+            result.Merged.Should().Be(0);
+            result.Detached.Should().Be(0);
+            result.Skipped.Should().Be(2);
+            result.SkippedPaths.Should().BeEquivalentTo("/elsewhere/Outside (2019)", "/elsewhere/Outside Twin (2020)");
+
+            Ids("Movies").Should().Equal(1, 2, 3);
+            Ids("MovieMetadata").Should().Equal(1, 2, 3);
+            Count("MovieFiles").Should().Be(3);
+            Count("Credits").Should().Be(3);
+            Count("AlternativeTitles").Should().Be(3);
+            Count("ImportFiles").Should().Be(0);
+            Count("LegacyMovieSeeds").Should().Be(0);
+            _connection.ExecuteScalar<int>("SELECT COUNT(*) FROM \"Movies\" WHERE \"MovieFileId\" > 0").Should().Be(3);
         }
 
         [Test]

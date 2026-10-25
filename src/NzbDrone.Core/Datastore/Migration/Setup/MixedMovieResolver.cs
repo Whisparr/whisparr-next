@@ -12,6 +12,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public int Kept { get; set; }
         public int Merged { get; set; }
         public int Detached { get; set; }
+
+        // Other-source movies outside every root folder: left untouched
+        public int Skipped { get; set; }
+        public List<string> SkippedPaths { get; } = new();
     }
 
     public interface IMixedMovieResolver
@@ -66,36 +70,52 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             foreach (var other in others)
             {
                 var twin = other.TmdbId.GetValueOrDefault() > 0 && keptByTmdb.TryGetValue(other.TmdbId.Value, out var found) ? found : null;
+                var root = other.Path == null ? null : FindRoot(roots, other.Path);
+                var movesOntoTwin = twin != null && (other.MovieFileId == 0 || twin.MovieFileId == 0);
 
-                if (twin != null)
+                // A detached file needs a root folder to hang off, and a seed needs one for its path. Without it the
+                // row is left exactly as it is, for the migration report.
+                if (other.Path == null || (root == null && !movesOntoTwin))
                 {
-                    result.Merged++;
+                    result.Skipped++;
+                    result.SkippedPaths.Add(other.Path ?? $"Movie {other.MovieId}");
 
-                    if (other.MovieFileId > 0 && twin.MovieFileId == 0)
-                    {
-                        MoveFile(v5Connection, transaction, other, twin);
-                    }
-                    else if (other.MovieFileId > 0 && Detach(v5Connection, transaction, roots, other) != null)
-                    {
-                        result.Detached++;
-                    }
-                }
-                else
-                {
-                    var importFileId = other.MovieFileId > 0 ? Detach(v5Connection, transaction, roots, other) : null;
-
-                    if (importFileId != null)
-                    {
-                        result.Detached++;
-                    }
-
-                    InsertSeed(v5Connection, transaction, roots, other, importFileId);
+                    continue;
                 }
 
+                ResolveOther(v5Connection, transaction, result, other, twin, root, movesOntoTwin);
                 DeleteMovie(v5Connection, transaction, other);
             }
 
             return result;
+        }
+
+        // Merged counts twins whose file moved onto the kept row or that had none; a detached file counts as Detached.
+        private static void ResolveOther(IDbConnection connection, IDbTransaction transaction, MixedMovieResult result, MovieRow other, MovieRow twin, RootRow root, bool movesOntoTwin)
+        {
+            if (movesOntoTwin)
+            {
+                result.Merged++;
+
+                if (other.MovieFileId > 0)
+                {
+                    MoveFile(connection, transaction, other, twin);
+                }
+
+                return;
+            }
+
+            var importFileId = other.MovieFileId > 0 ? Detach(connection, transaction, root, other) : null;
+
+            if (importFileId != null)
+            {
+                result.Detached++;
+            }
+
+            if (twin == null)
+            {
+                InsertSeed(connection, transaction, root, other, importFileId);
+            }
         }
 
         private static void MoveFile(IDbConnection connection, IDbTransaction transaction, MovieRow from, MovieRow to)
@@ -108,7 +128,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         }
 
         // Turns the movie's file into an ImportFiles row and drops the MovieFiles row. Nothing on disk is touched.
-        private static int? Detach(IDbConnection connection, IDbTransaction transaction, List<RootRow> roots, MovieRow movie)
+        private static int? Detach(IDbConnection connection, IDbTransaction transaction, RootRow root, MovieRow movie)
         {
             var file = connection.QuerySingleOrDefault<FileRow>(
                 "SELECT \"Id\", \"RelativePath\", \"OsHash\", \"PHash\", \"PHashAttemptedAt\", \"HashedFileModifiedAt\" FROM \"MovieFiles\" WHERE \"Id\" = @id",
@@ -122,15 +142,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             var relativeToMovie = file.RelativePath ?? string.Empty;
             var absolute = Join(movie.Path, relativeToMovie);
-            var root = FindRoot(roots, movie.Path);
-            var relativePath = root == null ? relativeToMovie : absolute[TrimEnd(root.Path).Length..].TrimStart('/', '\\');
+            var relativePath = absolute[TrimEnd(root.Path).Length..].TrimStart('/', '\\');
 
             var importFileId = connection.ExecuteScalar<int>(
                 "INSERT INTO \"ImportFiles\" (\"RootFolderId\", \"Path\", \"RelativePath\", \"Name\", \"OsHash\", \"PHash\", \"PHashAttemptedAt\", \"HashedFileModifiedAt\") " +
                 "VALUES (@rootFolderId, @path, @relativePath, @name, @osHash, @pHash, @pHashAttemptedAt, @hashedFileModifiedAt) RETURNING \"Id\"",
                 new
                 {
-                    rootFolderId = root?.Id ?? 0,
+                    rootFolderId = root.Id,
                     path = absolute,
                     relativePath,
                     name = FileNameWithoutExtension(relativeToMovie),
@@ -149,7 +168,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return importFileId;
         }
 
-        private static void InsertSeed(IDbConnection connection, IDbTransaction transaction, List<RootRow> roots, MovieRow movie, int? importFileId)
+        private static void InsertSeed(IDbConnection connection, IDbTransaction transaction, RootRow root, MovieRow movie, int? importFileId)
         {
             connection.Execute(
                 "INSERT INTO \"LegacyMovieSeeds\" (\"LegacyForeignId\", \"Title\", \"Year\", \"TmdbId\", \"ImdbId\", \"Monitored\", \"QualityProfileId\", \"RootFolderPath\", \"Tags\", \"ImportFileId\", \"Resolved\") " +
@@ -163,7 +182,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     imdbId = movie.ImdbId,
                     monitored = movie.Monitored,
                     qualityProfileId = movie.QualityProfileId,
-                    rootFolderPath = FindRoot(roots, movie.Path)?.Path,
+                    rootFolderPath = root.Path,
                     tags = movie.Tags,
                     importFileId,
                     resolved = false
