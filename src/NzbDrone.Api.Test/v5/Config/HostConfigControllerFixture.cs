@@ -7,6 +7,7 @@ using NUnit.Framework;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Localization;
+using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
 using NzbDrone.Test.Common;
 using Whisparr.Api.V5.Config;
@@ -73,8 +74,9 @@ namespace NzbDrone.Api.Test.v5.Config
                                                   IConfigService configService,
                                                   IUserService userService,
                                                   FileExistsValidator<HostConfigResource> fileExistsValidator,
+                                                  OidcAuthorityValidator<HostConfigResource> oidcAuthorityValidator,
                                                   ILocalizationService localizationService)
-                : base(configFileProvider, configService, userService, fileExistsValidator, localizationService)
+                : base(configFileProvider, configService, userService, fileExistsValidator, oidcAuthorityValidator, localizationService)
             {
             }
 

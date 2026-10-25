@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -30,6 +31,7 @@ namespace Whisparr.Api.V5.Config
                                     IConfigService configService,
                                     IUserService userService,
                                     FileExistsValidator<HostConfigResource> fileExistsValidator,
+                                    OidcAuthorityValidator<HostConfigResource> oidcAuthorityValidator,
                                     ILocalizationService localizationService)
         {
             _configFileProvider = configFileProvider;
@@ -68,6 +70,40 @@ namespace Whisparr.Api.V5.Config
 
             SharedValidator.RuleFor(c => c.PasswordConfirmation)
                 .Must((resource, p) => IsMatchingPassword(resource)).WithMessage("Must match Password");
+
+            SharedValidator.RuleFor(c => c.OidcAuthority)
+                .Cascade(CascadeMode.Stop)
+                .NotEmpty()
+                .Must(c => c is not null && c.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("OIDC Authority must start with 'https://'")
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
+                .WithName("OIDC Authority");
+
+            SharedValidator.RuleFor(c => c.OidcAuthority)
+                .SetValidator(oidcAuthorityValidator)
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc &&
+                           c.OidcAuthority != _configFileProvider.OidcAuthority)
+                .WithName("OIDC Authority");
+
+            SharedValidator.RuleFor(c => c.OidcClientId).NotEmpty()
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
+                .WithName("OIDC Client ID");
+
+            SharedValidator.RuleFor(c => c.OidcClientSecret).NotEmpty()
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
+                .WithName("OIDC Client Secret");
+
+            SharedValidator.RuleFor(c => c.OidcUserIdentifier).NotEmpty()
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
+                .WithName("OIDC User");
+
+            SharedValidator.RuleFor(c => c.OidcScopes)
+                .Cascade(CascadeMode.Stop)
+                .NotEmpty()
+                .Must(c => AuthenticationConfigurationExtensions.GetOidcScopes(c).Contains("openid"))
+                .WithMessage("OIDC Scopes must include 'openid'")
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
+                .WithName("OIDC Scopes");
 
             SharedValidator.RuleFor(c => c.SslPort).ValidPort().When(c => c.EnableSsl);
             SharedValidator.RuleFor(c => c.SslPort).NotEqual(c => c.Port).When(c => c.EnableSsl);
@@ -127,6 +163,7 @@ namespace Whisparr.Api.V5.Config
             // Prevent secrets from being exposed
             resource.SslCertPassword = resource.SslCertPassword.IsNullOrWhiteSpace() ? string.Empty : PrivateValue;
             resource.ProxyPassword = resource.ProxyPassword.IsNullOrWhiteSpace() ? string.Empty : PrivateValue;
+            resource.OidcClientSecret = _configFileProvider.OidcClientSecret.IsNullOrWhiteSpace() ? string.Empty : PrivateValue;
 
             return resource;
         }
@@ -149,6 +186,11 @@ namespace Whisparr.Api.V5.Config
             if (resource.ProxyPassword == PrivateValue)
             {
                 dictionary["ProxyPassword"] = _configService.ProxyPassword;
+            }
+
+            if (resource.OidcClientSecret == PrivateValue)
+            {
+                dictionary["OidcClientSecret"] = _configFileProvider.OidcClientSecret;
             }
 
             _configFileProvider.SaveConfigDictionary(dictionary);

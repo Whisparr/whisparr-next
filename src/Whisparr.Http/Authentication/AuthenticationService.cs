@@ -37,27 +37,26 @@ namespace Whisparr.Http.Authentication
         private static readonly TimeSpan ResetRequestThrottle = TimeSpan.FromMinutes(1);
 
         private static readonly Logger _authLogger = LogManager.GetLogger("Auth");
+        private readonly IConfigFileProvider _configFileProvider;
         private readonly IUserService _userService;
         private readonly ICached<FailedLoginAttempts> _failedAttempts;
         private readonly ICached<string> _resetToken;
         private readonly ICached<string> _resetRequests;
         private string _configuredResetTokenHash;
 
-        private static AuthenticationType AUTH_METHOD;
-
         public AuthenticationService(IConfigFileProvider configFileProvider, IUserService userService, ICacheManager cacheManager, IOptions<AuthOptions> authOptions)
         {
+            _configFileProvider = configFileProvider;
             _userService = userService;
             _failedAttempts = cacheManager.GetCache<FailedLoginAttempts>(GetType(), "failedLoginAttempts");
             _resetToken = cacheManager.GetCache<string>(GetType(), "passwordResetToken");
             _resetRequests = cacheManager.GetCache<string>(GetType(), "passwordResetRequests");
             _configuredResetTokenHash = GetConfiguredResetTokenHash(authOptions.Value.ResetToken);
-            AUTH_METHOD = configFileProvider.AuthenticationMethod;
         }
 
         public User Login(HttpRequest request, string username, string password)
         {
-            if (AUTH_METHOD == AuthenticationType.None)
+            if (_configFileProvider.EffectiveAuthenticationMethod() != AuthenticationType.Forms)
             {
                 return null;
             }
@@ -99,20 +98,20 @@ namespace Whisparr.Http.Authentication
 
         public void Logout(HttpContext context)
         {
-            if (AUTH_METHOD == AuthenticationType.None)
+            if (_configFileProvider.AuthenticationMethod == AuthenticationType.None)
             {
                 return;
             }
 
             if (context.User != null)
             {
-                LogLogout(context.Request, context.User.Identity.Name);
+                LogLogout(context.Request, context.User.FindFirst("user")?.Value ?? context.User.Identity?.Name);
             }
         }
 
         public string RequestPasswordReset(HttpRequest request)
         {
-            if (AUTH_METHOD != AuthenticationType.Forms)
+            if (_configFileProvider.EffectiveAuthenticationMethod() != AuthenticationType.Forms)
             {
                 return null;
             }
@@ -150,7 +149,7 @@ namespace Whisparr.Http.Authentication
 
         public bool ResetPassword(HttpRequest request, string token, string username, string password)
         {
-            if (AUTH_METHOD != AuthenticationType.Forms)
+            if (_configFileProvider.EffectiveAuthenticationMethod() != AuthenticationType.Forms)
             {
                 return false;
             }
