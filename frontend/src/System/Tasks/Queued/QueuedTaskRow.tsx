@@ -1,5 +1,6 @@
 import moment from 'moment';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CommandProgress } from 'Commands/Command';
 import { useCancelCommand } from 'Commands/useCommands';
 import Icon, { IconProps } from 'Components/Icon';
 import IconButton from 'Components/Link/IconButton';
@@ -98,9 +99,10 @@ export interface QueuedTaskRowProps {
   duration?: string;
   message?: string;
   clientUserAgent?: string;
+  progress?: CommandProgress;
 }
 
-export default function QueuedTaskRow(props: QueuedTaskRowProps) {
+export default function QueuedTaskRow(props: Readonly<QueuedTaskRowProps>) {
   const {
     id,
     trigger,
@@ -112,6 +114,7 @@ export default function QueuedTaskRow(props: QueuedTaskRowProps) {
     duration,
     message,
     clientUserAgent,
+    progress,
   } = props;
 
   const { cancelCommand } = useCancelCommand(id);
@@ -190,6 +193,9 @@ export default function QueuedTaskRow(props: QueuedTaskRowProps) {
         commandName={commandName}
         message={message}
         clientUserAgent={clientUserAgent}
+        status={status}
+        started={started}
+        progress={progress}
       />
 
       <TableRowCell

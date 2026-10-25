@@ -27,6 +27,13 @@ export interface NewCommandBody {
     string | number | boolean | number[] | string[] | object | undefined;
 }
 
+export interface CommandProgress {
+  phase: string;
+  done: number;
+  total: number;
+  percent: number;
+}
+
 interface Command extends ModelBase {
   name: string;
   commandName: string;
@@ -34,6 +41,7 @@ interface Command extends ModelBase {
   body: CommandBody;
   priority: CommandPriority;
   status: string;
+  progress?: CommandProgress;
   result: string;
   queued: string;
   started: string;

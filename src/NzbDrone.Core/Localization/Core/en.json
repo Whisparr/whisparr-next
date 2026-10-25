@@ -293,6 +293,8 @@
   "CollectionsUnavailableWithTpdb": "Collections come from TMDb, and your movie metadata source is TPDb, which doesn't provide them. Switch the movie metadata source to TMDb in Settings > General to use Collections.",
   "ColonReplacement": "Colon Replacement",
   "ColonReplacementFormatHelpText": "Change how {appName} handles colon replacement",
+  "CommandProgress": "{phase}: {done} / {total} ({percent}%)",
+  "CommandProgressEta": "About {eta} left",
   "Complete": "Complete",
   "Completed": "Completed",
   "CompletedDownloadHandling": "Completed Download Handling",
