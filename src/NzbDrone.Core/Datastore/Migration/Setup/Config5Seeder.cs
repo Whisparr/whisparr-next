@@ -40,6 +40,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         private const string LegacyMainDb = "whisparr-main";
         public const string LegacyLogDb = "whisparr-log";
+        public const string UnchangedMarker = "<unchanged>";
         public const string MainDbVariable = "Whisparr__Postgres__MainDb";
         public const string LogDbVariable = "Whisparr__Postgres__LogDb";
         public const string MainDbConnectionStringVariable = "Whisparr__Postgres__MainDbConnectionString";
@@ -53,7 +54,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 try
                 {
-                    return new NpgsqlConnectionStringBuilder(connectionString) { Database = database }.ConnectionString;
+                    var builder = new NpgsqlConnectionStringBuilder(connectionString) { Database = database };
+
+                    // Display only, and it reaches the API, so never carry the password.
+                    if (!string.IsNullOrEmpty(builder.Password))
+                    {
+                        builder.Password = UnchangedMarker;
+                    }
+
+                    return builder.ConnectionString;
                 }
                 catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or FormatException)
                 {

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,7 @@ namespace Whisparr.Http.Setup
     [ApiController]
     [Route("api/setup")]
     [ApiExplorerSettings(IgnoreApi = true)]
-    public class SetupController : Controller
+    public class SetupController : ControllerBase
     {
         private readonly ISetupModeState _setupModeState;
         private readonly ISetupWizardService _wizard;
@@ -143,9 +144,11 @@ namespace Whisparr.Http.Setup
         }
 
         // Before migrating nothing has been seeded yet, so show the values the seeder will pick.
-        private System.Collections.Generic.List<EnvTarget> PlanEnvTargets(DetectionResult detection)
+        private List<EnvTarget> PlanEnvTargets(DetectionResult detection)
         {
-            var install = detection.Installs.FirstOrDefault(i => i.Database?.NamedByEnvironment == true);
+            var named = detection.Installs.Where(i => i.Database?.NamedByEnvironment == true).ToList();
+            var defaultKind = GetDefaults(detection).Kind;
+            var install = named.FirstOrDefault(i => i.Kind == defaultKind) ?? named.FirstOrDefault();
 
             if (install == null || string.IsNullOrEmpty(detection.LegacyConfigPath))
             {

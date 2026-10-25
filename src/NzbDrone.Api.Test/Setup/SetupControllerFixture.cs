@@ -129,6 +129,47 @@ namespace NzbDrone.Api.Test.Setup
         }
 
         [Test]
+        public void status_and_progress_json_should_not_contain_connection_string_password()
+        {
+            var targets = Config5Seeder.EnvTargetsFor(
+                new[] { Config5Seeder.MainDbConnectionStringVariable },
+                "whisparr5-main",
+                "whisparr5-log",
+                "Host=db;Database=whisparr-main;Username=u;Password=secret",
+                null);
+
+            _detection.Installs.Add(Install(LegacyKind.Eros));
+            _detection.PendingEnvSwitch = true;
+            _detection.EnvTargets.AddRange(targets);
+            _progress = new SetupProgress { Status = SetupStatus.Succeeded, EnvTargets = targets };
+
+            var status = Status();
+            var json = NzbDrone.Common.Serializer.Json.ToJson(status);
+
+            json.Should().NotContain("secret");
+            json.Should().Contain("<unchanged>");
+            NzbDrone.Common.Serializer.Json.ToJson(status.Progress).Should().NotContain("secret");
+        }
+
+        [Test]
+        public void status_should_plan_env_targets_for_default_kind_when_both_named()
+        {
+            var v2 = Install(LegacyKind.V2);
+            v2.Database.NamedByEnvironment = true;
+            var eros = Install(LegacyKind.Eros);
+            eros.Database.NamedByEnvironment = true;
+            _detection.Installs.Add(v2);
+            _detection.Installs.Add(eros);
+
+            _seeder.Setup(s => s.PlanTargets("config.xml", eros)).Returns(new V5DatabaseTargets
+            {
+                EnvTargets = new List<EnvTarget> { new() { Name = "n", Value = "eros" } }
+            });
+
+            Status().EnvTargets.Should().ContainSingle().Which.Value.Should().Be("eros");
+        }
+
+        [Test]
         public void status_should_have_no_env_targets_when_config_is_unreadable()
         {
             var install = Install(LegacyKind.Eros);

@@ -240,6 +240,33 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void plan_targets_should_mask_connection_string_password()
+        {
+            WriteLegacy("<Port>6969</Port>");
+            _env["Whisparr__Postgres__MainDbConnectionString"] = "Host=db;Database=whisparr-main;Username=u;Password=secret";
+
+            var targets = Subject.PlanTargets(_legacyPath, Install());
+
+            var value = targets.EnvTargets.Should().ContainSingle().Which.Value;
+            value.Should().NotContain("secret");
+            value.Should().Contain("Password=<unchanged>");
+            value.Should().Contain("Database=whisparr5-main");
+        }
+
+        [Test]
+        public void env_targets_should_not_add_a_password_when_there_was_none()
+        {
+            var targets = Config5Seeder.EnvTargetsFor(
+                new[] { "Whisparr__Postgres__MainDbConnectionString" },
+                "m",
+                "l",
+                "Host=db;Database=whisparr-main;Username=u",
+                null);
+
+            targets[0].Value.Should().NotContain("Password");
+        }
+
+        [Test]
         public void should_work_with_default_environment_access()
         {
             WriteLegacy("<Port>6969</Port>");
