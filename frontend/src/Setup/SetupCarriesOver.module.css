@@ -1,0 +1,31 @@
+.carriesOver {
+  margin: 20px 0;
+
+  summary {
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  h4 {
+    margin: 15px 0 5px;
+  }
+}
+
+.table {
+  margin: 10px 0;
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 6px 10px;
+    border: 1px solid var(--borderColor);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    width: 22%;
+    white-space: nowrap;
+  }
+}

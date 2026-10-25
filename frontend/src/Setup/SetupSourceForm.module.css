@@ -1,0 +1,55 @@
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  label {
+    min-width: 120px;
+    font-weight: bold;
+  }
+
+  select {
+    padding: 5px 8px;
+    border: 1px solid var(--inputBorderColor);
+    border-radius: 4px;
+    background-color: var(--inputBackgroundColor);
+    color: var(--textColor);
+  }
+}
+
+.good {
+  color: var(--successColor);
+}
+
+.slow,
+.warning {
+  color: var(--warningColor);
+}
+
+.warning {
+  flex-basis: 100%;
+  margin-left: 130px;
+}
+
+.locked {
+  color: var(--disabledColor);
+}
+
+.envNotice {
+  margin: 15px 0;
+  padding: 10px 15px;
+  border: 1px solid var(--warningColor);
+  border-radius: 4px;
+}
+
+.error {
+  color: var(--dangerColor);
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}

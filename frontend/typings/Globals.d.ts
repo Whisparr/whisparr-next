@@ -10,6 +10,7 @@ interface WhisparrGlobal {
   urlBase: string;
   version: string;
   isProduction: boolean;
+  setupMode?: boolean;
 }
 
 interface Window {

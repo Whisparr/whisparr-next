@@ -1,0 +1,49 @@
+.steps {
+  margin: 0 0 15px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    padding: 4px 0;
+  }
+}
+
+.state {
+  display: inline-block;
+  margin-right: 12px;
+  min-width: 70px;
+  font-weight: bold;
+}
+
+.pending,
+.skipped {
+  color: var(--disabledColor);
+}
+
+.running {
+  color: var(--primaryColor);
+}
+
+.done {
+  color: var(--successColor);
+}
+
+.failed {
+  color: var(--dangerColor);
+}
+
+.paths {
+  word-break: break-all;
+}
+
+.failure {
+  margin-top: 15px;
+  padding: 10px 15px;
+  border: 1px solid var(--dangerColor);
+  border-radius: 4px;
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+}
