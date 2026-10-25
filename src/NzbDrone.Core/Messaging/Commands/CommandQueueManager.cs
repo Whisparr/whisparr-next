@@ -189,7 +189,9 @@ namespace NzbDrone.Core.Messaging.Commands
 
         public void SetProgress(CommandModel command, CommandProgress progress)
         {
-            command.Progress = progress;
+            command.Progress = progress == null
+                ? null
+                : CommandProgress.Create(progress.Phase, progress.Done, progress.Total, progress.Percent);
             _eventAggregator.PublishEvent(new CommandUpdatedEvent(command));
         }
 

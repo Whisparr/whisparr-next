@@ -93,6 +93,13 @@ namespace Whisparr.Api.V5.Config
                 .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
                 .WithName("OIDC Client Secret");
 
+            // The placeholder only means "keep the stored secret", so it needs one to keep
+            SharedValidator.RuleFor(c => c.OidcClientSecret)
+                .Must(_ => _configFileProvider.OidcClientSecret.IsNotNullOrWhiteSpace())
+                .When(c => c.AuthenticationMethod == AuthenticationType.Oidc && c.OidcClientSecret == PrivateValue)
+                .WithMessage("OIDC Client Secret is required")
+                .WithName("OIDC Client Secret");
+
             SharedValidator.RuleFor(c => c.OidcUserIdentifier).NotEmpty()
                 .When(c => c.AuthenticationMethod == AuthenticationType.Oidc)
                 .WithName("OIDC User");

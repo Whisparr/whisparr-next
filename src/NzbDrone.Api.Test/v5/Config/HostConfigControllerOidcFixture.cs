@@ -98,6 +98,26 @@ namespace NzbDrone.Api.Test.v5.Config
         }
 
         [Test]
+        public void put_should_reject_placeholder_secret_when_none_is_stored()
+        {
+            GivenStoredSecret(string.Empty);
+
+            var failures = Subject.Validator.Validate(OidcResource()).Errors;
+
+            failures.Should().Contain(e => e.PropertyName == nameof(HostConfigResource.OidcClientSecret));
+        }
+
+        [Test]
+        public void put_should_accept_placeholder_secret_when_one_is_stored()
+        {
+            GivenStoredSecret("s3cret");
+
+            var failures = Subject.Validator.Validate(OidcResource()).Errors;
+
+            failures.Should().NotContain(e => e.PropertyName == nameof(HostConfigResource.OidcClientSecret));
+        }
+
+        [Test]
         public void put_should_persist_new_secret()
         {
             GivenStoredSecret("s3cret");

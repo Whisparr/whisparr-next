@@ -16,6 +16,7 @@ namespace NzbDrone.Core.ProgressMessaging
 
         private readonly IEventAggregator _eventAggregator;
         private readonly ConcurrentDictionary<int, DateTime> _lastPublished = new();
+        private readonly object _throttleLock = new();
 
         public CommandProgressReporter(IEventAggregator eventAggregator)
         {
@@ -35,33 +36,31 @@ namespace NzbDrone.Core.ProgressMessaging
                 return;
             }
 
-            var previousPhase = command.Progress?.Phase;
+            bool publish;
 
-            var progress = new CommandProgress
+            // The throttle decision reads and writes shared state, so make it atomic per reporter
+            lock (_throttleLock)
             {
-                Phase = phase,
-                Done = done,
-                Total = total,
-                Percent = double.IsNaN(percent) ? 0 : Math.Clamp(percent, 0, 100)
-            };
+                var previousPhase = command.Progress?.Phase;
 
-            command.Progress = progress;
+                command.Progress = CommandProgress.Create(phase, done, total, percent);
 
-            var now = UtcNow();
-            var finished = total > 0 && done >= total;
+                var now = UtcNow();
+                var finished = total > 0 && done >= total;
 
-            var publish = !_lastPublished.TryGetValue(command.Id, out var last) ||
+                publish = !_lastPublished.TryGetValue(command.Id, out var last) ||
                           finished ||
                           previousPhase != phase ||
                           now - last >= MinPublishInterval;
 
-            if (finished)
-            {
-                _lastPublished.TryRemove(command.Id, out _);
-            }
-            else if (publish)
-            {
-                _lastPublished[command.Id] = now;
+                if (finished)
+                {
+                    _lastPublished.TryRemove(command.Id, out _);
+                }
+                else if (publish)
+                {
+                    _lastPublished[command.Id] = now;
+                }
             }
 
             if (publish)

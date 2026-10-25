@@ -48,10 +48,22 @@ namespace NzbDrone.Core.Test.Messaging.Commands
 
             Subject.SetProgress(command, progress);
 
-            command.Progress.Should().BeSameAs(progress);
+            command.Progress.Should().BeEquivalentTo(progress);
 
             Mocker.GetMock<IEventAggregator>()
                   .Verify(v => v.PublishEvent(It.Is<CommandUpdatedEvent>(e => e.Command == command)), Times.Once());
+        }
+
+        [TestCase(double.NaN, 0)]
+        [TestCase(150, 100)]
+        [TestCase(-5, 0)]
+        public void should_normalize_percent_when_setting_progress(double percent, double expected)
+        {
+            var command = Subject.Push<RefreshMonitoredDownloadsCommand>(new RefreshMonitoredDownloadsCommand());
+
+            Subject.SetProgress(command, new CommandProgress { Phase = "Linking files", Done = 1, Total = 10, Percent = percent });
+
+            command.Progress.Percent.Should().Be(expected);
         }
 
         [Test]
