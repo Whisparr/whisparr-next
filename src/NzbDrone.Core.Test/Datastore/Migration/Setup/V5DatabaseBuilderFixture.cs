@@ -453,12 +453,38 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             }
 
             var created = new List<string>();
+            var reused = new List<string>();
 
-            var built = Builder().CopyEros(PgInstall(), PgTargets(), created.Add);
+            var built = Builder().CopyEros(PgInstall(), PgTargets(), created.Add, reused.Add);
 
             created.Should().Equal(_targetLog);
+            reused.Should().Equal(_targetMain);
 
             AssertCopied(built);
+        }
+
+        [Test]
+        public void should_not_report_a_reused_target_when_a_target_is_refused()
+        {
+            StartPostgres();
+
+            using (var admin = OpenAdmin(_options.User, _options.Password))
+            {
+                admin.Execute($"CREATE DATABASE \"{_targetMain}\"");
+                admin.Execute($"CREATE DATABASE \"{_targetLog}\"");
+            }
+
+            using (var connection = new NpgsqlConnection(PgConnectionString(_targetLog)))
+            {
+                connection.Open();
+                connection.Execute("CREATE TABLE \"Something\" (\"Id\" integer)");
+            }
+
+            var reused = new List<string>();
+
+            Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), PgTargets(), _ => { }, reused.Add));
+
+            reused.Should().BeEmpty();
         }
 
         [Test]

@@ -25,7 +25,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
     {
         // recordCreated is called with each Postgres database name right after it is created and before
         // anything is written to it, so the caller can persist it for cleanup.
-        BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated);
+        //
+        // recordReused is called with each pre-existing empty Postgres database the build accepts, before
+        // anything is written to it, so a failed run can return it to empty instead of leaving it non-empty.
+        BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused = null);
     }
 
     public class V5DatabaseBuilder : IV5DatabaseBuilder
@@ -45,12 +48,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _tableCopier = tableCopier;
         }
 
-        public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated)
+        public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused = null)
         {
             try
             {
                 return install.Database.Type == DatabaseType.PostgreSQL
-                    ? CopyPostgres(install, targets, recordCreated)
+                    ? CopyPostgres(install, targets, recordCreated, recordReused ?? (_ => { }))
                     : CopySqlite(install);
             }
             catch (SetupStepException)
@@ -105,7 +108,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             }
         }
 
-        private BuiltDatabases CopyPostgres(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated)
+        private BuiltDatabases CopyPostgres(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
         {
             var legacyBuilder = new NpgsqlConnectionStringBuilder(install.Database.PostgresConnectionString) { Enlist = false };
             var legacyMain = install.Database.PostgresMainDb ?? legacyBuilder.Database;
@@ -117,8 +120,19 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             using (var admin = OpenAdmin(legacyBuilder))
             {
-                RequireEmptyOrMissing(legacyBuilder, admin, targets.MainDb);
-                RequireEmptyOrMissing(legacyBuilder, admin, targets.LogDb);
+                var reusedMain = RequireEmptyOrMissing(legacyBuilder, admin, targets.MainDb);
+                var reusedLog = RequireEmptyOrMissing(legacyBuilder, admin, targets.LogDb);
+
+                // Both are acceptable, so record them before anything is written to either.
+                if (reusedMain)
+                {
+                    recordReused(targets.MainDb);
+                }
+
+                if (reusedLog)
+                {
+                    recordReused(targets.LogDb);
+                }
 
                 var mainExisted = DatabaseExists(admin, targets.MainDb);
                 streamed = true;
@@ -212,11 +226,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return admin.ExecuteScalar<bool>("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = @name)", new { name });
         }
 
-        private void RequireEmptyOrMissing(NpgsqlConnectionStringBuilder legacyBuilder, NpgsqlConnection admin, string name)
+        // Returns true when the database already exists and is empty.
+        private bool RequireEmptyOrMissing(NpgsqlConnectionStringBuilder legacyBuilder, NpgsqlConnection admin, string name)
         {
             if (!DatabaseExists(admin, name))
             {
-                return;
+                return false;
             }
 
             var builder = new NpgsqlConnectionStringBuilder(ConnectionStringFor(legacyBuilder, name)) { Pooling = false };
@@ -228,6 +243,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 throw new SetupStepException($"The database \"{name}\" already exists and is not empty. Choose a different name or empty it first.");
             }
+
+            return true;
         }
 
         // Returns true when the database was created from the legacy template.

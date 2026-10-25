@@ -129,6 +129,94 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void discard_should_empty_a_reused_target_without_dropping_it()
+        {
+            var host = Environment.GetEnvironmentVariable("Whisparr__Postgres__Host");
+
+            if (string.IsNullOrWhiteSpace(host))
+            {
+                Assert.Ignore("Whisparr__Postgres__Host is not set");
+            }
+
+            var options = new PostgresOptions
+            {
+                Host = host,
+                Port = int.TryParse(Environment.GetEnvironmentVariable("Whisparr__Postgres__Port"), out var port) ? port : 5432,
+                User = Environment.GetEnvironmentVariable("Whisparr__Postgres__User"),
+                Password = Environment.GetEnvironmentVariable("Whisparr__Postgres__Password")
+            };
+
+            var server = new NpgsqlConnectionStringBuilder
+            {
+                Host = options.Host,
+                Port = options.Port,
+                Username = options.User,
+                Password = options.Password,
+                Database = "postgres",
+                Pooling = false
+            };
+
+            var reused = "setup_reused_" + Guid.NewGuid().ToString("N");
+
+            using (var connection = new NpgsqlConnection(server.ConnectionString))
+            {
+                connection.Open();
+                connection.Execute($"CREATE DATABASE \"{reused}\"");
+            }
+
+            try
+            {
+                var state = GivenState(options);
+                state.Begin(false);
+                state.RecordReusedEmptyTarget(reused);
+
+                // What phase 1 wrote before it failed.
+                server.Database = reused;
+
+                using (var connection = new NpgsqlConnection(server.ConnectionString))
+                {
+                    connection.Open();
+                    connection.Execute("CREATE TABLE \"Written\" (\"Id\" SERIAL PRIMARY KEY); CREATE VIEW \"WrittenView\" AS SELECT 1 AS x; INSERT INTO \"Written\" DEFAULT VALUES");
+                }
+
+                GivenState(options).DiscardIfPresent().Should().BeTrue();
+
+                File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+
+                using (var connection = new NpgsqlConnection(server.ConnectionString))
+                {
+                    connection.Open();
+                    connection.ExecuteScalar<int>("SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public'").Should().Be(0);
+
+                    // Usable again, as the builder's own emptiness check and a retry need it to be.
+                    connection.Execute("CREATE TABLE \"Again\" (\"Id\" INT)");
+                }
+            }
+            finally
+            {
+                server.Database = "postgres";
+
+                using var connection = new NpgsqlConnection(server.ConnectionString);
+                connection.Open();
+                connection.Execute($"DROP DATABASE IF EXISTS \"{reused}\" WITH (FORCE)");
+            }
+        }
+
+        [Test]
+        public void discard_should_keep_a_reused_target_recorded_when_it_cannot_be_emptied()
+        {
+            var unreachable = new PostgresOptions { Host = "127.0.0.1", Port = 1, User = "u", Password = "p" };
+
+            var state = GivenState(unreachable);
+            state.Begin(false);
+            state.RecordReusedEmptyTarget("stuck_reused");
+
+            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+
+            File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_reused");
+        }
+
+        [Test]
         public void discard_should_drop_recorded_db_and_leave_others()
         {
             var host = Environment.GetEnvironmentVariable("Whisparr__Postgres__Host");

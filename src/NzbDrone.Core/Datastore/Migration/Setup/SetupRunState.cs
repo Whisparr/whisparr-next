@@ -17,6 +17,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
     {
         void Begin(bool seededConfig5);
         void RecordDatabase(string name);
+
+        // A pre-existing empty Postgres database that phase 1 writes into. Discard empties it again and never drops it.
+        void RecordReusedEmptyTarget(string name);
         void RecordSqlitePartial(string path);
         void Complete();
         bool DiscardIfPresent();
@@ -64,6 +67,19 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             Save(sidecar);
         }
 
+        public void RecordReusedEmptyTarget(string name)
+        {
+            var sidecar = Load() ?? new Sidecar();
+
+            if (sidecar.ReusedEmptyDatabases.Any(d => d.Name == name))
+            {
+                return;
+            }
+
+            sidecar.ReusedEmptyDatabases.Add(new RecordedDatabase { Name = name, Server = ServerConnectionString() });
+            Save(sidecar);
+        }
+
         public void RecordSqlitePartial(string path)
         {
             var sidecar = Load() ?? new Sidecar();
@@ -104,6 +120,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 }
             }
 
+            var failedReused = new List<RecordedDatabase>();
+
+            foreach (var database in sidecar.ReusedEmptyDatabases)
+            {
+                discarded |= EmptyDatabase(database, out var emptyFailed);
+
+                if (emptyFailed)
+                {
+                    failedReused.Add(database);
+                }
+            }
+
             foreach (var path in sidecar.SqlitePartials.Where(File.Exists))
             {
                 File.Delete(path);
@@ -120,11 +148,11 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 discarded = true;
             }
 
-            if (failed.Count > 0)
+            if (failed.Count > 0 || failedReused.Count > 0)
             {
-                // Keep the sidecar, with only the databases still to drop, so the next start tries again
+                // Keep the sidecar, with only the databases still to drop or empty, so the next start tries again
                 // instead of orphaning them. Everything else it recorded is already gone.
-                Save(new Sidecar { Databases = failed });
+                Save(new Sidecar { Databases = failed, ReusedEmptyDatabases = failedReused });
 
                 return true;
             }
@@ -169,6 +197,61 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             catch (Exception ex)
             {
                 _logger.Error(ex, "Could not drop database {0} from an interrupted setup, it stays recorded and is retried on the next start", database.Name);
+                failed = true;
+
+                return false;
+            }
+        }
+
+        // The database existed and was empty before this run, so it goes back to empty, never dropped.
+        private bool EmptyDatabase(RecordedDatabase database, out bool failed)
+        {
+            failed = false;
+
+            try
+            {
+                var target = new NpgsqlConnectionStringBuilder(database.Server)
+                {
+                    Database = database.Name,
+                    Pooling = false,
+                    Enlist = false
+                };
+
+                using var connection = new NpgsqlConnection(target.ConnectionString);
+
+                try
+                {
+                    connection.Open();
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidCatalogName)
+                {
+                    return false;
+                }
+
+                var hadObjects = connection.ExecuteScalar<int>(
+                    "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public'") > 0;
+
+                // The pre-15 default lets everyone create in public, 15 and later only grants usage.
+                var grant = connection.ExecuteScalar<int>("SELECT current_setting('server_version_num')::int") >= 150000
+                    ? "GRANT USAGE ON SCHEMA public TO PUBLIC"
+                    : "GRANT ALL ON SCHEMA public TO PUBLIC";
+
+                using var transaction = connection.BeginTransaction();
+                connection.Execute("DROP SCHEMA public CASCADE", transaction: transaction);
+                connection.Execute("CREATE SCHEMA public", transaction: transaction);
+                connection.Execute(grant, transaction: transaction);
+                transaction.Commit();
+
+                if (hadObjects)
+                {
+                    _logger.Info("Emptied database {0} from an interrupted setup", database.Name);
+                }
+
+                return hadObjects;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Could not empty database {0} from an interrupted setup, it stays recorded and is retried on the next start", database.Name);
                 failed = true;
 
                 return false;
@@ -252,6 +335,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         {
             public bool SeededConfig5 { get; set; }
             public List<RecordedDatabase> Databases { get; set; } = new();
+            public List<RecordedDatabase> ReusedEmptyDatabases { get; set; } = new();
             public List<string> SqlitePartials { get; set; } = new();
         }
 
