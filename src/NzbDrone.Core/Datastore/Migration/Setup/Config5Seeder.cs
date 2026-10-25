@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using Npgsql;
+using NzbDrone.Core.Configuration;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
 {
@@ -15,6 +16,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         // True when an environment variable still names the legacy main or log database, so the user has to
         // change it before v5 can use its own databases.
         public bool EnvironmentStillNamesLegacy { get; set; }
+
+        // The exact environment variables that still name a legacy database. Never null.
+        public List<string> EnvVarsStillNamingLegacy { get; set; } = new();
     }
 
     public interface IConfig5Seeder
@@ -32,6 +36,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private const string LegacyLogDb = "whisparr-log";
         private const string MainDbVariable = "Whisparr__Postgres__MainDb";
         private const string LogDbVariable = "Whisparr__Postgres__LogDb";
+        private const string MainDbConnectionStringVariable = "Whisparr__Postgres__MainDbConnectionString";
+        private const string LogDbConnectionStringVariable = "Whisparr__Postgres__LogDbConnectionString";
 
         // Source: keys read by v2's ConfigFileProvider (~/Git/Whisparrv2) against v5's. The diff found no key
         // that moved to a new name. v2-only: SslKeyPath (v5 has no equivalent, copied unchanged). v5-only:
@@ -54,9 +60,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         {
             XDocument legacy;
 
-            using (var stream = new FileStream(legacyConfigPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            try
             {
+                using var stream = new FileStream(legacyConfigPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 legacy = XDocument.Load(stream);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Xml.XmlException)
+            {
+                throw new InvalidConfigFileException($"{legacyConfigPath} could not be read: {ex.Message}", ex);
             }
 
             var root = new XElement("Config");
@@ -74,11 +85,34 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             var envMain = FromEnvironment(MainDbVariable);
             var envLog = FromEnvironment(LogDbVariable);
 
+            var offenders = new List<string>();
+
+            if (Same(envMain, legacyMain))
+            {
+                offenders.Add(MainDbVariable);
+            }
+
+            if (Same(envLog, legacyLog))
+            {
+                offenders.Add(LogDbVariable);
+            }
+
+            if (Same(DatabaseOf(FromEnvironment(MainDbConnectionStringVariable)), legacyMain))
+            {
+                offenders.Add(MainDbConnectionStringVariable);
+            }
+
+            if (Same(DatabaseOf(FromEnvironment(LogDbConnectionStringVariable)), legacyLog))
+            {
+                offenders.Add(LogDbConnectionStringVariable);
+            }
+
             var targets = new V5DatabaseTargets
             {
                 MainDb = Target(envMain, legacyMain, V5MainDb),
                 LogDb = Target(envLog, legacyLog, V5LogDb),
-                EnvironmentStillNamesLegacy = Same(envMain, legacyMain) || Same(envLog, legacyLog)
+                EnvironmentStillNamesLegacy = offenders.Count > 0,
+                EnvVarsStillNamingLegacy = offenders
             };
 
             Set(root, "PostgresMainDb", targets.MainDb);
@@ -96,6 +130,25 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             var value = _getEnvironmentVariable(name);
 
             return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        private static string DatabaseOf(string connectionString)
+        {
+            if (connectionString == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var database = new NpgsqlConnectionStringBuilder(connectionString).Database;
+
+                return string.IsNullOrWhiteSpace(database) ? null : database;
+            }
+            catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or FormatException)
+            {
+                return null;
+            }
         }
 
         private static bool Same(string a, string b)
@@ -128,7 +181,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                         return database;
                     }
                 }
-                catch (ArgumentException)
+                catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or FormatException)
                 {
                     // Unparseable, fall through to the name keys.
                 }
@@ -166,7 +219,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 element.Value = new NpgsqlConnectionStringBuilder(element.Value) { Database = database }.ConnectionString;
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or FormatException)
             {
                 // Leave an unparseable string alone; the user's value is still what they wrote.
             }

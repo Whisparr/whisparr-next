@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Xml.Linq;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Test.Common;
 
@@ -101,6 +102,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             targets.MainDb.Should().Be("mine-main");
             targets.LogDb.Should().Be("mine-log");
             targets.EnvironmentStillNamesLegacy.Should().BeFalse();
+            targets.EnvVarsStillNamingLegacy.Should().NotBeNull().And.BeEmpty();
             ReadV5()["PostgresMainDb"].Should().Be("mine-main");
         }
 
@@ -114,8 +116,54 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             var targets = Subject.Seed(_legacyPath, _config5Path, Install());
 
             targets.EnvironmentStillNamesLegacy.Should().BeTrue();
+            targets.EnvVarsStillNamingLegacy.Should().Equal(variable);
             targets.MainDb.Should().Be("whisparr5-main");
             targets.LogDb.Should().Be("whisparr5-log");
+        }
+
+        [TestCase("Whisparr__Postgres__MainDbConnectionString", "whisparr-main")]
+        [TestCase("Whisparr__Postgres__LogDbConnectionString", "whisparr-log")]
+        public void should_flag_env_connection_string_still_naming_legacy(string variable, string database)
+        {
+            WriteLegacy("<Port>6969</Port>");
+            _env[variable] = "Host=db;Username=u;Database=" + database;
+
+            var targets = Subject.Seed(_legacyPath, _config5Path, Install());
+
+            targets.EnvironmentStillNamesLegacy.Should().BeTrue();
+            targets.EnvVarsStillNamingLegacy.Should().Equal(variable);
+        }
+
+        [Test]
+        public void should_not_flag_env_connection_string_naming_other_database()
+        {
+            WriteLegacy("<Port>6969</Port>");
+            _env["Whisparr__Postgres__MainDbConnectionString"] = "Host=db;Database=mine";
+            _env["Whisparr__Postgres__LogDbConnectionString"] = "garbage;;=";
+
+            var targets = Subject.Seed(_legacyPath, _config5Path, Install());
+
+            targets.EnvironmentStillNamesLegacy.Should().BeFalse();
+            targets.EnvVarsStillNamingLegacy.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_throw_for_missing_legacy_config()
+        {
+            var action = () => Subject.Seed(_legacyPath, _config5Path, Install());
+
+            action.Should().Throw<InvalidConfigFileException>().WithMessage("*config.xml*could not be read*");
+        }
+
+        [Test]
+        public void should_throw_for_malformed_legacy_config()
+        {
+            File.WriteAllText(_legacyPath, "<Config><Port>");
+
+            var action = () => Subject.Seed(_legacyPath, _config5Path, Install());
+
+            action.Should().Throw<InvalidConfigFileException>().WithMessage("*config.xml*could not be read*");
+            File.Exists(_config5Path).Should().BeFalse();
         }
 
         [Test]
