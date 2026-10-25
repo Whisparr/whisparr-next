@@ -15,7 +15,10 @@
 
 ## Global Constraints
 
-- **Scene-only.** Every behaviour change is gated on `ItemType.Scene`, with two exceptions that apply to all items: the delete-guard fix (Task 1) and the `MissingFromDisk` sidecar fix (Task 2).
+- **Scene-only.** Every behaviour change is gated on `ItemType.Scene`, with three exceptions that apply to all items, because both item types had the bug:
+  - the delete-guard fix (Task 1);
+  - the `MissingFromDisk` sidecar fix (Task 2);
+  - the extras move on rename (Task 8, plus the live-check fix that links same-scan sidecars to their video's current file).
 - **No Whisparr operation deletes, recycles, moves or claims a file the acting scene doesn't own.** This includes sidecars and the studio folder.
 - **No DB migration moves files.** New migrations are v5-only; the next free number is **304**.
 - **Never overwrite on a file-name collision.** Skip and log a warning.

@@ -202,7 +202,10 @@ G owns the final table. Example port: v2 `SeriesFolderFormat = "{Site Title}"` â
 
 ## Constraints
 
-- Scene-only. Every behaviour change is gated on `ItemType.Scene`, except the delete-guard fix and the `MissingFromDisk` sidecar fix, which are safety fixes for all items.
+- Scene-only. Every behaviour change is gated on `ItemType.Scene`, except these fixes, which apply to all items because both item types had the bug:
+  - the delete-guard fix;
+  - the `MissingFromDisk` sidecar fix;
+  - the extras move on rename (finding 4), which includes linking sidecars found in the same scan to their video's current file.
 - No migration may move files. Any DB migration (for example the lost-file table) is v5-only, numbered from the v5 range (â‰¥ 300).
 - Forward only: no backports to Eros.
 - Tests:
