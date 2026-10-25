@@ -225,6 +225,21 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void plan_targets_should_name_env_targets_without_writing_config5()
+        {
+            WriteLegacy("<Port>6969</Port>");
+            _env["Whisparr__Postgres__MainDb"] = "whisparr-main";
+
+            var targets = Subject.PlanTargets(_legacyPath, Install());
+
+            targets.EnvVarsStillNamingLegacy.Should().Equal("Whisparr__Postgres__MainDb");
+            targets.EnvTargets.Should().ContainSingle();
+            targets.EnvTargets[0].Name.Should().Be("Whisparr__Postgres__MainDb");
+            targets.EnvTargets[0].Value.Should().Be(Config5Seeder.V5MainDb);
+            File.Exists(_config5Path).Should().BeFalse();
+        }
+
+        [Test]
         public void should_work_with_default_environment_access()
         {
             WriteLegacy("<Port>6969</Port>");

@@ -19,11 +19,17 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         // The exact environment variables that still name a legacy database. Never null.
         public List<string> EnvVarsStillNamingLegacy { get; set; } = new();
+
+        // The value each variable in EnvVarsStillNamingLegacy needs.
+        public List<EnvTarget> EnvTargets { get; set; } = new();
     }
 
     public interface IConfig5Seeder
     {
         V5DatabaseTargets Seed(string legacyConfigPath, string config5Path, LegacyInstall install);
+
+        // The targets Seed would pick, without writing anything. Reads the legacy config.xml only.
+        V5DatabaseTargets PlanTargets(string legacyConfigPath, LegacyInstall install);
     }
 
     // Builds config5.xml from a legacy config.xml. It is built by hand in Bootstrap, before the container exists.
@@ -86,7 +92,29 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _getEnvironmentVariable = getEnvironmentVariable;
         }
 
+        public V5DatabaseTargets PlanTargets(string legacyConfigPath, LegacyInstall install)
+        {
+            var root = BuildRoot(legacyConfigPath);
+
+            return Plan(root, install);
+        }
+
         public V5DatabaseTargets Seed(string legacyConfigPath, string config5Path, LegacyInstall install)
+        {
+            var root = BuildRoot(legacyConfigPath);
+            var targets = Plan(root, install);
+
+            Set(root, "PostgresMainDb", targets.MainDb);
+            Set(root, "PostgresLogDb", targets.LogDb);
+            RewriteConnectionString(root, "PostgresMainDbConnectionString", targets.MainDb);
+            RewriteConnectionString(root, "PostgresLogDbConnectionString", targets.LogDb);
+
+            Write(new XDocument(new XDeclaration("1.0", "utf-8", null), root), config5Path);
+
+            return targets;
+        }
+
+        private static XElement BuildRoot(string legacyConfigPath)
         {
             XDocument legacy;
 
@@ -109,6 +137,11 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 root.Add(new XElement(name, element.Value));
             }
 
+            return root;
+        }
+
+        private V5DatabaseTargets Plan(XElement root, LegacyInstall install)
+        {
             string FromRoot(string key) => root.Element(key)?.Value;
 
             var legacyMain = LegacyMainName(FromRoot, install?.Database?.PostgresMainDb);
@@ -117,30 +150,28 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             var envMain = FromEnvironment(MainDbVariable);
             var envLog = FromEnvironment(LogDbVariable);
 
+            var envMainConnectionString = FromEnvironment(MainDbConnectionStringVariable);
+            var envLogConnectionString = FromEnvironment(LogDbConnectionStringVariable);
+
             var offenders = EnvVarsNamingLegacy(
                 legacyMain,
                 legacyLog,
                 envMain,
                 envLog,
-                FromEnvironment(MainDbConnectionStringVariable),
-                FromEnvironment(LogDbConnectionStringVariable));
+                envMainConnectionString,
+                envLogConnectionString);
 
-            var targets = new V5DatabaseTargets
+            var mainDb = Target(envMain, legacyMain, V5MainDb);
+            var logDb = Target(envLog, legacyLog, V5LogDb);
+
+            return new V5DatabaseTargets
             {
-                MainDb = Target(envMain, legacyMain, V5MainDb),
-                LogDb = Target(envLog, legacyLog, V5LogDb),
+                MainDb = mainDb,
+                LogDb = logDb,
                 EnvironmentStillNamesLegacy = offenders.Count > 0,
-                EnvVarsStillNamingLegacy = offenders
+                EnvVarsStillNamingLegacy = offenders,
+                EnvTargets = EnvTargetsFor(offenders, mainDb, logDb, envMainConnectionString, envLogConnectionString)
             };
-
-            Set(root, "PostgresMainDb", targets.MainDb);
-            Set(root, "PostgresLogDb", targets.LogDb);
-            RewriteConnectionString(root, "PostgresMainDbConnectionString", targets.MainDb);
-            RewriteConnectionString(root, "PostgresLogDbConnectionString", targets.LogDb);
-
-            Write(new XDocument(new XDeclaration("1.0", "utf-8", null), root), config5Path);
-
-            return targets;
         }
 
         private string FromEnvironment(string name)
