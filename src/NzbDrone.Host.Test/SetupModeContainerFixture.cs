@@ -83,6 +83,19 @@ namespace NzbDrone.App.Test
         }
 
         [Test]
+        public void should_not_use_the_log_database_in_setup_mode()
+        {
+            Bootstrap.UseLogDatabase(true, _state).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_use_the_log_database_outside_setup_mode_only_when_enabled()
+        {
+            Bootstrap.UseLogDatabase(true, SetupModeState.Inactive).Should().BeTrue();
+            Bootstrap.UseLogDatabase(false, SetupModeState.Inactive).Should().BeFalse();
+        }
+
+        [Test]
         public void should_resolve_the_registered_setup_state()
         {
             _services.GetRequiredService<ISetupModeState>().Should().BeSameAs(_state);

@@ -182,7 +182,7 @@ namespace NzbDrone.Host
                     c.Register<NzbDrone.Core.Update.GithubUpdatePackageProvider>(Reuse.Singleton);
                     c.Register<NzbDrone.Core.Update.IUpdatePackageProvider, NzbDrone.Core.Update.GithubUpdatePackageProvider>(Reuse.Singleton, ifAlreadyRegistered: IfAlreadyRegistered.Replace);
 
-                    if (logDbEnabled)
+                    if (UseLogDatabase(logDbEnabled, setupModeState))
                     {
                         c.AddLogDatabase();
                     }
@@ -221,6 +221,13 @@ namespace NzbDrone.Host
                     });
                     builder.UseStartup<Startup>();
                 });
+        }
+
+        // Setup mode runs before the wizard has created the v5 databases, and on PostgreSQL the log database
+        // can't be migrated until it exists, so setup mode logs to the console and files only.
+        public static bool UseLogDatabase(bool logDbEnabled, ISetupModeState setupModeState)
+        {
+            return logDbEnabled && !setupModeState.IsActive;
         }
 
         // Looks for a Whisparr v2 or Eros install that v5 would otherwise ignore. If there is one, config5.xml is

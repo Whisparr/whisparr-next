@@ -285,7 +285,7 @@ namespace NzbDrone.Host
                 _ = mainDatabaseFactory.Value;
             }
 
-            if (configFileProvider.LogDbEnabled)
+            if (Bootstrap.UseLogDatabase(configFileProvider.LogDbEnabled, setupModeState))
             {
                 _ = logDatabaseFactory.Value;
                 dbTarget.Register();
