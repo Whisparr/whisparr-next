@@ -39,10 +39,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private MixedMovieResult _mixed;
         private PostgresOptions _options;
         private LegacyMigrationState _finishedState;
+        private bool _seededConfig5;
 
         [SetUp]
         public void Setup()
         {
+            _seededConfig5 = true;
             _appData = Path.Combine(TempFolder, "appdata");
             Directory.CreateDirectory(_appData);
             _calls = new List<string>();
@@ -121,7 +123,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             folders.SetupGet(f => f.AppDataFolder).Returns(_appData);
 
             return new SetupWizardService(
-                new SetupModeState(_detection, true),
+                new SetupModeState(_detection, _seededConfig5),
                 _backup.Object,
                 _seeder.Object,
                 _runState.Object,
@@ -492,6 +494,94 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.Status.Should().Be(SetupStatus.Succeeded);
             progress.EnvVarsToChange.Should().Equal("Whisparr__Postgres__MainDb");
             progress.EnvTargets.Should().ContainSingle().Which.Value.Should().Be("whisparr5-main");
+        }
+
+        [Test]
+        public void should_keep_a_copy_of_a_config5_the_wizard_did_not_create()
+        {
+            _seededConfig5 = false;
+            File.WriteAllText(Path.Combine(_appData, "config5.xml"), "<Config>users</Config>");
+
+            var copyPath = Path.Combine(_appData, "config5.xml.pre-v5-setup");
+            string copiedContent = null;
+
+            // The copy has to exist by the time the seeder overwrites the file.
+            _seeder.Setup(s => s.Seed(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LegacyInstall>()))
+                .Callback(() => copiedContent = File.Exists(copyPath) ? File.ReadAllText(copyPath) : null)
+                .Returns(() => _targets);
+
+            Run();
+
+            copiedContent.Should().Be("<Config>users</Config>");
+            _runState.Verify(r => r.RecordConfig5Backup(copyPath), Times.Once);
+        }
+
+        [Test]
+        public void should_not_copy_a_config5_the_wizard_created()
+        {
+            File.WriteAllText(Path.Combine(_appData, "config5.xml"), "<Config>seeded</Config>");
+
+            Run();
+
+            _runState.Verify(r => r.RecordConfig5Backup(It.IsAny<string>()), Times.Never);
+            File.Exists(Path.Combine(_appData, "config5.xml.pre-v5-setup")).Should().BeFalse();
+        }
+
+        [Test]
+        public void failure_after_the_database_is_in_place_should_end_in_a_terminal_status_without_discarding()
+        {
+            _runState.Setup(r => r.Complete()).Throws(new IOException("sidecar is locked"));
+
+            var progress = Run();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.ErrorKey.Should().Be("Unexpected");
+            progress.CanRetry.Should().BeFalse();
+            progress.ErrorMessage.Should().Contain("v5 database was built").And.Contain("Restart Whisparr");
+            _runState.Verify(r => r.DiscardIfPresent(), Times.Never);
+            _lifecycle.Verify(l => l.Restart(), Times.Never);
+            File.Exists(Path.Combine(_appData, "whisparr5.db")).Should().BeTrue();
+        }
+
+        [Test]
+        public void failure_while_locking_sources_should_mark_the_running_steps_failed()
+        {
+            _finisher.Setup(f => f.Finish(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<SceneMetadataType>(), It.IsAny<MovieMetadataType>(), It.IsAny<LegacyMigrationState>()))
+                .Throws(new InvalidOperationException("locked"));
+
+            var progress = Run();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.Steps.Single(s => s.Step == SetupStep.LockSources).State.Should().Be("failed");
+            progress.Steps.Single(s => s.Step == SetupStep.Finish).State.Should().Be("failed");
+            progress.Steps.Should().NotContain(s => s.State == "running");
+        }
+
+        [Test]
+        public void start_should_be_ignored_once_succeeded_or_restarting()
+        {
+            var service = Service();
+
+            Run(service).Status.Should().Be(SetupStatus.Restarting);
+
+            service.Start(Choice());
+
+            service.Progress.Status.Should().Be(SetupStatus.Restarting);
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Once);
+        }
+
+        [Test]
+        public void start_should_be_ignored_for_a_pending_env_switch()
+        {
+            _detection.PendingEnvSwitch = true;
+            _detection.EnvTargets.Add(new EnvTarget { Name = "Whisparr__Postgres__MainDb", Value = "whisparr5-main" });
+
+            var service = Service();
+
+            service.Start(Choice());
+
+            service.Progress.Status.Should().Be(SetupStatus.Succeeded);
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
         }
 
         [Test]

@@ -28,7 +28,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         //
         // recordReused is called with each pre-existing empty Postgres database the build accepts, before
         // anything is written to it, so a failed run can return it to empty instead of leaving it non-empty.
-        BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused = null);
+        BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused);
     }
 
     public class V5DatabaseBuilder : IV5DatabaseBuilder
@@ -48,12 +48,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _tableCopier = tableCopier;
         }
 
-        public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused = null)
+        public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
         {
             try
             {
                 return install.Database.Type == DatabaseType.PostgreSQL
-                    ? CopyPostgres(install, targets, recordCreated, recordReused ?? (_ => { }))
+                    ? CopyPostgres(install, targets, recordCreated, recordReused)
                     : CopySqlite(install);
             }
             catch (SetupStepException)

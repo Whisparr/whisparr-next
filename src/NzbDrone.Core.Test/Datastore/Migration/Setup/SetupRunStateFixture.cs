@@ -1,4 +1,5 @@
 using System;
+using System.Data.SQLite;
 using System.IO;
 using Dapper;
 using FluentAssertions;
@@ -199,6 +200,183 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 using var connection = new NpgsqlConnection(server.ConnectionString);
                 connection.Open();
                 connection.Execute($"DROP DATABASE IF EXISTS \"{reused}\" WITH (FORCE)");
+            }
+        }
+
+        [Test]
+        public void discard_should_restore_the_users_config5_byte_for_byte()
+        {
+            var original = new byte[] { 0xEF, 0xBB, 0xBF, 0x3C, 0x43, 0x6F, 0x6E, 0x66, 0x69, 0x67, 0x2F, 0x3E, 0x0D, 0x0A, 0x00, 0xFF };
+            var config5 = Path5("config5.xml");
+            var copy = config5 + ".pre-v5-setup";
+
+            File.WriteAllBytes(config5, original);
+            File.Copy(config5, copy);
+
+            var state = GivenState();
+            state.Begin(false);
+            state.RecordConfig5Backup(copy);
+
+            // What the seeder wrote over it.
+            File.WriteAllText(config5, "<Config><PostgresMainDb>whisparr5-main</PostgresMainDb></Config>");
+
+            GivenState().DiscardIfPresent().Should().BeTrue();
+
+            File.ReadAllBytes(config5).Should().Equal(original);
+            File.Exists(copy).Should().BeFalse();
+            File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+        }
+
+        [Test]
+        public void complete_should_remove_the_config5_copy()
+        {
+            var config5 = Path5("config5.xml");
+            var copy = config5 + ".pre-v5-setup";
+
+            File.WriteAllText(config5, "<Config>seeded</Config>");
+            File.WriteAllText(copy, "<Config>users</Config>");
+
+            var state = GivenState();
+            state.Begin(false);
+            state.RecordConfig5Backup(copy);
+
+            state.Complete();
+
+            File.Exists(copy).Should().BeFalse();
+            File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+            File.ReadAllText(config5).Should().Be("<Config>seeded</Config>");
+        }
+
+        private string GivenSqliteV5(bool withStateRow)
+        {
+            var path = Path5("whisparr5.db");
+
+            using var connection = new SQLiteConnection(new SQLiteConnectionStringBuilder { DataSource = path, Pooling = false }.ConnectionString);
+            connection.Open();
+            connection.Execute("CREATE TABLE \"LegacyMigrationState\" (\"Id\" INTEGER PRIMARY KEY, \"Phase\" TEXT)");
+
+            if (withStateRow)
+            {
+                connection.Execute("INSERT INTO \"LegacyMigrationState\" (\"Phase\") VALUES ('Done')");
+            }
+
+            return path;
+        }
+
+        [Test]
+        public void discard_should_keep_a_finished_sqlite_database_when_the_sidecar_was_left_behind()
+        {
+            var v5 = GivenSqliteV5(true);
+            var copy = Path5("config5.xml.pre-v5-setup");
+
+            File.WriteAllText(Path5("config5.xml"), "<Config>seeded</Config>");
+            File.WriteAllText(copy, "<Config>users</Config>");
+
+            var state = GivenState();
+            state.Begin(true);
+            state.RecordSqlitePartial(Path5("whisparr5.db.partial"));
+            state.RecordConfig5Backup(copy);
+
+            GivenState().DiscardIfPresent().Should().BeFalse();
+
+            File.Exists(v5).Should().BeTrue();
+            File.ReadAllText(Path5("config5.xml")).Should().Be("<Config>seeded</Config>");
+            File.Exists(copy).Should().BeFalse();
+            File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+        }
+
+        [Test]
+        public void discard_should_still_undo_a_sqlite_database_without_a_state_row()
+        {
+            var v5 = GivenSqliteV5(false);
+            var partial = Path5("whisparr5.db.partial");
+
+            File.WriteAllText(partial, "x");
+            File.WriteAllText(Path5("config5.xml"), "<Config />");
+
+            var state = GivenState();
+            state.Begin(true);
+            state.RecordSqlitePartial(partial);
+
+            GivenState().DiscardIfPresent().Should().BeTrue();
+
+            File.Exists(partial).Should().BeFalse();
+            File.Exists(Path5("config5.xml")).Should().BeFalse();
+
+            // Not recorded as built by this run, so it is not touched.
+            File.Exists(v5).Should().BeTrue();
+        }
+
+        [Test]
+        public void discard_should_keep_a_finished_postgres_database_when_the_sidecar_was_left_behind()
+        {
+            var host = Environment.GetEnvironmentVariable("Whisparr__Postgres__Host");
+
+            if (string.IsNullOrWhiteSpace(host))
+            {
+                Assert.Ignore("Whisparr__Postgres__Host is not set");
+            }
+
+            var options = new PostgresOptions
+            {
+                Host = host,
+                Port = int.TryParse(Environment.GetEnvironmentVariable("Whisparr__Postgres__Port"), out var port) ? port : 5432,
+                User = Environment.GetEnvironmentVariable("Whisparr__Postgres__User"),
+                Password = Environment.GetEnvironmentVariable("Whisparr__Postgres__Password")
+            };
+
+            var server = new NpgsqlConnectionStringBuilder
+            {
+                Host = options.Host,
+                Port = options.Port,
+                Username = options.User,
+                Password = options.Password,
+                Database = "postgres",
+                Pooling = false
+            };
+
+            var finished = "setup_finished_" + Guid.NewGuid().ToString("N");
+
+            using (var connection = new NpgsqlConnection(server.ConnectionString))
+            {
+                connection.Open();
+                connection.Execute($"CREATE DATABASE \"{finished}\"");
+            }
+
+            try
+            {
+                server.Database = finished;
+
+                using (var connection = new NpgsqlConnection(server.ConnectionString))
+                {
+                    connection.Open();
+                    connection.Execute("CREATE TABLE \"LegacyMigrationState\" (\"Id\" SERIAL PRIMARY KEY, \"Phase\" TEXT); INSERT INTO \"LegacyMigrationState\" (\"Phase\") VALUES ('Done')");
+                }
+
+                File.WriteAllText(Path5("config5.xml"), "<Config>seeded</Config>");
+
+                var state = GivenState(options);
+                state.Begin(true);
+                state.RecordDatabase(finished);
+
+                GivenState(options).DiscardIfPresent().Should().BeFalse();
+
+                File.Exists(Path5("config5.xml")).Should().BeTrue();
+                File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+
+                server.Database = "postgres";
+
+                using var check = new NpgsqlConnection(server.ConnectionString);
+                check.Open();
+                check.ExecuteScalar<int>("SELECT COUNT(*) FROM pg_database WHERE datname = @finished", new { finished }).Should().Be(1);
+            }
+            finally
+            {
+                server.Database = "postgres";
+
+                using var connection = new NpgsqlConnection(server.ConnectionString);
+                connection.Open();
+                connection.Execute($"DROP DATABASE IF EXISTS \"{finished}\" WITH (FORCE)");
             }
         }
 

@@ -109,7 +109,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             lock (_sync)
             {
-                if (_progress.Status == SetupStatus.Running)
+                // Succeeded and Restarting are final, and a pending env switch starts out as Succeeded.
+                if (_progress.Status is not (SetupStatus.Idle or SetupStatus.Failed))
                 {
                     return;
                 }
@@ -213,7 +214,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 current = SetupStep.SeedConfig;
                 SetStep(current, SetupStepState.Running);
 
-                var targets = _config5Seeder.Seed(_setupModeState.Detection.LegacyConfigPath, _appFolderInfo.GetConfigPath(), install);
+                var config5Path = _appFolderInfo.GetConfigPath();
+
+                if (!_setupModeState.SeededConfig5 && File.Exists(config5Path))
+                {
+                    // The user's own file is about to be overwritten, so keep it until the run is complete.
+                    var copy = config5Path + ".pre-v5-setup";
+
+                    File.Copy(config5Path, copy, true);
+                    _runState.RecordConfig5Backup(copy);
+                }
+
+                var targets = _config5Seeder.Seed(_setupModeState.Detection.LegacyConfigPath, config5Path, install);
 
                 SetStep(current, SetupStepState.Done);
 
@@ -276,8 +288,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             }
             catch (Exception ex)
             {
-                // The v5 database is in place, so nothing is undone. Whatever is left to do is logged.
+                // The v5 database is in place, so nothing is undone, but the page must not keep spinning.
                 _logger.Error(ex, "Setup finished the migration but could not complete its last steps");
+
+                lock (_sync)
+                {
+                    _progress.Status = SetupStatus.Failed;
+                    _progress.ErrorKey = SetupErrorKey.Unexpected;
+                    _progress.CanRetry = false;
+                    _progress.ErrorMessage = "The v5 database was built, but setup could not finish its last steps. Restart Whisparr to continue. " + ex.Message;
+                }
             }
         }
 
@@ -407,11 +427,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             lock (_sync)
             {
-                var failedStep = _progress.Steps.FindIndex(s => s.Step == step);
-
-                if (failedStep >= 0)
+                // The current step, and any other step still running (LockSources and Finish run together).
+                for (var i = 0; i < _progress.Steps.Count; i++)
                 {
-                    _progress.Steps[failedStep] = (step, SetupStepState.Failed);
+                    var (s, state) = _progress.Steps[i];
+
+                    if (state == SetupStepState.Running || (s == step && state != SetupStepState.Done))
+                    {
+                        _progress.Steps[i] = (s, SetupStepState.Failed);
+                    }
                 }
 
                 _progress.Status = SetupStatus.Failed;

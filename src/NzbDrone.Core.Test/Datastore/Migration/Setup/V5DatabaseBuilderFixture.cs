@@ -111,7 +111,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         {
             var db = LegacyEros();
 
-            var built = Builder().CopyEros(SqliteInstall(db), Targets(), _ => { });
+            var built = Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }, _ => { });
 
             built.Type.Should().Be(DatabaseType.SQLite);
             built.SqlitePartialPath.Should().Be(Path.Combine(_dir, "whisparr5.db.partial"));
@@ -145,7 +145,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             var db = LegacyEros();
             var before = Hash(db);
 
-            Builder().CopyEros(SqliteInstall(db), Targets(), _ => { });
+            Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }, _ => { });
 
             Hash(db).Should().Be(before);
             File.Exists(db + "-wal").Should().BeFalse();
@@ -157,7 +157,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         {
             var db = LegacyEros();
 
-            var built = Builder().CopyEros(SqliteInstall(db), Targets(), _ => { });
+            var built = Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }, _ => { });
 
             using var connection = new SQLiteConnection(built.MainConnectionString);
             connection.Open();
@@ -193,7 +193,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var hashes = new[] { crashed, crashed + "-wal", crashed + "-shm" }.Where(File.Exists).ToDictionary(p => p, Hash);
 
-            var built = Builder().CopyEros(SqliteInstall(crashed), Targets(), _ => { });
+            var built = Builder().CopyEros(SqliteInstall(crashed), Targets(), _ => { }, _ => { });
 
             using (var connection = new SQLiteConnection(built.MainConnectionString))
             {
@@ -216,14 +216,14 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             File.WriteAllText(partial, "stale");
             File.WriteAllText(partial + "-wal", "stale");
 
-            Builder().CopyEros(SqliteInstall(db), Targets(), _ => { });
+            Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }, _ => { });
 
             File.Exists(partial + "-wal").Should().BeFalse();
 
             File.Delete(db);
             File.WriteAllText(db, "not a database");
 
-            Assert.Throws<SetupStepException>(() => Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }));
+            Assert.Throws<SetupStepException>(() => Builder().CopyEros(SqliteInstall(db), Targets(), _ => { }, _ => { }));
 
             File.Exists(partial).Should().BeFalse();
         }
@@ -376,7 +376,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var created = new List<string>();
 
-            var built = Builder().CopyEros(PgInstall(), PgTargets(), created.Add);
+            var built = Builder().CopyEros(PgInstall(), PgTargets(), created.Add, _ => { });
 
             built.Type.Should().Be(DatabaseType.PostgreSQL);
             built.SqlitePartialPath.Should().BeNull();
@@ -395,7 +395,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             using var blocker = new NpgsqlConnection(PgConnectionString(_legacyDb));
             blocker.Open();
 
-            var built = Builder().CopyEros(PgInstall(), PgTargets(), _ => { });
+            var built = Builder().CopyEros(PgInstall(), PgTargets(), _ => { }, _ => { });
 
             built.CreatedPostgresDatabases.Should().Equal(_targetMain, _targetLog);
 
@@ -409,14 +409,14 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var targets = new V5DatabaseTargets { MainDb = _legacyDb, LogDb = _targetLog };
 
-            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), targets, _ => { }));
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), targets, _ => { }, _ => { }));
 
             ex.UserMessage.Should().Contain(_legacyDb);
             Exists(_targetLog).Should().BeFalse();
 
             targets = new V5DatabaseTargets { MainDb = _targetMain, LogDb = Config5Seeder.LegacyLogDb };
 
-            Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), targets, _ => { }));
+            Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), targets, _ => { }, _ => { }));
             Exists(_targetMain).Should().BeFalse();
         }
 
@@ -436,7 +436,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 connection.Execute("CREATE TABLE \"Something\" (\"Id\" integer)");
             }
 
-            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), PgTargets(), _ => { }));
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), PgTargets(), _ => { }, _ => { }));
 
             ex.UserMessage.Should().Contain(_targetMain);
             Exists(_targetLog).Should().BeFalse();
@@ -502,7 +502,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var created = new List<string>();
 
-            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(role, "pw"), PgTargets(), created.Add));
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(role, "pw"), PgTargets(), created.Add, _ => { }));
 
             created.Should().BeEmpty();
             ex.UserMessage.Should().Contain($"CREATE DATABASE \"{_targetMain}\"");
