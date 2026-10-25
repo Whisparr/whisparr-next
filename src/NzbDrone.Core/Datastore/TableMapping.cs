@@ -25,6 +25,7 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Instrumentation;
 using NzbDrone.Core.Jobs;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.LostFiles;
@@ -199,6 +200,10 @@ namespace NzbDrone.Core.Datastore
                   .Ignore(e => e.ForeignId);
 
             Mapper.Entity<LostMovieFile>("LostMovieFiles").RegisterModel();
+
+            Mapper.Entity<LegacyMigrationState>("LegacyMigrationState").RegisterModel();
+
+            Mapper.Entity<LegacyMovieSeed>("LegacyMovieSeeds").RegisterModel();
         }
 
         private static void RegisterMappers()

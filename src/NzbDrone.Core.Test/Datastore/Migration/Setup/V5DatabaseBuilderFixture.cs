@@ -123,7 +123,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             {
                 connection.Open();
 
-                connection.ExecuteScalar<long>("SELECT MAX(\"Version\") FROM \"VersionInfo\"").Should().Be(304);
+                connection.ExecuteScalar<long>("SELECT MAX(\"Version\") FROM \"VersionInfo\"").Should().Be(305);
                 connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"VersionInfo\" WHERE \"Version\" = 300").Should().Be(1);
                 LegacyDatabaseGuard.IsLegacy(connection, DatabaseType.SQLite).Should().BeFalse();
             }
