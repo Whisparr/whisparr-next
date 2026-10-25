@@ -61,12 +61,13 @@
 ## Review Focus
 
 1. **A user who runs v5 fresh, then drops an old `whisparr3.db` into AppData.** A marked v5 DB already exists, so v5 boots normally and never enters setup mode. Tests: Task 1.
-2. **A `Whisparr__Postgres__MainDb` env var still names the legacy DB after phase 1.**
-   - The final page names the env vars to change.
-   - Until they're changed, startup stops with the existing guard message.
-   - Phase 1 never writes to that DB.
+2. **A Postgres env var (`Whisparr__Postgres__MainDb`, `LogDb` or a connection string) still names the legacy DB after phase 1** (plz12345, 2026-10-25).
+   - Before migrating, the halt page lists each variable and the value it needs.
+   - After phase 1, the app doesn't restart. The page says the v5 database is ready and to change the listed variables and recreate the container, with a Shut down button.
+   - On every later start where a completed v5 DB exists under the `config5.xml` names but an env var still names the legacy DB, a halt page shows only the env-var instructions. The migration is never offered again, and startup doesn't crash.
+   - Phase 1 never writes to the legacy DB.
 
-   Tests: Task 2 (seeder target names) and Task 8 (the guidance in the final state).
+   Tests: Task 2 (seeder target names), Task 8 (no restart, and detection of the pending switch), Task 9 (status fields).
 3. **The process is killed halfway through phase 1.**
    - The next start discards only what the sidecar lists. The legacy DB is untouched, and a pre-existing DB the wizard didn't create is never dropped.
    - The halt page shows again.
@@ -447,7 +448,10 @@ Postgres-only (`Assert.Ignore` without a host):
   - `src/NzbDrone.Core/Datastore/Migration/Setup/SetupWizardService.cs`
   - `SetupProgress.cs`
   - `SetupChoice.cs`
-- Test: `src/NzbDrone.Core.Test/Datastore/Migration/Setup/SetupWizardServiceFixture.cs`, `ErosSameSourceEndToEndFixture.cs`
+- Modify:
+  - `src/NzbDrone.Core/Datastore/Migration/Setup/LegacyInstallDetector.cs` and `LegacyInstall.cs` (pending env switch, below)
+  - `src/NzbDrone.Host/Bootstrap.cs`, so that a pending env switch also enters setup mode
+- Test: `src/NzbDrone.Core.Test/Datastore/Migration/Setup/SetupWizardServiceFixture.cs`, `ErosSameSourceEndToEndFixture.cs`, plus new cases in `LegacyInstallDetectorFixture.cs`
 
 **Interfaces:**
 - **Consumes:** every earlier task's interfaces, including `ISetupRunState` and `ISetupModeState.SeededConfig5` (Task 3), and `ILifecycleService.Restart()`.
@@ -479,7 +483,23 @@ Postgres-only (`Assert.Ignore` without a host):
   - **Failure handling:**
     - **Any failure after `Begin`:** discard everything the sidecar records, leave the legacy data alone, and set `Failed` with the `SetupStepException.UserMessage`.
     - **`PostgresCreateFailed` and `SkyhookUnavailable`** have `CanRetry = true`. `Retry` reruns from `Backup` with a new zip.
-  - **`EnvVarsToChange`** lists `Whisparr__Postgres__MainDb` and/or `Whisparr__Postgres__LogDb` when `V5DatabaseTargets.EnvironmentStillNamesLegacy` is true. It's shown on the success screen before the restart.
+  - **`EnvVarsToChange`** is `V5DatabaseTargets.EnvVarsStillNamingLegacy`, verbatim. When it's non-empty:
+    - step 9 doesn't restart;
+    - `Status` becomes `Succeeded`;
+    - the progress also carries `EnvTargets`, a list of `{ Name, Value }` pairs giving the value each variable needs: the v5 DB name, or for a connection-string variable, the connection string with `Database=` replaced;
+    - the page shows the instructions and a Shut down button.
+
+    When it's empty, step 9 restarts as before.
+  - **Pending env switch (detection):**
+    - `DetectionResult` gains `bool PendingEnvSwitch` and `List<EnvTarget> EnvTargets`.
+    - When `config5.xml` exists, the detector probes the v5 main DB under the `config5.xml` names, ignoring env vars.
+    - If that DB is marked and holds a `LegacyMigrationState` row while an env var still names the legacy DB:
+      - `PendingEnvSwitch` is true;
+      - `SetupModeRequired` is true;
+      - `EnvTargets` is filled;
+      - `Installs` stays empty, so the migration isn't offered.
+    - Detection stays read-only throughout.
+    - Bootstrap enters setup mode for it like any other setup case.
   - **`ShutDown`** logs `"Whisparr v5 setup declined. To go back, reinstall or switch to your previous Whisparr version; your data was not changed."`, then calls `ILifecycleService.Shutdown()`.
 
 - [ ] **Step 1: Write the failing tests:**
@@ -492,6 +512,7 @@ Postgres-only (`Assert.Ignore` without a host):
     - `should_leave_incomplete_with_detached_movies`;
     - `should_refuse_v2_and_scene_source_change_as_not_available_yet`;
     - `should_list_env_vars_to_change`;
+    - `should_not_restart_when_env_still_names_legacy`, which also checks `EnvTargets` values for a `MainDb` variable and a connection-string variable;
     - `retry_should_rerun_from_backup`.
   - `ErosSameSourceEndToEndFixture` (real services, SQLite, Skyhook and lifecycle mocked):
     - Build an Eros DB with scenes, movies and files.
@@ -506,6 +527,9 @@ Postgres-only (`Assert.Ignore` without a host):
       - the legacy DB and `config.xml` SHA-256 values are unchanged;
       - there's no sidecar;
       - `LegacyInstallDetector.Detect().SetupModeRequired` is false.
+  - `LegacyInstallDetectorFixture`, Postgres-only:
+    - `should_flag_pending_env_switch_when_completed_v5_db_and_env_names_legacy`: no installs, and `EnvTargets` is filled;
+    - `should_not_flag_pending_env_switch_without_migration_state_row`.
 - [ ] **Step 2: Run, expect a build failure.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run, expect pass. Run the Core project in full.**
@@ -525,6 +549,8 @@ Postgres-only (`Assert.Ignore` without a host):
 - **Produces** routes on `[Route("api/setup")]`, an `[ApiController]` outside the versioned API, using the normal fallback auth policy:
   - `GET status` returns `SetupStatusResource`:
     - `installs[]`, each with `kind`, `databaseType`, `refusal`, `studios`, `scenes`, `movies`, `files`, `previousSceneSource`, `previousMovieSource`, `hasMixedMovies` and `namedByEnvironment`;
+    - `errors[]`, from `DetectionResult.Errors`;
+    - `pendingEnvSwitch` and `envTargets[]` (`{ name, value }`), from detection. Before migrating, `envTargets` is also filled when any install has `namedByEnvironment`, using the targets `Config5Seeder` would pick, so the page can show the values up front;
     - `defaults`, with `kind`, `sceneSource` and `movieSource`;
     - `progress`, which is `SetupProgress` in camelCase.
   - `POST migrate` takes `{ kind, sceneSource, movieSource }`. It returns 202, or 409 when it's running or the chosen install has a refusal.
@@ -542,7 +568,9 @@ Postgres-only (`Assert.Ignore` without a host):
   - `status_should_default_to_eros_when_both`;
   - `migrate_should_start_wizard`;
   - `migrate_should_409_for_refused_install`;
-  - `should_404_outside_setup_mode`.
+  - `should_404_outside_setup_mode`;
+  - `status_should_expose_errors_and_env_targets`;
+  - `migrate_should_409_when_pending_env_switch`.
 - [ ] **Step 2: Run, expect a build failure.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the Api project in full, expect pass.**
@@ -583,7 +611,10 @@ Postgres-only (`Assert.Ignore` without a host):
     - TPDB for scenes with TMDB for movies shows "TPDB for movies is strongly recommended with TPDB scenes";
     - the line "This choice can't be changed later without starting over".
   - **Buttons:** "Back up & migrate" and "Shut down".
-  - **While running:** a step list with states, polling `status` every 1 s. On `Failed`, show the message plus Retry when `canRetry`. On `Restarting`, show the env vars to change (if any). Then poll `{urlBase}/initialize.json` every 2 s until `setupMode` is false, and reload.
+  - **Detection errors:** shown in place of the form, with no migrate button.
+  - **Env vars, before migrating:** when `envTargets` is non-empty, a notice lists each variable and its new value. It says that setting them before migrating works too.
+  - **Pending env switch:** the whole page is replaced by "Your v5 database is ready", the variable list, "Change these variables, then recreate or restart the container", and a Shut down button.
+  - **While running:** a step list with states, polling `status` every 1 s. On `Failed`, show the message plus Retry when `canRetry`. On `Succeeded` with env vars to change, show the same "ready, change these variables" screen as a pending env switch. On `Restarting`, poll `{urlBase}/initialize.json` every 2 s until `setupMode` is false, and reload.
 - **Copy:** every string above is an en.json key. Name them `Setup*`.
 
 - [ ] **Step 1: Implement.**
