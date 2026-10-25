@@ -102,6 +102,33 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void discard_should_keep_sidecar_with_the_db_when_a_drop_fails()
+        {
+            // Nothing listens on port 1, so the drop cannot connect.
+            var unreachable = new PostgresOptions { Host = "127.0.0.1", Port = 1, User = "u", Password = "p" };
+            var partial = Path5("whisparr5.db.partial");
+            File.WriteAllText(partial, "x");
+            File.WriteAllText(Path5("config5.xml"), "<Config />");
+
+            var state = GivenState(unreachable);
+            state.Begin(true);
+            state.RecordDatabase("stuck_db");
+            state.RecordSqlitePartial(partial);
+
+            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+
+            // What could be removed is gone, the database that could not be dropped stays recorded.
+            File.Exists(partial).Should().BeFalse();
+            File.Exists(Path5("config5.xml")).Should().BeFalse();
+            File.Exists(Path5("v5-setup.json")).Should().BeTrue();
+            File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_db");
+
+            // The next start retries it, and keeps it while the server stays unreachable.
+            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+            File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_db");
+        }
+
+        [Test]
         public void discard_should_drop_recorded_db_and_leave_others()
         {
             var host = Environment.GetEnvironmentVariable("Whisparr__Postgres__Host");

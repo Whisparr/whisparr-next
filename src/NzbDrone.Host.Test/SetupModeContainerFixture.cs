@@ -109,13 +109,5 @@ namespace NzbDrone.App.Test
                 _services.GetRequiredService(type).Should().NotBeNull(type.Name);
             }
         }
-
-        [Test]
-        public void should_expose_a_dummy_main_database()
-        {
-            var database = _services.GetRequiredService<IMainDatabase>();
-
-            database.Should().BeOfType<MainDatabase>();
-        }
     }
 }

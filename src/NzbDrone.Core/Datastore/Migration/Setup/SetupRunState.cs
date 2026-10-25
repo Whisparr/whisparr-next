@@ -92,9 +92,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             var discarded = false;
 
+            var failed = new List<RecordedDatabase>();
+
             foreach (var database in sidecar.Databases)
             {
-                discarded |= DropDatabase(database);
+                discarded |= DropDatabase(database, out var dropFailed);
+
+                if (dropFailed)
+                {
+                    failed.Add(database);
+                }
             }
 
             foreach (var path in sidecar.SqlitePartials.Where(File.Exists))
@@ -113,13 +120,24 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 discarded = true;
             }
 
+            if (failed.Count > 0)
+            {
+                // Keep the sidecar, with only the databases still to drop, so the next start tries again
+                // instead of orphaning them. Everything else it recorded is already gone.
+                Save(new Sidecar { Databases = failed });
+
+                return true;
+            }
+
             File.Delete(SidecarPath);
 
             return discarded;
         }
 
-        private bool DropDatabase(RecordedDatabase database)
+        private bool DropDatabase(RecordedDatabase database, out bool failed)
         {
+            failed = false;
+
             try
             {
                 var server = new NpgsqlConnectionStringBuilder(database.Server)
@@ -150,7 +168,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             }
             catch (Exception ex)
             {
-                _logger.Warn(ex, "Could not drop database {0} from an interrupted setup", database.Name);
+                _logger.Error(ex, "Could not drop database {0} from an interrupted setup, it stays recorded and is retried on the next start", database.Name);
+                failed = true;
 
                 return false;
             }
