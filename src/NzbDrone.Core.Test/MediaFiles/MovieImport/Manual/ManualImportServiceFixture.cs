@@ -17,6 +17,7 @@ using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
 using NzbDrone.Core.MediaFiles.MovieImport.Manual;
 using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Test.Framework;
@@ -67,12 +68,82 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
             Mocker.GetMock<IDiskScanService>().Verify(v => v.GetVideoFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
         }
 
+        [Test]
+        public void manual_import_for_scene_in_shared_folder_lists_owned_and_identified_files_only()
+        {
+            var studioFolder = @"C:\Test\Scenes\Studio".AsOsAgnostic();
+            var scene = new Movie { Id = 1, Path = studioFolder };
+            var owned = System.IO.Path.Combine(studioFolder, "owned.mp4");
+            var identified = System.IO.Path.Combine(studioFolder, "identified.mp4");
+            var sibling = System.IO.Path.Combine(studioFolder, "sibling.mp4");
+            var unknown = System.IO.Path.Combine(studioFolder, "unknown.mp4");
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(scene.Id)).Returns(scene);
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(scene.Id))
+                  .Returns(new List<MovieFile> { new() { Id = 5, RelativePath = "owned.mp4", Quality = new QualityModel(Quality.Unknown), Languages = new List<Language>() } });
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(studioFolder)).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(scene)).Returns(true);
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.GetVideoFiles(studioFolder, false))
+                  .Returns(new[] { owned, identified, sibling, unknown });
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.FilterPaths(studioFolder, It.IsAny<IEnumerable<string>>(), It.IsAny<bool>()))
+                  .Returns<string, IEnumerable<string>, bool>((_, paths, _) => paths.ToList());
+
+            var siblingScene = new Movie { Id = 2, Path = studioFolder };
+
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(scene, It.Is<List<string>>(l => !l.Contains(owned))))
+                  .Returns(new List<ImportDecision>
+                  {
+                      new(new LocalMovie { Path = identified, Movie = scene, Quality = new QualityModel(Quality.Unknown), Languages = new List<Language>() }),
+                      new(new LocalMovie { Path = sibling, Movie = siblingScene, Quality = new QualityModel(Quality.Unknown), Languages = new List<Language>() })
+                  });
+
+            var items = Subject.GetMediaFiles(scene.Id);
+
+            items.Select(i => i.Path).Should().BeEquivalentTo(new List<string> { owned, identified });
+            items.Should().OnlyContain(i => i.Movie.Id == scene.Id);
+        }
+
+        [Test]
+        public void shared_folder_does_not_resolve_to_a_scene_by_path()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(false);
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(Folder))
+                  .Returns(new List<MoviePathEntry> { new() { Id = 1, Path = Folder }, new() { Id = 2, Path = Folder } });
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByPath(Folder)).Returns(new Movie { Id = 1, Path = Folder });
+
+            var items = Subject.GetMediaFiles(Folder, null, null, true);
+
+            items.Should().ContainSingle().Which.Movie.Should().BeNull();
+            Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void flat_format_does_not_resolve_to_a_scene_by_path()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(true);
+
+            Subject.GetMediaFiles(Folder, null, null, true).Should().ContainSingle().Which.Movie.Should().BeNull();
+            Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(It.IsAny<string>()), Times.Never());
+        }
+
         private static readonly string Folder = @"C:\Test\Unknown".AsOsAgnostic();
 
         private List<string> GivenUnknownFiles(params string[] names)
         {
             var files = names.Select(n => System.IO.Path.Combine(Folder, n)).ToList();
 
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(It.IsAny<string>()))
+                  .Returns(new List<MoviePathEntry>());
             Mocker.GetMock<IConfigService>().SetupGet(s => s.WhisparrFolderLimit).Returns(100);
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(Folder)).Returns(true);
             Mocker.GetMock<IDiskProvider>().Setup(s => s.GetDirectories(Folder)).Returns(Array.Empty<string>());

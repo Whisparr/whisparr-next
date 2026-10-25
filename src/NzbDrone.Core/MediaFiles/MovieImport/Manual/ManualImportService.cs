@@ -20,6 +20,7 @@ using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource.SkyHook.Fingerprints;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Studios;
+using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
@@ -55,6 +56,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
         private readonly IFingerprintLookupClient _fingerprintLookupClient;
         private readonly IFileMatchEvaluator _fileMatchEvaluator;
         private readonly ILocalizationService _localizationService;
+        private readonly ISceneFolderLayout _sceneFolderLayout;
+        private readonly ISharedFolderScanner _sharedFolderScanner;
         private readonly Logger _logger;
 
         public ManualImportService(IDiskProvider diskProvider,
@@ -77,6 +80,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                                    IFingerprintLookupClient fingerprintLookupClient,
                                    IFileMatchEvaluator fileMatchEvaluator,
                                    ILocalizationService localizationService,
+                                   ISceneFolderLayout sceneFolderLayout,
+                                   ISharedFolderScanner sharedFolderScanner,
                                    Logger logger)
         {
             _localizationService = localizationService;
@@ -99,6 +104,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             _eventAggregator = eventAggregator;
             _configService = configService;
             _studioService = studioService;
+            _sceneFolderLayout = sceneFolderLayout;
+            _sharedFolderScanner = sharedFolderScanner;
             _logger = logger;
         }
 
@@ -112,6 +119,19 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
 
             if (!_diskProvider.FolderExists(movie.Path))
             {
+                return items;
+            }
+
+            if (_sceneFolderLayout.IsShared(movie))
+            {
+                // Only this scene's own files: siblings, unknown files and nested folders stay out of the list
+                var folderFiles = _diskScanService.FilterPaths(movie.Path, _diskScanService.GetVideoFiles(movie.Path, false)).ToList();
+                var unowned = MediaFileService.FilterExistingFiles(folderFiles, movieFiles, movie);
+
+                items.AddRange(_sharedFolderScanner.IdentifyOwned(movie, unowned)
+                                                   .Where(d => d.LocalMovie.Movie?.Id == movie.Id)
+                                                   .Select(d => MapItem(d, movie.Path, null, directoryInfo.Name)));
+
                 return items;
             }
 
@@ -450,7 +470,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                     }
                 }
 
-                if (movie == null)
+                // A shared folder belongs to no single scene, so it never resolves one by path
+                if (movie == null && !IsSharedFolder(baseFolder))
                 {
                     movie = _movieService.FindByPath(baseFolder);
                 }
@@ -516,6 +537,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             }
 
             return items;
+        }
+
+        private bool IsSharedFolder(string folder)
+        {
+            return _sceneFolderLayout.IsFlat() || _sceneFolderLayout.GetItemsInFolder(folder).Count > 1;
         }
 
         private bool SceneSource(Movie movie, string folder)
