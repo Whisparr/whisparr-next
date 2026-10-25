@@ -10,7 +10,7 @@ namespace NzbDrone.Core.ProgressMessaging
         void Report(string phase, long done, long total, double percent);
     }
 
-    public class CommandProgressReporter : IReportCommandProgress
+    public class CommandProgressReporter : IReportCommandProgress, IHandle<CommandExecutedEvent>
     {
         private static readonly TimeSpan MinPublishInterval = TimeSpan.FromSeconds(1);
 
@@ -48,17 +48,12 @@ namespace NzbDrone.Core.ProgressMessaging
             command.Progress = progress;
 
             var now = UtcNow();
-            var finished = done == total;
-            var publish = false;
+            var finished = total > 0 && done >= total;
 
-            if (!_lastPublished.TryGetValue(command.Id, out var last))
-            {
-                publish = true;
-            }
-            else if (finished || previousPhase != phase || now - last >= MinPublishInterval)
-            {
-                publish = true;
-            }
+            var publish = !_lastPublished.TryGetValue(command.Id, out var last) ||
+                          finished ||
+                          previousPhase != phase ||
+                          now - last >= MinPublishInterval;
 
             if (finished)
             {
@@ -73,6 +68,12 @@ namespace NzbDrone.Core.ProgressMessaging
             {
                 _eventAggregator.PublishEvent(new CommandUpdatedEvent(command));
             }
+        }
+
+        // Failed or cancelled commands never report done == total, so drop their throttle entry here
+        public void Handle(CommandExecutedEvent message)
+        {
+            _lastPublished.TryRemove(message.Command.Id, out _);
         }
     }
 }

@@ -11,7 +11,7 @@ namespace NzbDrone.Core.Test.Datastore
     public class CommandProgressMappingFixture : DbTest<CommandRepository, CommandModel>
     {
         [Test]
-        public void should_save_and_load_command_without_progress_column()
+        public void should_not_persist_progress()
         {
             var command = new CommandModel
             {

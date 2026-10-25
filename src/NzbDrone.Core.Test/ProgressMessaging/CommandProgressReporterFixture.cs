@@ -135,6 +135,27 @@ namespace NzbDrone.Core.Test.ProgressMessaging
         }
 
         [Test]
+        public void should_throttle_reports_with_zero_total()
+        {
+            for (var i = 0; i < 50; i++)
+            {
+                Subject.Report("Scanning", 0, 0, 0);
+            }
+
+            VerifyPublished(Times.Once());
+        }
+
+        [Test]
+        public void should_drop_throttle_entry_when_command_executed()
+        {
+            Subject.Report("Linking files", 1, 10, 10);
+            Subject.Handle(new CommandExecutedEvent(_command));
+            Subject.Report("Linking files", 2, 10, 20);
+
+            VerifyPublished(Times.Exactly(2));
+        }
+
+        [Test]
         public void should_accept_zero_total()
         {
             Action action = () => Subject.Report("Linking files", 0, 0, 0);
