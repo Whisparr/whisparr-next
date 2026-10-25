@@ -5,6 +5,7 @@ using NzbDrone.Common;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Analytics;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore.Migration.Setup;
 
 namespace Whisparr.Http.Frontend
 {
@@ -15,16 +16,19 @@ namespace Whisparr.Http.Frontend
     {
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IAnalyticsService _analyticsService;
+        private readonly ISetupModeState _setupModeState;
 
         private static string _apiKey;
         private static string _urlBase;
         private string _generatedContent;
 
         public InitializeJsonController(IConfigFileProvider configFileProvider,
-                                      IAnalyticsService analyticsService)
+                                      IAnalyticsService analyticsService,
+                                      ISetupModeState setupModeState)
         {
             _configFileProvider = configFileProvider;
             _analyticsService = analyticsService;
+            _setupModeState = setupModeState;
 
             _apiKey = configFileProvider.ApiKey;
             _urlBase = configFileProvider.UrlBase;
@@ -55,6 +59,7 @@ namespace Whisparr.Http.Frontend
             builder.AppendLine($"  \"analytics\": {_analyticsService.IsEnabled.ToString().ToLowerInvariant()},");
             builder.AppendLine($"  \"userHash\": \"{HashUtil.AnonymousToken()}\",");
             builder.AppendLine($"  \"urlBase\": \"{_urlBase}\",");
+            builder.AppendLine($"  \"setupMode\": {_setupModeState.IsActive.ToString().ToLowerInvariant()},");
             builder.AppendLine($"  \"isProduction\": {RuntimeInfo.IsProduction.ToString().ToLowerInvariant()}");
             builder.AppendLine("}");
 

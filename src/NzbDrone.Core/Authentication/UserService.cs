@@ -1,7 +1,4 @@
 using System;
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using NzbDrone.Common.Extensions;
 
 namespace NzbDrone.Core.Authentication
@@ -18,10 +15,6 @@ namespace NzbDrone.Core.Authentication
 
     public class UserService : IUserService
     {
-        private const int ITERATIONS = 220000;
-        private const int SALT_SIZE = 128 / 8;
-        private const int NUMBER_OF_BYTES = 256 / 8;
-
         private readonly IUserRepository _repo;
 
         public UserService(IUserRepository repo)
@@ -90,30 +83,18 @@ namespace NzbDrone.Core.Authentication
                 return null;
             }
 
-            if (user.Salt.IsNullOrWhiteSpace())
+            if (!PasswordHasher.Verify(user, password))
             {
-                // If password matches stored SHA256 hash, update to salted hash and verify.
-                if (IsMatchingHash(user.Password, password.SHA256Hash()))
-                {
-                    SetUserHashedPassword(user, password);
-
-                    return Update(user);
-                }
-
                 return null;
             }
 
-            if (VerifyHashedPassword(user, password))
+            // Upgrade an unsalted SHA-256 hash, or a salted one with fewer iterations than we use now.
+            if (user.Salt.IsNullOrWhiteSpace() || user.Iterations < PasswordHasher.CurrentIterations)
             {
-                if (user.Iterations < ITERATIONS)
-                {
-                    return Update(SetUserHashedPassword(user, password));
-                }
-
-                return user;
+                return Update(SetUserHashedPassword(user, password));
             }
 
-            return null;
+            return user;
         }
 
         public User FindUser(Guid identifier)
@@ -121,46 +102,11 @@ namespace NzbDrone.Core.Authentication
             return _repo.FindUser(identifier);
         }
 
-        private User SetUserHashedPassword(User user, string password)
+        private static User SetUserHashedPassword(User user, string password)
         {
-            var salt = GenerateSalt();
-
-            user.Iterations = ITERATIONS;
-            user.Salt = Convert.ToBase64String(salt);
-            user.Password = GetHashedPassword(password, salt, ITERATIONS);
+            PasswordHasher.SetHash(user, password);
 
             return user;
-        }
-
-        private byte[] GenerateSalt()
-        {
-            var salt = new byte[SALT_SIZE];
-            RandomNumberGenerator.Create().GetBytes(salt);
-
-            return salt;
-        }
-
-        private string GetHashedPassword(string password, byte[] salt, int iterations)
-        {
-            return Convert.ToBase64String(KeyDerivation.Pbkdf2(
-                password: password,
-                salt: salt,
-                prf: KeyDerivationPrf.HMACSHA512,
-                iterationCount: iterations,
-                numBytesRequested: NUMBER_OF_BYTES));
-        }
-
-        private bool VerifyHashedPassword(User user, string password)
-        {
-            var salt = Convert.FromBase64String(user.Salt);
-            var hashedPassword = GetHashedPassword(password, salt, user.Iterations);
-
-            return IsMatchingHash(user.Password, hashedPassword);
-        }
-
-        private static bool IsMatchingHash(string storedHash, string hash)
-        {
-            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(storedHash), Encoding.UTF8.GetBytes(hash));
         }
     }
 }

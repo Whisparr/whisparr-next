@@ -22,6 +22,7 @@ using NzbDrone.Common.Processes;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.Instrumentation;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
@@ -265,7 +266,8 @@ namespace NzbDrone.Host
                               IRuntimeInfo runtimeInfo,
                               IFirewallAdapter firewallAdapter,
                               IEventAggregator eventAggregator,
-                              WhisparrErrorPipeline errorHandler)
+                              WhisparrErrorPipeline errorHandler,
+                              ISetupModeState setupModeState)
         {
             initializeLogger.Initialize();
             appFolderFactory.Register();
@@ -277,8 +279,11 @@ namespace NzbDrone.Host
 
             EnsureSingleInstance(false, startupContext, singleInstancePolicy);
 
-            // instantiate the databases to initialize/migrate them
-            _ = mainDatabaseFactory.Value;
+            // instantiate the databases to initialize/migrate them. Setup mode has no main database yet.
+            if (!setupModeState.IsActive)
+            {
+                _ = mainDatabaseFactory.Value;
+            }
 
             if (configFileProvider.LogDbEnabled)
             {
@@ -286,14 +291,20 @@ namespace NzbDrone.Host
                 dbTarget.Register();
             }
 
-            SchemaBuilder.Initialize(container);
+            if (!setupModeState.IsActive)
+            {
+                SchemaBuilder.Initialize(container);
+            }
 
             if (OsInfo.IsNotWindows)
             {
                 Console.CancelKeyPress += (sender, eventArgs) => NLog.LogManager.Configuration = null;
             }
 
-            eventAggregator.PublishEvent(new ApplicationStartingEvent());
+            if (!setupModeState.IsActive)
+            {
+                eventAggregator.PublishEvent(new ApplicationStartingEvent());
+            }
 
             if (OsInfo.IsWindows && runtimeInfo.IsAdmin)
             {
@@ -329,28 +340,33 @@ namespace NzbDrone.Host
 
             // Enable middleware to serve generated Swagger as a JSON endpoint.
             // Place before authentication to allow anonymous access
-            app.UseSwagger(c =>
+            // Setup mode leaves them out, so SetupModeMiddleware answers /docs like the rest of the API.
+            if (!setupModeState.IsActive)
             {
-                c.RouteTemplate = "docs/{documentName}/openapi.json";
-            });
+                app.UseSwagger(c =>
+                {
+                    c.RouteTemplate = "docs/{documentName}/openapi.json";
+                });
 
-            // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.)
-            app.UseSwaggerUI(c =>
-            {
-                c.SwaggerEndpoint("/docs/v5/openapi.json", "Whisparr API v5");
-                c.SwaggerEndpoint("/docs/v3/openapi.json", "Whisparr API v3");
-                c.RoutePrefix = "docs";
-                c.DocumentTitle = "Whisparr API";
-                c.DefaultModelsExpandDepth(-1);
+                // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.)
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/docs/v5/openapi.json", "Whisparr API v5");
+                    c.SwaggerEndpoint("/docs/v3/openapi.json", "Whisparr API v3");
+                    c.RoutePrefix = "docs";
+                    c.DocumentTitle = "Whisparr API";
+                    c.DefaultModelsExpandDepth(-1);
 
-                // Disable the top bar and configure for standalone operation
-                c.ConfigObject.AdditionalItems["displayOperationId"] = false;
-                c.ConfigObject.AdditionalItems["displayRequestDuration"] = true;
-            });
+                    // Disable the top bar and configure for standalone operation
+                    c.ConfigObject.AdditionalItems["displayOperationId"] = false;
+                    c.ConfigObject.AdditionalItems["displayRequestDuration"] = true;
+                });
+            }
 
             app.UseAuthentication();
             app.UseBrowserRedirect();  // workaround to convert 401 to 302 for browser requests
             app.UseAuthorization();
+            app.UseMiddleware<SetupModeMiddleware>();
             app.UseResponseCompression();
             app.Properties["host.AppName"] = BuildInfo.AppName;
 

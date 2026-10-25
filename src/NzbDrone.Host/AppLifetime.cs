@@ -5,6 +5,7 @@ using NLog;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Processes;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging;
 using NzbDrone.Core.Messaging.Events;
@@ -20,6 +21,7 @@ namespace NzbDrone.Host
         private readonly IBrowserService _browserService;
         private readonly IProcessProvider _processProvider;
         private readonly IEventAggregator _eventAggregator;
+        private readonly ISetupModeState _setupModeState;
         private readonly Logger _logger;
 
         public AppLifetime(IHostApplicationLifetime appLifetime,
@@ -29,8 +31,10 @@ namespace NzbDrone.Host
             IBrowserService browserService,
             IProcessProvider processProvider,
             IEventAggregator eventAggregator,
+            ISetupModeState setupModeState,
             Logger logger)
         {
+            _setupModeState = setupModeState;
             _appLifetime = appLifetime;
             _configFileProvider = configFileProvider;
             _runtimeInfo = runtimeInfo;
@@ -65,7 +69,10 @@ namespace NzbDrone.Host
                 _browserService.LaunchWebUI();
             }
 
-            _eventAggregator.PublishEvent(new ApplicationStartedEvent());
+            if (!_setupModeState.IsActive)
+            {
+                _eventAggregator.PublishEvent(new ApplicationStartedEvent());
+            }
         }
 
         private void OnAppStopped()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -24,6 +25,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Common.Options;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Extensions;
+using NzbDrone.Core.Datastore.Migration.Setup;
 using PostgresOptions = NzbDrone.Core.Datastore.PostgresOptions;
 
 namespace NzbDrone.Host
@@ -137,6 +139,8 @@ namespace NzbDrone.Host
 
         public static IHostBuilder CreateConsoleHostBuilder(string[] args, StartupContext context)
         {
+            // Before the configuration is read, so a seeded config5.xml supplies the port, bind address and URL base.
+            var setupModeState = DetectSetupMode(new AppFolderInfo(context));
             var config = GetConfiguration(context);
 
             var bindAddress = config.GetValue<string>($"Whisparr:Server:{nameof(ServerOptions.BindAddress)}") ?? config.GetValue(nameof(ConfigFileProvider.BindAddress), "*");
@@ -160,9 +164,19 @@ namespace NzbDrone.Host
                 .ConfigureContainer<IContainer>(c =>
                 {
                     c.AutoAddServices(Bootstrap.ASSEMBLIES)
-                        .AddNzbDroneLogger()
-                        .AddDatabase()
-                        .AddStartupContext(context);
+                        .AddNzbDroneLogger();
+
+                    if (setupModeState.IsActive)
+                    {
+                        // A legacy install is waiting to be migrated, so there is no v5 main database yet.
+                        c.AddDummyDatabase().AddSetupMode(setupModeState);
+                    }
+                    else
+                    {
+                        c.AddDatabase();
+                    }
+
+                    c.AddStartupContext(context);
 
                     // Only register GithubUpdatePackageProvider for IUpdatePackageProvider
                     c.Register<NzbDrone.Core.Update.GithubUpdatePackageProvider>(Reuse.Singleton);
@@ -207,6 +221,45 @@ namespace NzbDrone.Host
                     });
                     builder.UseStartup<Startup>();
                 });
+        }
+
+        // Looks for a Whisparr v2 or Eros install that v5 would otherwise ignore. If there is one, config5.xml is
+        // seeded from it (when there is none yet) and the app starts in setup mode.
+        private static ISetupModeState DetectSetupMode(AppFolderInfo appFolder)
+        {
+            // An interrupted phase 1 is undone, so the halt page shows again.
+            new SetupRunState(appFolder).DiscardIfPresent();
+
+            var detection = new LegacyInstallDetector(appFolder, Microsoft.Extensions.Options.Options.Create(PostgresOptions.GetOptions())).Detect();
+
+            if (!detection.SetupModeRequired)
+            {
+                return SetupModeState.Inactive;
+            }
+
+            var seeded = false;
+            var config5Path = appFolder.GetConfigPath();
+
+            // Eros wins when both exist. There may be no install at all, when the legacy database is unreadable.
+            var install = detection.Installs.FirstOrDefault(i => i.Kind == LegacyKind.Eros) ?? detection.Installs.FirstOrDefault();
+
+            if (!File.Exists(config5Path) && install != null)
+            {
+                if (File.Exists(detection.LegacyConfigPath))
+                {
+                    new Config5Seeder().Seed(detection.LegacyConfigPath, config5Path, install);
+                    seeded = true;
+                    Logger.Info("Seeded {0} from {1}", config5Path, detection.LegacyConfigPath);
+                }
+                else
+                {
+                    Logger.Warn("{0} was not found, so {1} was not seeded from it", detection.LegacyConfigPath, config5Path);
+                }
+            }
+
+            Logger.Info("A legacy install was found, starting in setup mode");
+
+            return new SetupModeState(detection, seeded);
         }
 
         public static ApplicationModes GetApplicationMode(IStartupContext startupContext)
