@@ -257,7 +257,15 @@ namespace NzbDrone.Host
                 }
             }
 
-            Logger.Info("A legacy install was found, starting in setup mode");
+            if (detection.PendingEnvSwitch)
+            {
+                // The v5 database is already built, so no migration is offered, only the environment change.
+                Logger.Info("The v5 database is ready, but {0} still names a legacy database, starting in setup mode", string.Join(", ", detection.EnvTargets.Select(t => t.Name)));
+            }
+            else
+            {
+                Logger.Info("A legacy install was found, starting in setup mode");
+            }
 
             return new SetupModeState(detection, seeded);
         }

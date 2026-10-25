@@ -380,6 +380,137 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             }
         }
 
+        [Test]
+        public void should_flag_pending_env_switch_when_completed_v5_db_and_env_names_legacy()
+        {
+            var options = RequirePostgres();
+            var legacyName = "legacy_" + TestBase.GetUID();
+            var v5Name = GivenCompletedV5Postgres(options, true);
+
+            try
+            {
+                GivenPendingEnvSwitchFiles(options, legacyName, v5Name);
+
+                var result = Detect();
+
+                result.PendingEnvSwitch.Should().BeTrue();
+                result.SetupModeRequired.Should().BeTrue();
+                result.Installs.Should().BeEmpty();
+                result.EnvTargets.Should().ContainSingle().Which.Should().BeEquivalentTo(new EnvTarget { Name = "Whisparr__Postgres__MainDb", Value = v5Name });
+            }
+            finally
+            {
+                PostgresDatabase.Drop(WithMainDb(options, v5Name), MigrationType.Main);
+            }
+        }
+
+        [Test]
+        public void should_fill_env_targets_for_a_connection_string_variable()
+        {
+            var options = RequirePostgres();
+            var legacyName = "legacy_" + TestBase.GetUID();
+            var v5Name = GivenCompletedV5Postgres(options, true);
+
+            try
+            {
+                GivenPendingEnvSwitchFiles(options, legacyName, v5Name);
+
+                _options.MainDb = null;
+                _options.MainDbConnectionString = $"Host={options.Host};Port={options.Port};Username={options.User};Password={options.Password};Database={legacyName}";
+
+                var target = Detect().EnvTargets.Should().ContainSingle().Subject;
+
+                target.Name.Should().Be("Whisparr__Postgres__MainDbConnectionString");
+                new NpgsqlConnectionStringBuilder(target.Value).Database.Should().Be(v5Name);
+                new NpgsqlConnectionStringBuilder(target.Value).Host.Should().Be(options.Host);
+            }
+            finally
+            {
+                PostgresDatabase.Drop(WithMainDb(options, v5Name), MigrationType.Main);
+            }
+        }
+
+        [Test]
+        public void should_not_flag_pending_env_switch_without_migration_state_row()
+        {
+            var options = RequirePostgres();
+            var legacyName = "legacy_" + TestBase.GetUID();
+            var v5Name = GivenCompletedV5Postgres(options, false);
+
+            try
+            {
+                GivenPendingEnvSwitchFiles(options, legacyName, v5Name);
+
+                var result = Detect();
+
+                result.PendingEnvSwitch.Should().BeFalse();
+                result.EnvTargets.Should().BeEmpty();
+            }
+            finally
+            {
+                PostgresDatabase.Drop(WithMainDb(options, v5Name), MigrationType.Main);
+            }
+        }
+
+        [Test]
+        public void should_not_flag_pending_env_switch_when_env_names_the_v5_db()
+        {
+            var options = RequirePostgres();
+            var v5Name = GivenCompletedV5Postgres(options, true);
+
+            try
+            {
+                GivenPendingEnvSwitchFiles(options, "legacy_" + TestBase.GetUID(), v5Name);
+
+                _options.MainDb = v5Name;
+
+                var result = Detect();
+
+                result.PendingEnvSwitch.Should().BeFalse();
+                result.SetupModeRequired.Should().BeFalse();
+            }
+            finally
+            {
+                PostgresDatabase.Drop(WithMainDb(options, v5Name), MigrationType.Main);
+            }
+        }
+
+        private static string GivenCompletedV5Postgres(PostgresOptions options, bool withStateRow)
+        {
+            PostgresDatabase.Create(options, MigrationType.Main);
+
+            var connectionString = new NpgsqlConnectionStringBuilder
+            {
+                Host = options.Host,
+                Port = options.Port,
+                Username = options.User,
+                Password = options.Password,
+                Database = options.MainDb,
+                Enlist = false
+            }.ConnectionString;
+
+            new MigrationController(LogManager.GetCurrentClassLogger())
+                .Migrate(connectionString, new MigrationContext(MigrationType.Main), DatabaseType.PostgreSQL);
+
+            if (withStateRow)
+            {
+                using var connection = new NpgsqlConnection(connectionString);
+                connection.Open();
+                connection.Execute("INSERT INTO \"LegacyMigrationState\" (\"SourceKind\", \"SceneSource\", \"MovieSource\", \"Phase\", \"Progress\", \"Completed\") VALUES (1, 1, 1, 'Done', '{}', true)");
+            }
+
+            return options.MainDb;
+        }
+
+        // config5.xml names the v5 database, config.xml and the environment still name the legacy one.
+        private void GivenPendingEnvSwitchFiles(PostgresOptions options, string legacyName, string v5Name)
+        {
+            File.WriteAllText(DbPath("config.xml"), $"<Config><PostgresMainDb>{legacyName}</PostgresMainDb></Config>");
+            File.WriteAllText(DbPath("config5.xml"), $"<Config><PostgresMainDb>{v5Name}</PostgresMainDb></Config>");
+
+            _options = new PostgresOptions { Host = options.Host, Port = options.Port, User = options.User, Password = options.Password, MainDb = legacyName };
+        }
+
         private static PostgresOptions RequirePostgres()
         {
             var options = PostgresDatabase.GetTestOptions();

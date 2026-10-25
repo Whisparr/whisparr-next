@@ -34,10 +34,40 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         private const string LegacyMainDb = "whisparr-main";
         public const string LegacyLogDb = "whisparr-log";
-        private const string MainDbVariable = "Whisparr__Postgres__MainDb";
-        private const string LogDbVariable = "Whisparr__Postgres__LogDb";
-        private const string MainDbConnectionStringVariable = "Whisparr__Postgres__MainDbConnectionString";
-        private const string LogDbConnectionStringVariable = "Whisparr__Postgres__LogDbConnectionString";
+        public const string MainDbVariable = "Whisparr__Postgres__MainDb";
+        public const string LogDbVariable = "Whisparr__Postgres__LogDb";
+        public const string MainDbConnectionStringVariable = "Whisparr__Postgres__MainDbConnectionString";
+        public const string LogDbConnectionStringVariable = "Whisparr__Postgres__LogDbConnectionString";
+
+        // What each environment variable has to say for v5 to use its own databases: the database name, or for a
+        // connection string the user's own string with only Database= replaced. Null for a variable that is not set.
+        public static List<EnvTarget> EnvTargetsFor(IEnumerable<string> variables, string v5Main, string v5Log, string envMainConnectionString, string envLogConnectionString)
+        {
+            string Replace(string connectionString, string database)
+            {
+                try
+                {
+                    return new NpgsqlConnectionStringBuilder(connectionString) { Database = database }.ConnectionString;
+                }
+                catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException or FormatException)
+                {
+                    return database;
+                }
+            }
+
+            return variables.Select(name => new EnvTarget
+            {
+                Name = name,
+                Value = name switch
+                {
+                    MainDbVariable => v5Main,
+                    LogDbVariable => v5Log,
+                    MainDbConnectionStringVariable => Replace(envMainConnectionString, v5Main),
+                    LogDbConnectionStringVariable => Replace(envLogConnectionString, v5Log),
+                    _ => null
+                }
+            }).ToList();
+        }
 
         // Source: keys read by v2's ConfigFileProvider (~/Git/Whisparrv2) against v5's. The diff found no key
         // that moved to a new name. v2-only: SslKeyPath (v5 has no equivalent, copied unchanged). v5-only:
@@ -79,33 +109,21 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 root.Add(new XElement(name, element.Value));
             }
 
-            var legacyMain = LegacyName(root, install, "PostgresMainDb", "PostgresMainDbConnectionString", LegacyMainDb, true);
-            var legacyLog = LegacyName(root, install, "PostgresLogDb", "PostgresLogDbConnectionString", LegacyLogDb, false);
+            string FromRoot(string key) => root.Element(key)?.Value;
+
+            var legacyMain = LegacyMainName(FromRoot, install?.Database?.PostgresMainDb);
+            var legacyLog = LegacyLogName(FromRoot);
 
             var envMain = FromEnvironment(MainDbVariable);
             var envLog = FromEnvironment(LogDbVariable);
 
-            var offenders = new List<string>();
-
-            if (Same(envMain, legacyMain))
-            {
-                offenders.Add(MainDbVariable);
-            }
-
-            if (Same(envLog, legacyLog))
-            {
-                offenders.Add(LogDbVariable);
-            }
-
-            if (Same(DatabaseOf(FromEnvironment(MainDbConnectionStringVariable)), legacyMain))
-            {
-                offenders.Add(MainDbConnectionStringVariable);
-            }
-
-            if (Same(DatabaseOf(FromEnvironment(LogDbConnectionStringVariable)), legacyLog))
-            {
-                offenders.Add(LogDbConnectionStringVariable);
-            }
+            var offenders = EnvVarsNamingLegacy(
+                legacyMain,
+                legacyLog,
+                envMain,
+                envLog,
+                FromEnvironment(MainDbConnectionStringVariable),
+                FromEnvironment(LogDbConnectionStringVariable));
 
             var targets = new V5DatabaseTargets
             {
@@ -132,7 +150,47 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return string.IsNullOrWhiteSpace(value) ? null : value;
         }
 
-        private static string DatabaseOf(string connectionString)
+        // The environment variables, out of the four that can name a database, that name a legacy one. The
+        // detector shares this with the seeder, so both agree on what "still names legacy" means.
+        public static List<string> EnvVarsNamingLegacy(string legacyMain, string legacyLog, string envMain, string envLog, string envMainConnectionString, string envLogConnectionString)
+        {
+            var offenders = new List<string>();
+
+            if (Same(envMain, legacyMain))
+            {
+                offenders.Add(MainDbVariable);
+            }
+
+            if (Same(envLog, legacyLog))
+            {
+                offenders.Add(LogDbVariable);
+            }
+
+            if (Same(DatabaseOf(envMainConnectionString), legacyMain))
+            {
+                offenders.Add(MainDbConnectionStringVariable);
+            }
+
+            if (Same(DatabaseOf(envLogConnectionString), legacyLog))
+            {
+                offenders.Add(LogDbConnectionStringVariable);
+            }
+
+            return offenders;
+        }
+
+        // The legacy main database name from the config values, as the legacy app would resolve it without the environment.
+        public static string LegacyMainName(Func<string, string> configValue, string installMainDb)
+        {
+            return LegacyName(configValue, installMainDb, "PostgresMainDb", "PostgresMainDbConnectionString", LegacyMainDb);
+        }
+
+        public static string LegacyLogName(Func<string, string> configValue)
+        {
+            return LegacyName(configValue, null, "PostgresLogDb", "PostgresLogDbConnectionString", LegacyLogDb);
+        }
+
+        public static string DatabaseOf(string connectionString)
         {
             if (connectionString == null)
             {
@@ -161,14 +219,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return envName != null && !Same(envName, legacyName) ? envName : v5Default;
         }
 
-        private static string LegacyName(XElement root, LegacyInstall install, string key, string connectionStringKey, string defaultName, bool main)
+        private static string LegacyName(Func<string, string> configValue, string installName, string key, string connectionStringKey, string defaultName)
         {
-            if (main && !string.IsNullOrWhiteSpace(install?.Database?.PostgresMainDb))
+            if (!string.IsNullOrWhiteSpace(installName))
             {
-                return install.Database.PostgresMainDb;
+                return installName;
             }
 
-            var connectionString = root.Element(connectionStringKey)?.Value;
+            var connectionString = configValue(connectionStringKey);
 
             if (!string.IsNullOrWhiteSpace(connectionString))
             {
@@ -187,7 +245,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 }
             }
 
-            var name = root.Element(key)?.Value;
+            var name = configValue(key);
 
             return string.IsNullOrWhiteSpace(name) ? defaultName : name;
         }

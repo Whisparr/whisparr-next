@@ -56,7 +56,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             var result = new DetectionResult { LegacyConfigPath = legacyConfigPath };
             var legacyPostgres = ResolvePostgres(legacyConfig, LegacyPostgresMainDb);
 
-            if (HasMarkedV5Database(appData, legacyPostgres, v5ConfigExists ? ReadConfig(v5ConfigPath) : null))
+            var v5Config = v5ConfigExists ? ReadConfig(v5ConfigPath) : null;
+
+            // A finished migration whose environment still points at the legacy database would otherwise look like a
+            // fresh legacy install, and offer the migration again.
+            if (v5Config != null && DetectPendingEnvSwitch(legacyConfig, v5Config, result))
+            {
+                return result;
+            }
+
+            if (HasMarkedV5Database(appData, legacyPostgres, v5Config))
             {
                 return result;
             }
@@ -85,6 +94,103 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             result.SetupModeRequired = result.Installs.Count > 0 || result.Errors.Count > 0;
 
             return result;
+        }
+
+        // Read-only. Probes the v5 main database under the names config5.xml gives it, ignoring the environment.
+        private bool DetectPendingEnvSwitch(Dictionary<string, string> legacyConfig, Dictionary<string, string> v5Config, DetectionResult result)
+        {
+            var v5Postgres = ResolvePostgres(v5Config, V5PostgresMainDb, true);
+
+            if (!v5Postgres.IsConfigured)
+            {
+                return false;
+            }
+
+            string FromLegacy(string key) => legacyConfig.GetValueOrDefault(key);
+
+            var v5Main = new NpgsqlConnectionStringBuilder(v5Postgres.ConnectionString).Database;
+            var v5Log = DatabaseOf(v5Config.GetValueOrDefault("PostgresLogDbConnectionString")) ??
+                        (v5Config.GetValueOrDefault("PostgresLogDb").IsNotNullOrWhiteSpace() ? v5Config["PostgresLogDb"] : Config5Seeder.V5LogDb);
+
+            var envMain = Blank(_options.MainDb);
+            var envLog = Blank(_options.LogDb);
+            var envMainConnectionString = Blank(_options.MainDbConnectionString);
+            var envLogConnectionString = Blank(_options.LogDbConnectionString);
+
+            var offenders = Config5Seeder.EnvVarsNamingLegacy(
+                Config5Seeder.LegacyMainName(FromLegacy, null),
+                Config5Seeder.LegacyLogName(FromLegacy),
+                envMain,
+                envLog,
+                envMainConnectionString,
+                envLogConnectionString);
+
+            // A legacy database that only the environment named has no trace in config.xml, so look at what the
+            // variable points to.
+            if (!offenders.Contains(Config5Seeder.MainDbVariable) && envMain != null && envMain != v5Main && IsLegacyDatabase(v5Postgres, envMain))
+            {
+                offenders.Add(Config5Seeder.MainDbVariable);
+            }
+
+            var envConnectionStringMain = Config5Seeder.DatabaseOf(envMainConnectionString);
+
+            if (!offenders.Contains(Config5Seeder.MainDbConnectionStringVariable) && envConnectionStringMain != null &&
+                envConnectionStringMain != v5Main && IsLegacyDatabase(v5Postgres, envConnectionStringMain))
+            {
+                offenders.Add(Config5Seeder.MainDbConnectionStringVariable);
+            }
+
+            if (offenders.Count == 0 || !HasMigrationState(v5Postgres))
+            {
+                return false;
+            }
+
+            result.PendingEnvSwitch = true;
+            result.SetupModeRequired = true;
+            result.EnvTargets = Config5Seeder.EnvTargetsFor(offenders, v5Main, v5Log, envMainConnectionString, envLogConnectionString);
+
+            return true;
+        }
+
+        private static string Blank(string value) => value.IsNotNullOrWhiteSpace() ? value : null;
+
+        private static string DatabaseOf(string connectionString) => connectionString.IsNotNullOrWhiteSpace() ? Config5Seeder.DatabaseOf(connectionString) : null;
+
+        private bool HasMigrationState(PostgresSettings v5Postgres)
+        {
+            try
+            {
+                using var connection = LegacyConnections.OpenPostgres(v5Postgres.ConnectionString);
+
+                return HasVersionInfo(connection, DatabaseType.PostgreSQL) &&
+                       !LegacyDatabaseGuard.IsLegacy(connection, DatabaseType.PostgreSQL) &&
+                       TableExists(connection, DatabaseType.PostgreSQL, "LegacyMigrationState") &&
+                       Count(connection, "SELECT COUNT(*) FROM \"LegacyMigrationState\"") > 0;
+            }
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException)
+            {
+                _logger.Debug(ex, "Unable to probe the v5 database for a completed migration");
+
+                return false;
+            }
+        }
+
+        private bool IsLegacyDatabase(PostgresSettings server, string database)
+        {
+            try
+            {
+                var connectionString = new NpgsqlConnectionStringBuilder(server.ConnectionString) { Database = database }.ConnectionString;
+
+                using var connection = LegacyConnections.OpenPostgres(connectionString);
+
+                return HasVersionInfo(connection, DatabaseType.PostgreSQL) && LegacyDatabaseGuard.IsLegacy(connection, DatabaseType.PostgreSQL);
+            }
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException)
+            {
+                _logger.Debug(ex, "Unable to probe {0}", database);
+
+                return false;
+            }
         }
 
         private static string DescribePostgres(PostgresSettings settings)
@@ -354,7 +460,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         }
 
         // Environment values override the config file, as they do for the running app.
-        private PostgresSettings ResolvePostgres(Dictionary<string, string> config, string defaultMainDb)
+        // ignoreEnvironmentNames leaves out the variables that name a database, for probing where config5.xml
+        // says the v5 database lives. The server variables still apply.
+        private PostgresSettings ResolvePostgres(Dictionary<string, string> config, string defaultMainDb, bool ignoreEnvironmentNames = false)
         {
             string FromConfig(string key) => config.TryGetValue(key, out var value) ? value : null;
 
@@ -372,8 +480,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 port = configPort;
             }
 
-            var envMainDb = _options.MainDb.IsNotNullOrWhiteSpace() ? _options.MainDb : null;
-            var envConnectionString = _options.MainDbConnectionString.IsNotNullOrWhiteSpace() ? _options.MainDbConnectionString : null;
+            var envMainDb = !ignoreEnvironmentNames && _options.MainDb.IsNotNullOrWhiteSpace() ? _options.MainDb : null;
+            var envConnectionString = !ignoreEnvironmentNames && _options.MainDbConnectionString.IsNotNullOrWhiteSpace() ? _options.MainDbConnectionString : null;
             var connectionString = envConnectionString ?? (FromConfig("PostgresMainDbConnectionString").IsNotNullOrWhiteSpace() ? FromConfig("PostgresMainDbConnectionString") : null);
             var mainDb = envMainDb ?? (FromConfig("PostgresMainDb").IsNotNullOrWhiteSpace() ? FromConfig("PostgresMainDb") : defaultMainDb);
 

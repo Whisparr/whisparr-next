@@ -47,9 +47,21 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public bool HasMixedMovies { get; set; }
     }
 
+    // An environment variable and the value it needs for v5 to use its own database.
+    public class EnvTarget
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+    }
+
     public class DetectionResult
     {
         public bool SetupModeRequired { get; set; }
+
+        // The v5 database is already built and marked, but an environment variable still names the legacy one. The
+        // migration is not offered again, only the instructions to switch the variable. Installs stays empty.
+        public bool PendingEnvSwitch { get; set; }
+        public List<EnvTarget> EnvTargets { get; set; } = new();
         public List<LegacyInstall> Installs { get; set; } = new();
         public string LegacyConfigPath { get; set; }
 

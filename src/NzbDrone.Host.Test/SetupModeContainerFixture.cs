@@ -74,6 +74,15 @@ namespace NzbDrone.App.Test
         }
 
         [Test]
+        public void should_resolve_the_setup_wizard_service_with_every_dependency()
+        {
+            var wizard = _services.GetRequiredService<ISetupWizardService>();
+
+            wizard.Should().BeOfType<SetupWizardService>();
+            wizard.Progress.Status.Should().Be(SetupStatus.Idle);
+        }
+
+        [Test]
         public void should_resolve_the_registered_setup_state()
         {
             _services.GetRequiredService<ISetupModeState>().Should().BeSameAs(_state);
