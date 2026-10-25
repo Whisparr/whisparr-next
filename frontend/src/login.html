@@ -249,6 +249,7 @@
 
       .oidc-misconfigured .oidc-misconfigured-message {
         display: block;
+        margin-top: 20px;
       }
 
       .oidc-only {
@@ -263,10 +264,13 @@
         display: block;
       }
 
+      /* OIDC is selected but unusable, the backend falls back to Forms, so show that login */
+      .oidc-misconfigured .forms-only {
+        display: block;
+      }
+
       .oidc-misconfigured #sso-login {
-        opacity: 0.5;
-        cursor: default;
-        pointer-events: none;
+        display: none;
       }
 
       @media only screen and (min-device-width: 375px) and (max-device-width: 812px) {
@@ -355,7 +359,8 @@
 
               <div class="login-failed oidc-misconfigured-message">
                 OIDC authentication is enabled, but isn't configured correctly.
-                Update the OIDC settings in your config file to continue.
+                Sign in with your username and password, then fix the OIDC
+                settings in Settings &rarr; General.
               </div>
 
               <div id="sso-failed" class="login-failed hidden">

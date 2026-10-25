@@ -58,7 +58,8 @@ namespace NzbDrone.Core.Authentication
                 return;
             }
 
-            if (_configFileProvider.AuthenticationMethod != AuthenticationType.Forms)
+            // An incomplete OIDC setup falls back to Forms, so that login needs a user too
+            if (_configFileProvider.EffectiveAuthenticationMethod() != AuthenticationType.Forms)
             {
                 return;
             }

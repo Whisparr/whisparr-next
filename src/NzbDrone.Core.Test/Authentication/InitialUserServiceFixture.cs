@@ -89,6 +89,38 @@ namespace NzbDrone.Core.Test.Authentication
         }
 
         [Test]
+        public void should_seed_when_oidc_is_selected_but_incomplete()
+        {
+            var config = Mocker.GetMock<IConfigFileProvider>();
+
+            config.SetupGet(c => c.AuthenticationMethod).Returns(AuthenticationType.Oidc);
+            config.SetupGet(c => c.OidcAuthority).Returns("http://id.example");
+
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Mocker.GetMock<IUserService>()
+                .Verify(c => c.Add("whisparr", It.Is<string>(p => p.Length == 20)), Times.Once());
+        }
+
+        [Test]
+        public void should_not_seed_when_oidc_is_complete()
+        {
+            var config = Mocker.GetMock<IConfigFileProvider>();
+
+            config.SetupGet(c => c.AuthenticationMethod).Returns(AuthenticationType.Oidc);
+            config.SetupGet(c => c.OidcAuthority).Returns("https://id.example");
+            config.SetupGet(c => c.OidcClientId).Returns("whisparr");
+            config.SetupGet(c => c.OidcClientSecret).Returns("secret");
+            config.SetupGet(c => c.OidcUserIdentifier).Returns("user@example.com");
+            config.SetupGet(c => c.OidcScopes).Returns("openid profile");
+
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Mocker.GetMock<IUserService>()
+                .Verify(c => c.Add(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
         public void should_migrate_credentials_from_config_file()
         {
             GivenConfigFile("<Config><Username>olduser</Username><Password>oldpass</Password></Config>");
