@@ -1,5 +1,7 @@
+using System;
 using System.Data;
 using System.Data.SQLite;
+using System.IO;
 using Dapper;
 using Npgsql;
 
@@ -9,11 +11,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
     public static class LegacyConnections
     {
         // Read-only and unpooled, so opening neither changes the journal mode nor keeps the file locked.
+        // immutable=1 stops SQLite creating -shm/-wal files next to a WAL-mode database. The legacy app is
+        // stopped while we read, so there are no uncheckpointed writes to miss.
         public static IDbConnection OpenSqliteReadOnly(string path)
         {
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("Database file not found", path);
+            }
+
             var connectionString = new SQLiteConnectionStringBuilder
             {
-                DataSource = path,
+                FullUri = new Uri(Path.GetFullPath(path)).AbsoluteUri + "?immutable=1",
                 ReadOnly = true,
                 FailIfMissing = true,
                 Pooling = false

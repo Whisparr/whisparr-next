@@ -226,14 +226,83 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void should_ignore_an_unreadable_legacy_file()
+        public void should_report_an_error_for_an_unreadable_legacy_file()
         {
             File.WriteAllText(DbPath("whisparr3.db"), "not a database");
 
             var result = Detect();
 
+            result.SetupModeRequired.Should().BeTrue();
+            result.Installs.Should().BeEmpty();
+            result.Errors.Should().ContainSingle().Which.Should().Contain("whisparr3.db");
+        }
+
+        [Test]
+        public void should_treat_unreadable_v5_db_as_marked()
+        {
+            File.WriteAllText(DbPath("whisparr5.db"), "not a database");
+            CreateEros();
+
+            var result = Detect();
+
             result.SetupModeRequired.Should().BeFalse();
             result.Installs.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_report_error_for_unreachable_configured_postgres()
+        {
+            // Nothing listens on port 1.
+            _options = new PostgresOptions { Host = "127.0.0.1", Port = 1, User = "postgres", Password = "secret-pw" };
+
+            var result = Detect();
+
+            result.SetupModeRequired.Should().BeTrue();
+            result.Installs.Should().BeEmpty();
+            result.Errors.Should().ContainSingle().Which.Should().NotContain("secret-pw");
+        }
+
+        [Test]
+        public void should_not_change_a_wal_mode_legacy_file()
+        {
+            var legacy = CreateEros();
+            LegacyDbBuilder.InsertErosItem(legacy, "scene-1", 1, 1);
+            LegacyDbBuilder.EnableWal(legacy);
+
+            var before = Hash(legacy);
+
+            Detect().Installs.Should().ContainSingle().Which.Scenes.Should().Be(1);
+
+            Hash(legacy).Should().Be(before);
+            File.Exists(legacy + "-wal").Should().BeFalse();
+            File.Exists(legacy + "-shm").Should().BeFalse();
+            File.Exists(legacy + "-journal").Should().BeFalse();
+        }
+
+        [Test]
+        public void should_not_change_a_wal_mode_v5_file()
+        {
+            var v5 = DbPath("whisparr5.db");
+            LegacyDbBuilder.CreateV5Sqlite(v5);
+            LegacyDbBuilder.EnableWal(v5);
+
+            var before = Hash(v5);
+
+            Detect().SetupModeRequired.Should().BeFalse();
+
+            Hash(v5).Should().Be(before);
+            File.Exists(v5 + "-wal").Should().BeFalse();
+            File.Exists(v5 + "-shm").Should().BeFalse();
+            File.Exists(v5 + "-journal").Should().BeFalse();
+        }
+
+        [Test]
+        public void should_fall_back_to_tmdb_for_an_undefined_movie_source_number()
+        {
+            var path = CreateEros();
+            LegacyDbBuilder.InsertConfig(path, "whisparrmoviemetadatasource", "7");
+
+            Detect().Installs.Single().PreviousMovieSource.Should().Be(MovieMetadataType.TMDB);
         }
 
         [Test]
@@ -259,7 +328,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         [Test]
         public void should_fail_to_open_a_missing_sqlite_file()
         {
-            Assert.Throws<System.Data.SQLite.SQLiteException>(() => LegacyConnections.OpenSqliteReadOnly(DbPath("missing.db")));
+            Assert.Throws<FileNotFoundException>(() => LegacyConnections.OpenSqliteReadOnly(DbPath("missing.db")));
             File.Exists(DbPath("missing.db")).Should().BeFalse();
         }
 

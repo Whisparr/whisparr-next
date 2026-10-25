@@ -52,5 +52,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public bool SetupModeRequired { get; set; }
         public List<LegacyInstall> Installs { get; set; } = new();
         public string LegacyConfigPath { get; set; }
+
+        // Legacy databases that exist but could not be inspected. Never null.
+        public List<string> Errors { get; set; } = new();
     }
 }

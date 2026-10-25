@@ -31,6 +31,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 .Migrate(connectionString, new MigrationContext(MigrationType.Main), DatabaseType.SQLite);
         }
 
+        // Persistent WAL mode, as real installs use. Closing the only connection checkpoints and removes -wal/-shm.
+        public static void EnableWal(string path)
+        {
+            Execute(path, "PRAGMA journal_mode=WAL");
+        }
+
         public static void DropTable(string path, string table)
         {
             Execute(path, $"DROP TABLE \"{table}\"");

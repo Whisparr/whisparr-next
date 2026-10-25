@@ -65,7 +65,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             if (legacyPostgres.IsConfigured)
             {
-                TryAdd(installs, () => DetectPostgres(legacyPostgres, legacyConfig));
+                TryAdd(installs, result.Errors, DescribePostgres(legacyPostgres), () => DetectPostgres(legacyPostgres, legacyConfig), true);
             }
 
             foreach (var name in new[] { "whisparr2.db", "whisparr3.db" })
@@ -74,15 +74,29 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 if (File.Exists(path))
                 {
-                    TryAdd(installs, () => DetectSqlite(path, legacyConfig));
+                    TryAdd(installs, result.Errors, path, () => DetectSqlite(path, legacyConfig), false);
                 }
             }
 
             // One install per kind: a configured Postgres database comes first and shadows stale SQLite files.
             result.Installs = installs.GroupBy(i => i.Kind).Select(g => g.First()).ToList();
-            result.SetupModeRequired = result.Installs.Count > 0;
+
+            // A legacy database that exists but can't be read must not fall through to a fresh v5 boot.
+            result.SetupModeRequired = result.Installs.Count > 0 || result.Errors.Count > 0;
 
             return result;
+        }
+
+        private static string DescribePostgres(PostgresSettings settings)
+        {
+            try
+            {
+                return "PostgreSQL database " + new NpgsqlConnectionStringBuilder(settings.ConnectionString).Database;
+            }
+            catch (Exception)
+            {
+                return "the configured PostgreSQL database";
+            }
         }
 
         private static HashSet<long> LoadKnownMigrations()
@@ -95,7 +109,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 .ToHashSet();
         }
 
-        private void TryAdd(List<LegacyInstall> installs, Func<LegacyInstall> detect)
+        private void TryAdd(List<LegacyInstall> installs, List<string> errors, string description, Func<LegacyInstall> detect, bool missingDatabaseIsAbsent)
         {
             try
             {
@@ -106,9 +120,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     installs.Add(install);
                 }
             }
+            catch (PostgresException ex) when (missingDatabaseIsAbsent && ex.SqlState == PostgresErrorCodes.InvalidCatalogName)
+            {
+                // The configured database doesn't exist, so there is nothing legacy to migrate.
+                _logger.Debug(ex, "{0} does not exist", description);
+            }
             catch (Exception ex)
             {
-                _logger.Warn(ex, "Unable to inspect a legacy database; ignoring it");
+                _logger.Warn(ex, "Unable to inspect {0}", description);
+                errors.Add($"Unable to inspect {description}: {ex.Message}");
             }
         }
 
@@ -137,11 +157,24 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 return HasVersionInfo(connection, type) && !LegacyDatabaseGuard.IsLegacy(connection, type);
             }
-            catch (Exception ex)
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidCatalogName)
             {
-                _logger.Debug(ex, "Unable to check for a v5 database");
+                return false;
+            }
+            catch (NpgsqlException ex) when (ex is not PostgresException)
+            {
+                // The server can't be reached, so there is no v5 database to speak of. The legacy probe on the
+                // same server reports the failure.
+                _logger.Debug(ex, "Unable to reach the server while checking for a v5 database");
 
                 return false;
+            }
+            catch (Exception ex)
+            {
+                // The v5 database exists but can't be probed. Normal startup surfaces its own error.
+                _logger.Warn(ex, "Unable to probe the existing v5 database; treating it as marked");
+
+                return true;
             }
         }
 
@@ -261,7 +294,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         {
             var value = connection.ExecuteScalar<string>("SELECT \"Value\" FROM \"Config\" WHERE LOWER(\"Key\") = 'whisparrmoviemetadatasource'");
 
-            return Enum.TryParse<MovieMetadataType>(value?.Trim(), true, out var source) ? source : MovieMetadataType.TMDB;
+            // IsDefined rejects numeric strings such as "7" that TryParse accepts.
+            return Enum.TryParse<MovieMetadataType>(value?.Trim(), true, out var source) && Enum.IsDefined(source)
+                ? source
+                : MovieMetadataType.TMDB;
         }
 
         private static bool HasUsableCredentials(IDbConnection connection, DatabaseType type, Dictionary<string, string> legacyConfig)
