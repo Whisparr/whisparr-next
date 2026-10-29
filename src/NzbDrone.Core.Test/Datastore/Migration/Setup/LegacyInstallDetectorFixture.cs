@@ -333,6 +333,43 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void should_detect_v2_postgres()
+        {
+            var options = RequirePostgres();
+
+            PostgresDatabase.Create(options, MigrationType.Main);
+
+            try
+            {
+                LegacyDbBuilder.CreateV2PostgresFromDump(new NpgsqlConnectionStringBuilder
+                {
+                    Host = options.Host,
+                    Port = options.Port,
+                    Username = options.User,
+                    Password = options.Password,
+                    Database = options.MainDb,
+                    Enlist = false
+                }.ConnectionString);
+
+                _options = new PostgresOptions { Host = options.Host, Port = options.Port, User = options.User, Password = options.Password };
+                File.WriteAllText(DbPath("config.xml"), $"<Config><PostgresMainDb>{options.MainDb}</PostgresMainDb></Config>");
+
+                var install = Detect().Installs.Should().ContainSingle().Subject;
+
+                install.Kind.Should().Be(LegacyKind.V2);
+                install.Database.Type.Should().Be(DatabaseType.PostgreSQL);
+                install.Database.PostgresMainDb.Should().Be(options.MainDb);
+                install.MaxMigration.Should().Be(221);
+                install.Refusal.Should().Be(LegacyRefusal.None);
+            }
+            finally
+            {
+                NpgsqlConnection.ClearAllPools();
+                PostgresDatabase.Drop(WithMainDb(options, options.MainDb), MigrationType.Main);
+            }
+        }
+
+        [Test]
         public void should_detect_eros_postgres()
         {
             var options = RequirePostgres();
