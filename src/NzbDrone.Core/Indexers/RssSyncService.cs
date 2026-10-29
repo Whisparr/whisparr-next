@@ -5,6 +5,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.Pending;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 
@@ -17,6 +18,7 @@ namespace NzbDrone.Core.Indexers
         private readonly IProcessDownloadDecisions _processDownloadDecisions;
         private readonly IPendingReleaseService _pendingReleaseService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         public RssSyncService(IFetchAndParseRss rssFetcherAndParser,
@@ -24,8 +26,10 @@ namespace NzbDrone.Core.Indexers
                               IProcessDownloadDecisions processDownloadDecisions,
                               IPendingReleaseService pendingReleaseService,
                               IEventAggregator eventAggregator,
+                              ILegacyMigrationGate migrationGate,
                               Logger logger)
         {
+            _migrationGate = migrationGate;
             _rssFetcherAndParser = rssFetcherAndParser;
             _downloadDecisionMaker = downloadDecisionMaker;
             _processDownloadDecisions = processDownloadDecisions;
@@ -59,6 +63,13 @@ namespace NzbDrone.Core.Indexers
 
         public void Execute(RssSyncCommand message)
         {
+            if (_migrationGate.AutomationPaused)
+            {
+                _logger.Info("RSS sync is paused until the library migration completes");
+
+                return;
+            }
+
             var processed = Sync().GetAwaiter().GetResult();
 
             _eventAggregator.PublishEvent(new RssSyncCompleteEvent(processed));

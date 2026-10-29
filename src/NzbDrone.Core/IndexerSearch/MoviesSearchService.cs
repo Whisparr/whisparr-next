@@ -7,6 +7,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Queue;
@@ -20,6 +21,7 @@ namespace NzbDrone.Core.IndexerSearch
         private readonly ISearchForReleases _releaseSearchService;
         private readonly IProcessDownloadDecisions _processDownloadDecisions;
         private readonly IQueueService _queueService;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         public MovieSearchService(IMovieService movieService,
@@ -27,8 +29,10 @@ namespace NzbDrone.Core.IndexerSearch
                                    ISearchForReleases releaseSearchService,
                                    IProcessDownloadDecisions processDownloadDecisions,
                                    IQueueService queueService,
+                                   ILegacyMigrationGate migrationGate,
                                    Logger logger)
         {
+            _migrationGate = migrationGate;
             _movieService = movieService;
             _movieCutoffService = movieCutoffService;
             _releaseSearchService = releaseSearchService;
@@ -50,6 +54,11 @@ namespace NzbDrone.Core.IndexerSearch
 
         public void Execute(MissingMoviesSearchCommand message)
         {
+            if (IsPausedFor(message))
+            {
+                return;
+            }
+
             var pagingSpec = new PagingSpec<Movie>
             {
                 Page = 1,
@@ -80,6 +89,11 @@ namespace NzbDrone.Core.IndexerSearch
 
         public void Execute(CutoffUnmetMoviesSearchCommand message)
         {
+            if (IsPausedFor(message))
+            {
+                return;
+            }
+
             var pagingSpec = new PagingSpec<Movie>
             {
                 Page = 1,
@@ -106,6 +120,18 @@ namespace NzbDrone.Core.IndexerSearch
             var missing = movies.Where(e => !queue.Contains(e.Id)).ToList();
 
             SearchForBulkMovies(missing, message.Trigger == CommandTrigger.Manual).GetAwaiter().GetResult();
+        }
+
+        private bool IsPausedFor(Command message)
+        {
+            if (message.Trigger == CommandTrigger.Manual || !_migrationGate.AutomationPaused)
+            {
+                return false;
+            }
+
+            _logger.Info("Automatic searches are paused until the library migration completes");
+
+            return true;
         }
 
         private async Task SearchForBulkMovies(List<Movie> movies, bool userInvokedSearch)

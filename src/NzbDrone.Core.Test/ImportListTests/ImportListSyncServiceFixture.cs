@@ -8,6 +8,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.ImportLists.ImportListMovies;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
@@ -94,6 +95,37 @@ namespace NzbDrone.Core.Test.ImportList
                   Mocker.GetMock<IFetchAndParseImportList>()
                         .Setup(v => v.Fetch())
                         .Returns(_importListFetch);
+            }
+
+            private void GivenPaused(bool paused)
+            {
+                  Mocker.GetMock<ILegacyMigrationGate>()
+                        .SetupGet(g => g.AutomationPaused)
+                        .Returns(paused);
+            }
+
+            [Test]
+            public void import_list_sync_skipped_while_paused()
+            {
+                  GivenPaused(true);
+
+                  Subject.Execute(_commandAll);
+                  Subject.Execute(_commandSingle);
+
+                  Mocker.GetMock<IImportListFactory>().Verify(v => v.Enabled(It.IsAny<bool>()), Times.Never());
+                  Mocker.GetMock<IImportListFactory>().Verify(v => v.Get(It.IsAny<int>()), Times.Never());
+                  Mocker.GetMock<IFetchAndParseImportList>().Verify(v => v.Fetch(), Times.Never());
+                  Mocker.GetMock<IFetchAndParseImportList>().Verify(v => v.FetchSingleList(It.IsAny<ImportListDefinition>()), Times.Never());
+            }
+
+            [Test]
+            public void import_list_sync_runs_when_not_paused()
+            {
+                  GivenPaused(false);
+
+                  Subject.Execute(_commandAll);
+
+                  Mocker.GetMock<IImportListFactory>().Verify(v => v.Enabled(It.IsAny<bool>()), Times.Once());
             }
 
             private void GivenListFailure()

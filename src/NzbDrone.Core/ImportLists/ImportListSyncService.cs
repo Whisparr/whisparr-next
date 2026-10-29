@@ -6,6 +6,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.ImportLists.ImportListMovies;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Performers;
@@ -25,6 +26,7 @@ namespace NzbDrone.Core.ImportLists
         private readonly IImportListMovieService _listMovieService;
         private readonly IPerformerService _performerService;
         private readonly IStudioService _studioService;
+        private readonly ILegacyMigrationGate _migrationGate;
 
         public ImportListSyncService(IImportListFactory importListFactory,
                                       IFetchAndParseImportList listFetcherAndParser,
@@ -35,8 +37,10 @@ namespace NzbDrone.Core.ImportLists
                                       IImportListMovieService listMovieService,
                                       IPerformerService performerService,
                                       IStudioService studioService,
+                                      ILegacyMigrationGate migrationGate,
                                       Logger logger)
         {
+            _migrationGate = migrationGate;
             _importListFactory = importListFactory;
             _listFetcherAndParser = listFetcherAndParser;
             _movieService = movieService;
@@ -308,6 +312,13 @@ namespace NzbDrone.Core.ImportLists
 
         public void Execute(ImportListSyncCommand message)
         {
+            if (_migrationGate.AutomationPaused)
+            {
+                _logger.Info("Import list sync is paused until the library migration completes");
+
+                return;
+            }
+
             if (message.DefinitionId.HasValue)
             {
                 SyncList(_importListFactory.Get(message.DefinitionId.Value));

@@ -3,6 +3,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 
@@ -15,6 +16,7 @@ namespace NzbDrone.Core.Download
         private readonly IFailedDownloadService _failedDownloadService;
         private readonly ITrackedDownloadService _trackedDownloadService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         public DownloadProcessingService(IConfigService configService,
@@ -22,8 +24,10 @@ namespace NzbDrone.Core.Download
                                          IFailedDownloadService failedDownloadService,
                                          ITrackedDownloadService trackedDownloadService,
                                          IEventAggregator eventAggregator,
+                                         ILegacyMigrationGate migrationGate,
                                          Logger logger)
         {
+            _migrationGate = migrationGate;
             _configService = configService;
             _completedDownloadService = completedDownloadService;
             _failedDownloadService = failedDownloadService;
@@ -46,7 +50,8 @@ namespace NzbDrone.Core.Download
 
         public void Execute(ProcessMonitoredDownloadsCommand message)
         {
-            var enableCompletedDownloadHandling = _configService.EnableCompletedDownloadHandling;
+            // While the library migration runs, ImportPending downloads wait; the next run after it completes imports them.
+            var enableCompletedDownloadHandling = _configService.EnableCompletedDownloadHandling && !_migrationGate.AutomationPaused;
             var trackedDownloads = _trackedDownloadService.GetTrackedDownloads()
                                               .Where(t => t.IsTrackable)
                                               .ToList();
