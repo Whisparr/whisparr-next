@@ -30,8 +30,10 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ILegacyFileLinker _fileLinker;
         private readonly ILegacyMigrationService _migrationService;
         private readonly IDiskProvider _diskProvider;
+        private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public ErosSeedImportRunner(ILegacyMovieSeedRepository seedRepository,
                                     ISearchForNewMovie searchForNewMovie,
                                     IAddMovieService addMovieService,
@@ -40,8 +42,10 @@ namespace NzbDrone.Core.LegacyMigration
                                     ILegacyFileLinker fileLinker,
                                     ILegacyMigrationService migrationService,
                                     IDiskProvider diskProvider,
+                                    ISkyhookPacer pacer,
                                     Logger logger)
         {
+            _pacer = pacer;
             _seedRepository = seedRepository;
             _searchForNewMovie = searchForNewMovie;
             _addMovieService = addMovieService;
@@ -58,7 +62,7 @@ namespace NzbDrone.Core.LegacyMigration
             return state.SourceKind == LegacyKind.Eros;
         }
 
-        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress)
+        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
         {
             var seeds = _seedRepository.All().ToList();
 
@@ -73,27 +77,34 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             var pass = new LegacyImportPass();
+            var failures = new List<(LegacyMovieSeed Seed, Exception Error)>();
+            var succeeded = 0;
+            var now = _pacer.UtcNow;
 
             foreach (var seed in seeds.Where(s => !s.Resolved))
             {
+                // A seed backing off from an earlier failure waits for its own turn
+                if (!LegacyRetryPolicy.IsDue(seed.Attempts, seed.LastAttemptAt, now))
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                    pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(seed.Attempts, seed.LastAttemptAt));
+                    continue;
+                }
+
+                pass.Attempted++;
+
                 try
                 {
                     Resolve(state, seed);
                     progress.Advance(Area);
+                    succeeded++;
                 }
                 catch (Exception ex) when (ex is HttpException || ex is WebException || ex is TimeoutException)
                 {
                     _logger.Warn(ex, "Could not re-identify {0} ({1}), will retry", seed.Title, seed.Year);
 
-                    if (RecordFailure(seed, ex))
-                    {
-                        progress.Advance(Area);
-                        continue;
-                    }
-
-                    pass.Pending++;
-                    pass.WaitingRetry++;
-                    pass.NextAttempt = pass.NextAttempt == 0 ? seed.Attempts : Math.Min(pass.NextAttempt, seed.Attempts);
+                    failures.Add((seed, ex));
                 }
                 catch (Exception ex)
                 {
@@ -103,6 +114,28 @@ namespace NzbDrone.Core.LegacyMigration
                     _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", ex.Message);
                     MarkResolved(seed);
                     progress.Advance(Area);
+                }
+            }
+
+            // Everything worked on failed transiently, so the source is down rather than the seeds: don't spend their attempts
+            pass.Outage = failures.Count > 0 && succeeded == 0;
+
+            foreach (var (seed, error) in failures)
+            {
+                if (pass.Outage && !recordOutages)
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                }
+                else if (RecordFailure(seed, error))
+                {
+                    progress.Advance(Area);
+                }
+                else
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                    pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(seed.Attempts, seed.LastAttemptAt));
                 }
             }
 
@@ -215,7 +248,7 @@ namespace NzbDrone.Core.LegacyMigration
         private bool RecordFailure(LegacyMovieSeed seed, Exception ex)
         {
             seed.Attempts++;
-            seed.LastAttemptAt = DateTime.UtcNow;
+            seed.LastAttemptAt = _pacer.UtcNow;
 
             var giveUp = LegacyRetryPolicy.ShouldGiveUp(seed.Attempts);
 

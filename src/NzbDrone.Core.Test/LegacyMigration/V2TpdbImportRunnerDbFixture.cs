@@ -153,7 +153,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var state = new LegacyMigrationState { SourceKind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb };
             var progress = new Mock<ILegacyImportProgress>();
 
-            var pass = runner.RunPass(state, progress.Object);
+            var pass = runner.RunPass(state, progress.Object, false);
 
             pass.Pending.Should().Be(0);
             seriesRepository.All().Should().OnlyContain(s => s.Done).And.HaveCount(2);
@@ -166,7 +166,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             report.Should().Contain(r => r.Area == "Studios" && r.Subject == "Lost Studio");
 
             // A second pass over finished staging does nothing
-            runner.RunPass(state, progress.Object).Pending.Should().Be(0);
+            runner.RunPass(state, progress.Object, false).Pending.Should().Be(0);
             Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Once());
             migrationService.GetReport().Should().HaveCount(report.Count);
@@ -208,7 +208,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             var state = new LegacyMigrationState { SourceKind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb };
 
-            var pass = runner.RunPass(state, new Mock<ILegacyImportProgress>().Object);
+            var pass = runner.RunPass(state, new Mock<ILegacyImportProgress>().Object, false);
 
             pass.Waiting.Should().Be(1);
 

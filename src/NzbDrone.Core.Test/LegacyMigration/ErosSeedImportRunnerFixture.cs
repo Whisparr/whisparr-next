@@ -25,6 +25,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private ImportFile _importFile;
         private Mock<ILegacyImportProgress> _progress;
         private string _path;
+        private DateTime _now;
 
         [SetUp]
         public void Setup()
@@ -47,6 +48,9 @@ namespace NzbDrone.Core.Test.LegacyMigration
             };
             _seeds = new List<LegacyMovieSeed> { _seed };
             _progress = new Mock<ILegacyImportProgress>();
+            _now = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
+
+            Mocker.GetMock<ISkyhookPacer>().SetupGet(p => p.UtcNow).Returns(() => _now);
 
             Mocker.GetMock<ILegacyMovieSeedRepository>().Setup(r => r.All()).Returns(() => _seeds);
             Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(5)).Returns(_importFile);
@@ -85,9 +89,9 @@ namespace NzbDrone.Core.Test.LegacyMigration
             GivenSearch("The Big Movie 2020", results);
         }
 
-        private LegacyImportPass Run()
+        private LegacyImportPass Run(bool recordOutages = false)
         {
-            return Subject.RunPass(_state, _progress.Object);
+            return Subject.RunPass(_state, _progress.Object, recordOutages);
         }
 
         private void VerifyNeverAdded()
@@ -212,6 +216,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         [Test]
         public void transient_error_records_attempt_and_stays_pending()
         {
+            AddHealthySeed();
             Mocker.GetMock<ISearchForNewMovie>()
                   .Setup(s => s.SearchForNewMovie("tmdb:123"))
                   .Throws(new TimeoutException());
@@ -221,14 +226,16 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(1);
             pass.WaitingRetry.Should().Be(1);
-            pass.NextAttempt.Should().Be(2);
-            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Attempts == 2 && s.LastAttemptAt != null && !s.Resolved)), Times.Once());
-            _progress.Verify(p => p.Advance(It.IsAny<string>(), It.IsAny<long>()), Times.Never());
+            pass.Outage.Should().BeFalse();
+            pass.NextDue.Should().Be(_now.AddMinutes(30));
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Attempts == 2 && s.LastAttemptAt == _now && !s.Resolved)), Times.Once());
+            _progress.Verify(p => p.Advance(It.IsAny<string>(), It.IsAny<long>()), Times.Once());
         }
 
         [Test]
         public void fifth_failure_gives_up_as_needs_attention()
         {
+            AddHealthySeed();
             Mocker.GetMock<ISearchForNewMovie>()
                   .Setup(s => s.SearchForNewMovie("tmdb:123"))
                   .Throws(new TimeoutException());
@@ -240,7 +247,74 @@ namespace NzbDrone.Core.Test.LegacyMigration
             pass.WaitingRetry.Should().Be(0);
             VerifyNeedsAttention(Times.Once());
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Attempts == 5 && s.Resolved)), Times.Once());
-            _progress.Verify(p => p.Advance("Movies", 1), Times.Once());
+            _progress.Verify(p => p.Advance("Movies", 1), Times.Exactly(2));
+        }
+
+        [Test]
+        public void every_seed_failing_transiently_is_an_outage_that_spends_no_attempts()
+        {
+            Mocker.GetMock<ISearchForNewMovie>()
+                  .Setup(s => s.SearchForNewMovie("tmdb:123"))
+                  .Throws(new TimeoutException());
+
+            var pass = Run();
+
+            pass.Outage.Should().BeTrue();
+            pass.Attempted.Should().Be(1);
+            pass.Pending.Should().Be(1);
+            pass.WaitingRetry.Should().Be(1);
+            pass.NextDue.Should().BeNull();
+            _seed.Attempts.Should().Be(0);
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.IsAny<LegacyMovieSeed>()), Times.Never());
+        }
+
+        [Test]
+        public void outage_attempts_are_spent_when_the_pass_is_told_to_record_them()
+        {
+            Mocker.GetMock<ISearchForNewMovie>()
+                  .Setup(s => s.SearchForNewMovie("tmdb:123"))
+                  .Throws(new TimeoutException());
+
+            var pass = Run(recordOutages: true);
+
+            pass.Outage.Should().BeTrue();
+            pass.NextDue.Should().Be(_now.AddMinutes(5));
+            _seed.Attempts.Should().Be(1);
+            _seed.LastAttemptAt.Should().Be(_now);
+        }
+
+        [Test]
+        public void a_seed_still_backing_off_is_skipped()
+        {
+            _seed.Attempts = 1;
+            _seed.LastAttemptAt = _now.AddMinutes(-4);
+
+            var pass = Run();
+
+            pass.Attempted.Should().Be(0);
+            pass.Pending.Should().Be(1);
+            pass.WaitingRetry.Should().Be(1);
+            pass.NextDue.Should().Be(_now.AddMinutes(1));
+            Mocker.GetMock<ISearchForNewMovie>().Verify(s => s.SearchForNewMovie(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void a_seed_whose_delay_has_passed_is_tried_again()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            _seed.Attempts = 1;
+            _seed.LastAttemptAt = _now.AddMinutes(-5);
+
+            var pass = Run();
+
+            pass.Attempted.Should().Be(1);
+            pass.Pending.Should().Be(0);
+        }
+
+        private void AddHealthySeed()
+        {
+            GivenSearch("tmdb:456", Candidate("Healthy", 2021, 456));
+            _seeds.Add(new LegacyMovieSeed { Id = 2, LegacyForeignId = "legacy-2", Title = "Healthy", Year = 2021, TmdbId = 456, RootFolderPath = "/data/library".AsOsAgnostic() });
         }
 
         [Test]

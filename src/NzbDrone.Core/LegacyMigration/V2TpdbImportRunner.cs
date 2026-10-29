@@ -45,6 +45,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public V2TpdbImportRunner(ILegacyV2SeriesRepository seriesRepository,
                                   ILegacyV2EpisodeRepository episodeRepository,
                                   ILegacyV2EpisodeFileRepository fileRepository,
@@ -81,7 +82,7 @@ namespace NzbDrone.Core.LegacyMigration
             return state.SourceKind == LegacyKind.V2 && state.SceneSource == SceneMetadataType.Tpdb;
         }
 
-        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress)
+        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
         {
             var allSeries = _seriesRepository.All().ToList();
             var episodes = _episodeRepository.All().ToList();
@@ -93,54 +94,53 @@ namespace NzbDrone.Core.LegacyMigration
             progress.Total(pendingSeries.Count + pendingFiles.Count);
 
             var pass = new LegacyImportPass();
-            var failed = new HashSet<int>();
+            var failures = new List<SeriesFailure>();
+            var succeeded = 0;
+            var now = _pacer.UtcNow;
 
             foreach (var series in pendingSeries)
             {
+                // A series backing off from an earlier failure waits for its own turn
+                if (!LegacyRetryPolicy.IsDue(series.Attempts, series.LastAttemptAt, now))
+                {
+                    pass.WaitingRetry++;
+                    pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(series.Attempts, series.LastAttemptAt));
+                    continue;
+                }
+
                 var seriesEpisodes = episodes.Where(e => e.LegacySeriesId == series.LegacyId).OrderBy(e => e.LegacyId).ToList();
                 var seriesFiles = pendingFiles.Where(f => f.LegacySeriesId == series.LegacyId).OrderBy(f => f.LegacyId).ToList();
 
-                try
+                pass.Attempted++;
+
+                switch (TryImport(series, seriesEpisodes, seriesFiles, progress, out var error))
                 {
-                    Import(series, seriesEpisodes, seriesFiles, progress);
+                    case ImportResult.Imported:
+                        succeeded++;
+                        break;
+                    case ImportResult.Waiting:
+                        pass.Waiting++;
+                        break;
+                    case ImportResult.Transient:
+                        failures.Add(new SeriesFailure(series, seriesEpisodes, seriesFiles, error));
+                        break;
                 }
-                catch (ResolvePendingException ex)
+            }
+
+            // Everything worked on failed transiently, so the source is down rather than the series: don't spend their attempts
+            pass.Outage = failures.Count > 0 && succeeded == 0 && pass.Waiting == 0;
+
+            if (pass.Outage && !recordOutages)
+            {
+                _logger.Warn("Every one of the {0} studios tried failed transiently, so no attempts were spent on them", failures.Count);
+
+                pass.WaitingRetry += failures.Count;
+            }
+            else
+            {
+                foreach (var failure in failures)
                 {
-                    // Skyhook is still working on it: not a failure, so no attempt is spent, but the wait has a ceiling
-                    _logger.Debug("{0} for {1}", ex.Message, series.Title);
-
-                    if (WaitedTooLong(series))
-                    {
-                        const string reason = "TPDB did not finish resolving ids within 24 hours";
-
-                        _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, reason);
-                        ParkAndFinish(series, seriesEpisodes, seriesFiles, reason, progress);
-                        continue;
-                    }
-
-                    pass.Waiting++;
-                }
-                catch (Exception ex) when (IsTransient(ex))
-                {
-                    _logger.Warn(ex, "Could not import {0}, will retry", series.Title);
-
-                    if (RecordFailure(series, ex))
-                    {
-                        ParkAndFinish(series, seriesEpisodes, seriesFiles, $"Import failed: {ex.Message}", progress);
-                        continue;
-                    }
-
-                    failed.Add(series.LegacyId);
-                    pass.WaitingRetry++;
-                    pass.NextAttempt = pass.NextAttempt == 0 ? series.Attempts : Math.Min(pass.NextAttempt, series.Attempts);
-                }
-                catch (Exception ex)
-                {
-                    // Retrying won't help; report it and move on so one bad series can't hold the migration open
-                    _logger.Warn(ex, "Could not import {0}", series.Title);
-
-                    _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, ex.Message);
-                    ParkAndFinish(series, seriesEpisodes, seriesFiles, $"Import failed: {ex.Message}", progress);
+                    RecordTransientFailure(failure, progress, pass);
                 }
             }
 
@@ -149,6 +149,68 @@ namespace NzbDrone.Core.LegacyMigration
             pass.Pending = pendingSeries.Count(s => !s.Done) + pendingFiles.Count(f => !f.Done);
 
             return pass;
+        }
+
+        private ImportResult TryImport(LegacyV2Series series, List<LegacyV2Episode> episodes, List<LegacyV2EpisodeFile> files, ILegacyImportProgress progress, out Exception error)
+        {
+            error = null;
+
+            try
+            {
+                Import(series, episodes, files, progress);
+
+                return ImportResult.Imported;
+            }
+            catch (ResolvePendingException ex)
+            {
+                // Skyhook is still working on it: not a failure, so no attempt is spent, but the wait has a ceiling
+                _logger.Debug("{0} for {1}", ex.Message, series.Title);
+
+                if (!WaitedTooLong(series))
+                {
+                    return ImportResult.Waiting;
+                }
+
+                const string reason = "TPDB did not finish resolving ids within 24 hours";
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, reason);
+                ParkAndFinish(series, episodes, files, reason, progress);
+
+                return ImportResult.Reported;
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                _logger.Warn(ex, "Could not import {0}, will retry", series.Title);
+
+                error = ex;
+
+                return ImportResult.Transient;
+            }
+            catch (Exception ex)
+            {
+                // Retrying won't help; report it and move on so one bad series can't hold the migration open
+                _logger.Warn(ex, "Could not import {0}", series.Title);
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, ex.Message);
+                ParkAndFinish(series, episodes, files, $"Import failed: {ex.Message}", progress);
+
+                return ImportResult.Reported;
+            }
+        }
+
+        private void RecordTransientFailure(SeriesFailure failure, ILegacyImportProgress progress, LegacyImportPass pass)
+        {
+            var series = failure.Series;
+
+            if (RecordFailure(series, failure.Error))
+            {
+                ParkAndFinish(series, failure.Episodes, failure.Files, $"Import failed: {failure.Error.Message}", progress);
+
+                return;
+            }
+
+            pass.WaitingRetry++;
+            pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(series.Attempts, series.LastAttemptAt));
         }
 
         private void Import(LegacyV2Series series, List<LegacyV2Episode> episodes, List<LegacyV2EpisodeFile> files, ILegacyImportProgress progress)
@@ -412,6 +474,16 @@ namespace NzbDrone.Core.LegacyMigration
             _seriesRepository.Update(series);
             progress.Advance(StudioArea);
         }
+
+        private enum ImportResult
+        {
+            Imported,
+            Waiting,
+            Transient,
+            Reported
+        }
+
+        private sealed record SeriesFailure(LegacyV2Series Series, List<LegacyV2Episode> Episodes, List<LegacyV2EpisodeFile> Files, Exception Error);
 
         // Remembers when the series first waited on a 202; true once that is longer ago than the ceiling allows
         private bool WaitedTooLong(LegacyV2Series series)

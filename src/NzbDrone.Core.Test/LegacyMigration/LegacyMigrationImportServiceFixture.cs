@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.LegacyMigration;
@@ -19,6 +20,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private Mock<ILegacyImportRunner> _runner;
         private Queue<LegacyImportPass> _passes;
         private Action<ILegacyImportProgress> _duringPass;
+        private List<bool> _recordOutages;
+        private DateTime _now;
 
         [SetUp]
         public void Setup()
@@ -33,9 +36,15 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             _runner = new Mock<ILegacyImportRunner>();
             _runner.Setup(r => r.Handles(It.IsAny<LegacyMigrationState>())).Returns(true);
-            _runner.Setup(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()))
-                   .Returns((LegacyMigrationState s, ILegacyImportProgress p) =>
+            _recordOutages = new List<bool>();
+            _now = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
+
+            Mocker.GetMock<ISkyhookPacer>().SetupGet(p => p.UtcNow).Returns(() => _now);
+
+            _runner.Setup(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>(), It.IsAny<bool>()))
+                   .Returns((LegacyMigrationState s, ILegacyImportProgress p, bool recordOutages) =>
                    {
+                       _recordOutages.Add(recordOutages);
                        _duringPass?.Invoke(p);
 
                        return _passes.Dequeue();
@@ -44,9 +53,22 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.SetConstant<IEnumerable<ILegacyImportRunner>>(new[] { _runner.Object });
         }
 
-        private static LegacyImportPass Pass(int pending, int waiting = 0, int nextAttempt = 0, int resolving = 0)
+        private LegacyImportPass Pass(int pending, int waiting = 0, TimeSpan? dueIn = null, int resolving = 0, int attempted = 1, bool outage = false)
         {
-            return new LegacyImportPass { Pending = pending, WaitingRetry = waiting, NextAttempt = nextAttempt, Waiting = resolving };
+            return new LegacyImportPass
+            {
+                Pending = pending,
+                WaitingRetry = waiting,
+                NextDue = dueIn.HasValue ? _now + dueIn.Value : null,
+                Waiting = resolving,
+                Attempted = attempted,
+                Outage = outage
+            };
+        }
+
+        private void VerifyRunPasses(Times times)
+        {
+            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>(), It.IsAny<bool>()), times);
         }
 
         [Test]
@@ -80,7 +102,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _state = new LegacyMigrationState { Id = 1, Completed = true };
             Subject.Execute(new LegacyMigrationImportCommand());
 
-            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()), Times.Never());
+            VerifyRunPasses(Times.Never());
         }
 
         [Test]
@@ -94,27 +116,102 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
-        public void sleeps_policy_delay_then_retries_waiting_items()
+        public void sleeps_until_the_earliest_item_is_due_then_runs_again()
         {
-            _passes.Enqueue(Pass(2, 2, 1));
+            _passes.Enqueue(Pass(2, 2, TimeSpan.FromMinutes(5)));
             _passes.Enqueue(Pass(0));
 
             Subject.Execute(new LegacyMigrationImportCommand());
 
-            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(1)), Times.Once());
-            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()), Times.Exactly(2));
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(5)), Times.Once());
+            VerifyRunPasses(Times.Exactly(2));
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.MarkCompleted(), Times.Once());
         }
 
         [Test]
-        public void sleeps_the_delay_for_the_smallest_waiting_attempt()
+        public void sleeps_a_long_backoff_in_full_when_nothing_else_waits()
         {
-            _passes.Enqueue(Pass(1, 1, 3));
+            _passes.Enqueue(Pass(1, 1, TimeSpan.FromHours(6)));
             _passes.Enqueue(Pass(0));
 
             Subject.Execute(new LegacyMigrationImportCommand());
 
-            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(4)), Times.Once());
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromHours(6)), Times.Once());
+        }
+
+        [Test]
+        public void does_not_sleep_a_negative_time_when_an_item_is_already_due()
+        {
+            _passes.Enqueue(Pass(1, 1, TimeSpan.FromMinutes(-3)));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.Zero), Times.Once());
+        }
+
+        [Test]
+        public void a_pass_where_every_item_failed_backs_off_globally_on_the_policy_schedule()
+        {
+            _passes.Enqueue(Pass(3, 3, outage: true));
+            _passes.Enqueue(Pass(3, 3, outage: true));
+            _passes.Enqueue(Pass(3, 3, outage: true));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            var pacer = Mocker.GetMock<ISkyhookPacer>();
+
+            pacer.Verify(p => p.Sleep(TimeSpan.FromMinutes(5)), Times.Once());
+            pacer.Verify(p => p.Sleep(TimeSpan.FromMinutes(30)), Times.Once());
+            pacer.Verify(p => p.Sleep(TimeSpan.FromHours(2)), Times.Once());
+            _recordOutages.Should().Equal(false, false, false, false);
+        }
+
+        [Test]
+        public void outage_passes_start_spending_attempts_once_the_global_backoff_is_used_up()
+        {
+            for (var i = 0; i < LegacyRetryPolicy.MaxAttempts; i++)
+            {
+                _passes.Enqueue(Pass(1, 1, outage: true));
+            }
+
+            // The pass told to record outages sets the item's own backoff
+            _passes.Enqueue(Pass(1, 1, TimeSpan.FromMinutes(5), outage: true));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            _recordOutages.Should().Equal(false, false, false, false, false, true, true);
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromHours(6)), Times.Exactly(2));
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(5)), Times.Exactly(2));
+        }
+
+        [Test]
+        public void a_pass_that_worked_on_something_ends_the_outage()
+        {
+            _passes.Enqueue(Pass(2, 2, outage: true));
+            _passes.Enqueue(Pass(1, 1, TimeSpan.FromMinutes(5)));
+            _passes.Enqueue(Pass(2, 2, outage: true));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            // The second outage starts the schedule over rather than continuing it
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(5)), Times.Exactly(3));
+        }
+
+        [Test]
+        public void a_pass_that_only_skipped_backing_off_items_keeps_the_outage_count()
+        {
+            _passes.Enqueue(Pass(2, 2, outage: true));
+            _passes.Enqueue(Pass(2, 2, TimeSpan.FromMinutes(5), attempted: 0));
+            _passes.Enqueue(Pass(2, 2, outage: true));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(30)), Times.Once());
         }
 
         [Test]
@@ -126,22 +223,22 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Subject.Execute(new LegacyMigrationImportCommand());
 
             Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(LegacyRetryPolicy.PendingDelay), Times.Once());
-            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()), Times.Exactly(2));
+            VerifyRunPasses(Times.Exactly(2));
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.MarkCompleted(), Times.Once());
         }
 
         [Test]
         public void sleeps_the_shorter_delay_when_both_kinds_wait()
         {
-            _passes.Enqueue(Pass(3, 1, 1, resolving: 2));
-            _passes.Enqueue(Pass(1, 1, 1, resolving: 0));
+            _passes.Enqueue(Pass(3, 1, TimeSpan.FromMinutes(5), resolving: 2));
+            _passes.Enqueue(Pass(2, 1, TimeSpan.FromSeconds(10), resolving: 1));
             _passes.Enqueue(Pass(0));
 
             Subject.Execute(new LegacyMigrationImportCommand());
 
-            // Attempt 1 backs off a minute, so the 30 second resolve delay wins the first pass
+            // The 5 minute backoff is capped at the 30 second resolve delay; a 10 second one is shorter, so it wins
             Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(LegacyRetryPolicy.PendingDelay), Times.Once());
-            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(1)), Times.Once());
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromSeconds(10)), Times.Once());
         }
 
         [Test]
@@ -178,7 +275,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ILegacyMigrationService>()
                   .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Migration", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Once());
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.MarkCompleted(), Times.Never());
-            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()), Times.Never());
+            VerifyRunPasses(Times.Never());
         }
 
         [Test]
