@@ -33,8 +33,35 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             _requests.Should().ContainSingle();
             _requests[0].Url.Path.Should().EndWith("tpdb/resolve");
 
-            var body = Json.Deserialize<Dictionary<string, object>>(System.Text.Encoding.UTF8.GetString(_requests[0].ContentData));
-            body["kind"].Should().Be("site");
+            // Skyhook binds case-sensitively, so assert the wire text rather than round-tripping through app settings.
+            var raw = System.Text.Encoding.UTF8.GetString(_requests[0].ContentData);
+            raw.Should().Contain("\"Kind\":\"site\"");
+        }
+
+        [Test]
+        public void should_send_request_body_in_pascal_case()
+        {
+            GivenResolve(ids => (HttpStatusCode.OK, new Dictionary<int, string>()));
+
+            Subject.Resolve(TpdbIdKind.Site, new[] { 1 });
+
+            var raw = System.Text.Encoding.UTF8.GetString(_requests[0].ContentData);
+            raw.Should().Contain("\"Kind\":\"site\"");
+            raw.Should().Contain("\"Ids\":[");
+            raw.Should().NotContain("\"kind\"");
+            raw.Should().NotContain("\"ids\"");
+        }
+
+        [Test]
+        public void should_read_pascal_case_response_body()
+        {
+            var request = new HttpRequest("http://localhost/tpdb/resolve");
+            var response = new HttpResponse(request, new HttpHeader(), "{\"Ids\":{\"123\":\"abc-uuid\"}}", HttpStatusCode.OK);
+
+            // HttpResponse<T> deserializes with the same Json.Deserialize the real client uses.
+            var typed = new HttpResponse<TpdbResolveResponse>(response);
+
+            typed.Resource.Ids.Should().BeEquivalentTo(new Dictionary<int, string> { { 123, "abc-uuid" } });
         }
 
         [Test]

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Serializer;
@@ -23,6 +25,9 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         public bool Pending { get; set; }
     }
 
+    // Skyhook binds this body case-sensitively. The app's camel-case resolver overrides explicit
+    // [JsonProperty] names, so opt the type out of it to keep PascalCase on the wire.
+    [JsonObject(NamingStrategyType = typeof(DefaultNamingStrategy))]
     public class TpdbResolveRequest
     {
         public string Kind { get; set; }
@@ -80,8 +85,10 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                                                    .Build();
 
                 httpRequest.Headers.ContentType = "application/json";
-                httpRequest.SetContent(body.ToJson());
-                httpRequest.ContentSummary = body.ToJson(Newtonsoft.Json.Formatting.None);
+                var json = body.ToJson(Formatting.None);
+
+                httpRequest.SetContent(json);
+                httpRequest.ContentSummary = json;
                 httpRequest.AllowAutoRedirect = true;
                 httpRequest.SuppressHttpError = true;
 
