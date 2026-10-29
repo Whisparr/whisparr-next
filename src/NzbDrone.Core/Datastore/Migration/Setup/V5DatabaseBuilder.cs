@@ -4,7 +4,9 @@ using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using Dapper;
+using NLog;
 using Npgsql;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Datastore.Migration.Framework;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
@@ -41,11 +43,13 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         private readonly IMigrationController _migrationController;
         private readonly PostgresTableCopier _tableCopier;
+        private readonly Logger _logger;
 
         public V5DatabaseBuilder(IMigrationController migrationController, PostgresTableCopier tableCopier)
         {
             _migrationController = migrationController;
             _tableCopier = tableCopier;
+            _logger = NzbDroneLogger.GetLogger(this);
         }
 
         public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
@@ -181,7 +185,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 throw new SetupStepException("The v5 database names are empty. Choose a name for the main and the log database.");
             }
 
-            var legacy = new[] { legacyMain, Config5Seeder.LegacyLogDb };
+            var legacy = new[] { legacyMain, Config5Seeder.LegacyLogDb, targets.LegacyLogDb }.Where(n => !string.IsNullOrWhiteSpace(n)).ToArray();
 
             foreach (var target in new[] { targets.MainDb, targets.LogDb })
             {
@@ -260,9 +264,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                     return true;
                 }
-                catch (PostgresException)
+                catch (PostgresException ex)
                 {
                     // Busy template (other sessions) or no privilege: try a plain create below.
+                    _logger.Info(ex, "Could not create {0} from the template {1}, copying its tables instead", name, template);
                 }
             }
 
@@ -285,8 +290,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return "The database user is not allowed to create databases. Ask a database administrator to run:\n" +
                    $"CREATE DATABASE {Quote(targets.MainDb)};\n" +
                    $"CREATE DATABASE {Quote(targets.LogDb)};\n" +
-                   "then set the environment variables " +
-                   $"Whisparr__Postgres__MainDb={targets.MainDb} and Whisparr__Postgres__LogDb={targets.LogDb} and restart Whisparr.";
+                   "then try again. The empty databases are used as they are.";
         }
 
         private void StreamTables(string legacyConnectionString, string targetConnectionString)

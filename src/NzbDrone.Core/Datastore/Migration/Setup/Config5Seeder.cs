@@ -13,6 +13,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public string MainDb { get; set; }
         public string LogDb { get; set; }
 
+        // The legacy install's log database, which may have a custom name. A target may never be equal to it.
+        public string LegacyLogDb { get; set; }
+
         // True when an environment variable still names the legacy main or log database, so the user has to
         // change it before v5 can use its own databases.
         public bool EnvironmentStillNamesLegacy { get; set; }
@@ -56,10 +59,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 {
                     var builder = new NpgsqlConnectionStringBuilder(connectionString) { Database = database };
 
-                    // Display only, and it reaches the API, so never carry the password.
+                    // Display only, and it reaches the API, so never carry a password.
                     if (!string.IsNullOrEmpty(builder.Password))
                     {
                         builder.Password = UnchangedMarker;
+                    }
+
+                    if (!string.IsNullOrEmpty(builder.SslPassword))
+                    {
+                        builder.SslPassword = UnchangedMarker;
                     }
 
                     return builder.ConnectionString;
@@ -177,6 +185,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 MainDb = mainDb,
                 LogDb = logDb,
+                LegacyLogDb = legacyLog,
                 EnvironmentStillNamesLegacy = offenders.Count > 0,
                 EnvVarsStillNamingLegacy = offenders,
                 EnvTargets = EnvTargetsFor(offenders, mainDb, logDb, envMainConnectionString, envLogConnectionString)

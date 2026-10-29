@@ -488,7 +488,20 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void should_report_sql_and_env_vars_when_create_denied()
+        public void should_refuse_a_custom_legacy_log_name()
+        {
+            StartPostgres();
+
+            var targets = new V5DatabaseTargets { MainDb = _targetMain, LogDb = _targetLog, LegacyLogDb = _targetLog };
+
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CopyEros(PgInstall(), targets, _ => { }, _ => { }));
+
+            ex.UserMessage.Should().Contain(_targetLog);
+            Exists(_targetMain).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_report_sql_without_env_vars_when_create_denied()
         {
             StartPostgres();
 
@@ -507,8 +520,10 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             created.Should().BeEmpty();
             ex.UserMessage.Should().Contain($"CREATE DATABASE \"{_targetMain}\"");
             ex.UserMessage.Should().Contain($"CREATE DATABASE \"{_targetLog}\"");
-            ex.UserMessage.Should().Contain("Whisparr__Postgres__MainDb");
-            ex.UserMessage.Should().Contain("Whisparr__Postgres__LogDb");
+
+            // Pointing the env vars at the empty databases would hide the legacy install on the next start.
+            ex.UserMessage.Should().NotContain("Whisparr__Postgres__MainDb");
+            ex.UserMessage.Should().NotContain("Whisparr__Postgres__LogDb");
         }
     }
 }

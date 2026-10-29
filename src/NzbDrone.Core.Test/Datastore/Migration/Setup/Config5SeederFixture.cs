@@ -254,6 +254,20 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void env_targets_should_mask_the_client_key_password()
+        {
+            var targets = Config5Seeder.EnvTargetsFor(
+                new[] { "Whisparr__Postgres__MainDbConnectionString" },
+                "m",
+                "l",
+                "Host=db;Database=whisparr-main;Username=u;Password=secret;SSL Password=keysecret",
+                null);
+
+            targets[0].Value.Should().NotContain("keysecret");
+            targets[0].Value.Should().NotContain("secret");
+        }
+
+        [Test]
         public void env_targets_should_not_add_a_password_when_there_was_none()
         {
             var targets = Config5Seeder.EnvTargetsFor(
