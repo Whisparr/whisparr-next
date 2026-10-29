@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
+using System.IO;
 using System.Linq;
 using FluentAssertions;
 using Moq;
+using Npgsql;
 using NUnit.Framework;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
@@ -203,6 +206,13 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                   .Throws(new TimeoutException("slow"));
+        }
+
+        private void GivenCatalogThrowsFor(string title, Exception exception)
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Throws(exception);
         }
 
         private void VerifyReport(LegacyReportCategory category, string area, string subject, string detail, Times times)
@@ -726,6 +736,114 @@ namespace NzbDrone.Core.Test.LegacyMigration
             file.Done.Should().BeFalse();
             healthy.Done.Should().BeTrue();
             Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(series), Times.Once());
+        }
+
+        [Test]
+        public void sqlite_busy_and_locked_are_transient()
+        {
+            var busy = GivenSeries(1, 11, "site-1");
+            var locked = GivenSeries(2, 12, "site-2");
+            var healthy = GivenSeries(3, 13, "site-3");
+
+            GivenCatalogThrowsFor(busy.Title, new SQLiteException(SQLiteErrorCode.Busy, "database is busy"));
+            GivenCatalogThrowsFor(locked.Title, new SQLiteException(SQLiteErrorCode.Locked, "table is locked"));
+
+            var pass = Run();
+
+            pass.WaitingRetry.Should().Be(2);
+            busy.Attempts.Should().Be(1);
+            locked.Attempts.Should().Be(1);
+            busy.Done.Should().BeFalse();
+            locked.Done.Should().BeFalse();
+            healthy.Done.Should().BeTrue();
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Studios", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void other_sqlite_errors_are_not_transient()
+        {
+            var bad = GivenSeries(1, 11, "site-1");
+            GivenSeries(2, 12, "site-2");
+
+            GivenCatalogThrowsFor(bad.Title, new SQLiteException(SQLiteErrorCode.Constraint, "constraint failed"));
+
+            Run();
+
+            bad.Done.Should().BeTrue();
+            bad.Attempts.Should().Be(0);
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Studios", bad.Title, It.Is<string>(d => d.Contains("constraint failed")), It.IsAny<int>()), Times.Once());
+        }
+
+        [Test]
+        public void transient_npgsql_errors_are_retried_and_others_are_not()
+        {
+            var transient = GivenSeries(1, 11, "site-1");
+            var permanent = GivenSeries(2, 12, "site-2");
+            GivenSeries(3, 13, "site-3");
+
+            GivenCatalogThrowsFor(transient.Title, new NpgsqlException("connection lost", new IOException()));
+            GivenCatalogThrowsFor(permanent.Title, new NpgsqlException("bad statement"));
+
+            Run();
+
+            transient.Attempts.Should().Be(1);
+            transient.Done.Should().BeFalse();
+            permanent.Done.Should().BeTrue();
+            permanent.Attempts.Should().Be(0);
+        }
+
+        [Test]
+        public void giving_up_still_applies_the_v2_settings_to_the_studio_that_was_created()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", monitored: true, monitorNewItems: 0);
+            GivenSeries(2, 12, "healthy-site");
+            series.Attempts = LegacyRetryPolicy.MaxAttempts - 1;
+
+            GivenCatalogTimesOutFor(series.Title);
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            _studios["site-uuid"].Monitored.Should().BeTrue();
+            _studios["site-uuid"].WhisparrMonitorNewItems.Should().BeTrue();
+            _studios["site-uuid"].SearchOnAdd.Should().BeFalse();
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(_studios["site-uuid"]), Times.Once());
+        }
+
+        [Test]
+        public void a_non_transient_failure_still_applies_the_v2_settings_to_the_studio_that_was_created()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", monitored: true, monitorNewItems: 1);
+
+            GivenCatalogThrowsFor(series.Title, new InvalidOperationException("boom"));
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            _studios["site-uuid"].Monitored.Should().BeTrue();
+            _studios["site-uuid"].WhisparrMonitorNewItems.Should().BeFalse();
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(_studios["site-uuid"]), Times.Once());
+        }
+
+        [Test]
+        public void a_failure_before_the_studio_exists_updates_no_studio()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            GivenSeries(2, 12, "healthy-site");
+            series.Attempts = LegacyRetryPolicy.MaxAttempts - 1;
+            GivenEpisode(1, series, 101, "scene-1");
+
+            Mocker.GetMock<ITpdbIdResolver>()
+                  .Setup(r => r.Resolve(TpdbIdKind.Scene, It.IsAny<IReadOnlyCollection<int>>()))
+                  .Throws(new TimeoutException("slow"));
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            _studios.Should().NotContainKey("site-uuid");
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.Is<Studio>(st => st.ForeignId == "site-uuid")), Times.Never());
         }
 
         [Test]

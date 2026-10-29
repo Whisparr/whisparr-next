@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.Linq;
 using System.Net;
 using NLog;
+using Npgsql;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Converters;
@@ -44,6 +46,9 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ILegacyMigrationService _migrationService;
         private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
+
+        // The TPDB studio id of each series whose site resolved this run, to find the studio again if the series is given up on
+        private readonly Dictionary<int, string> _siteUuids = new();
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public V2TpdbImportRunner(ILegacyV2SeriesRepository seriesRepository,
@@ -225,6 +230,8 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
+            _siteUuids[series.LegacyId] = siteUuid;
+
             var sceneUuids = ResolveScenes(episodes);
             var episodeByUuid = new Dictionary<string, LegacyV2Episode>();
 
@@ -274,13 +281,43 @@ namespace NzbDrone.Core.LegacyMigration
                 LinkFile(series, file, episodes, sceneUuids, progress);
             }
 
-            studio = _studioService.FindByForeignId(siteUuid) ?? studio;
+            ApplyV2Settings(series, _studioService.FindByForeignId(siteUuid) ?? studio);
+            _siteUuids.Remove(series.LegacyId);
+
+            MarkSeriesDone(series, episodes, progress);
+        }
+
+        private void ApplyV2Settings(LegacyV2Series series, Studio studio)
+        {
             studio.Monitored = series.Monitored;
             studio.WhisparrMonitorNewItems = series.MonitorNewItems == 0;
             studio.SearchOnAdd = false;
             _studioService.Update(studio);
+        }
 
-            MarkSeriesDone(series, episodes, progress);
+        // A series given up on keeps the studio it already created, so the studio still gets what the user had set in v2
+        private void ApplyV2SettingsToCreatedStudio(LegacyV2Series series)
+        {
+            if (!_siteUuids.Remove(series.LegacyId, out var siteUuid))
+            {
+                return;
+            }
+
+            try
+            {
+                var studio = _studioService.FindByForeignId(siteUuid);
+
+                if (studio != null)
+                {
+                    ApplyV2Settings(series, studio);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Could not apply the v2 settings to the studio of {0}", series.Title);
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, $"v2 studio settings not applied: {ex.Message}");
+            }
         }
 
         // Null when TPDB doesn't know the site
@@ -412,6 +449,8 @@ namespace NzbDrone.Core.LegacyMigration
         // Parks the files of a series that can't be imported, then marks the series and its episodes done
         private void ParkAndFinish(LegacyV2Series series, List<LegacyV2Episode> episodes, List<LegacyV2EpisodeFile> files, string reason, ILegacyImportProgress progress)
         {
+            ApplyV2SettingsToCreatedStudio(series);
+
             foreach (var file in files.Where(f => !f.Done))
             {
                 try
@@ -529,7 +568,9 @@ namespace NzbDrone.Core.LegacyMigration
 
         private static bool IsTransient(Exception ex)
         {
-            return ex is HttpException or WebException or TimeoutException or ResolveThrottledException;
+            return ex is HttpException or WebException or TimeoutException or ResolveThrottledException
+                || ex is SQLiteException { ResultCode: SQLiteErrorCode.Busy or SQLiteErrorCode.Locked }
+                || ex is NpgsqlException { IsTransient: true };
         }
 
         private static HashSet<int> ParseTags(string json)
