@@ -1,4 +1,5 @@
 using System;
+using Dapper;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Datastore;
@@ -19,20 +20,27 @@ namespace NzbDrone.Core.Test.Datastore.Migration
             // WithMigrationTestDb hands back the raw mapper, and the models go in and out through the repository
             var db = new TestDatabase(Mocker.Resolve<IDatabase>());
 
-            db.Insert(new LegacyV2Series
+            // LegacyV2Series gained Attempts/LastAttemptAt in migration 307, so the series row goes through explicit columns
+            using (var connection = db.OpenConnection())
             {
-                LegacyId = 7,
-                TpdbSiteId = 70,
-                Title = "Studio",
-                Path = "/media/studio",
-                RootFolderPath = "/media",
-                Monitored = true,
-                MonitorNewItems = 1,
-                QualityProfileId = 2,
-                Tags = "[1]",
-                SeriesType = 0,
-                Added = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
-            });
+                connection.Execute(
+                    "INSERT INTO \"LegacyV2Series\" (\"LegacyId\", \"TpdbSiteId\", \"Title\", \"Path\", \"RootFolderPath\", \"Monitored\", \"MonitorNewItems\", \"QualityProfileId\", \"Tags\", \"SeriesType\", \"Added\") " +
+                    "VALUES (@LegacyId, @TpdbSiteId, @Title, @Path, @RootFolderPath, @Monitored, @MonitorNewItems, @QualityProfileId, @Tags, @SeriesType, @Added)",
+                    new
+                    {
+                        LegacyId = 7,
+                        TpdbSiteId = 70,
+                        Title = "Studio",
+                        Path = "/media/studio",
+                        RootFolderPath = "/media",
+                        Monitored = true,
+                        MonitorNewItems = 1,
+                        QualityProfileId = 2,
+                        Tags = "[1]",
+                        SeriesType = 0,
+                        Added = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+                    });
+            }
 
             db.Insert(new LegacyV2Episode
             {
@@ -68,12 +76,16 @@ namespace NzbDrone.Core.Test.Datastore.Migration
                 Count = 3
             });
 
-            var series = db.Single<LegacyV2Series>();
-            series.LegacyId.Should().Be(7);
-            series.TpdbSiteId.Should().Be(70);
-            series.RootFolderPath.Should().Be("/media");
-            series.Monitored.Should().BeTrue();
-            series.Done.Should().BeFalse();
+            using (var connection = db.OpenConnection())
+            {
+                var series = connection.QuerySingle<(int LegacyId, int TpdbSiteId, string RootFolderPath, bool Monitored, bool Done)>(
+                    "SELECT \"LegacyId\", \"TpdbSiteId\", \"RootFolderPath\", \"Monitored\", \"Done\" FROM \"LegacyV2Series\"");
+                series.LegacyId.Should().Be(7);
+                series.TpdbSiteId.Should().Be(70);
+                series.RootFolderPath.Should().Be("/media");
+                series.Monitored.Should().BeTrue();
+                series.Done.Should().BeFalse();
+            }
 
             var episode = db.Single<LegacyV2Episode>();
             episode.TpdbSceneId.Should().Be(80);

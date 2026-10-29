@@ -229,7 +229,12 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            added.Should().ContainSingle().Which.Should().BeEquivalentTo(new Studio { Monitored = false, MoviesMonitored = false, SearchOnAdd = false });
+
+            // Asserted per property: a whole-object comparison also walks Added, and BasicRepositoryFixture registers a process-wide DateTime rule
+            var seen = added.Should().ContainSingle().Subject;
+            seen.Monitored.Should().BeFalse();
+            seen.MoviesMonitored.Should().BeFalse();
+            seen.SearchOnAdd.Should().BeFalse();
 
             var studio = _studios["site-uuid"];
 
