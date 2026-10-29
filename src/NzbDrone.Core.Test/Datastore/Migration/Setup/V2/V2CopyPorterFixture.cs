@@ -93,7 +93,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
             context.Add(NzbDrone.Core.LegacyMigration.LegacyReportCategory.DroppedToken, "Naming", "StandardSceneFormat", "{Foo}");
             context.Add(NzbDrone.Core.LegacyMigration.LegacyReportCategory.LeftBehind, "Tables", "History", null, 12);
 
-            new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter()).WriteReport(context);
+            NewPorter().WriteReport(context);
 
             var rows = V5.Query("SELECT \"Category\", \"Area\", \"Subject\", \"Detail\", \"Count\" FROM \"LegacyMigrationReportItems\" ORDER BY \"Id\"", transaction: Transaction)
                 .Cast<System.Collections.Generic.IDictionary<string, object>>()
@@ -117,7 +117,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
             InsertV2("Tags", new { Id = 9, Label = "nine" });
 
             var context = OpenContext();
-            new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter()).PortSettings(context);
+            NewPorter().PortSettings(context);
             Commit();
             context.Dispose();
 

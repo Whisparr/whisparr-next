@@ -22,7 +22,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
 
         protected IDbConnection V5 { get; private set; }
 
-        protected IDbTransaction Transaction { get; private set; }
+        protected IDbTransaction Transaction { get; set; }
 
         protected DatabaseType V5Type { get; private set; }
 
@@ -76,9 +76,20 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
             };
 
             Transaction = V5.BeginTransaction();
-            Context = new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter()).Open(install, V5, Transaction, V5Type);
+            Context = NewPorter().Open(install, V5, Transaction, V5Type);
 
             return Context;
+        }
+
+        protected static V2Porter NewPorter()
+        {
+            return new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter(), new V2LibrarySnapshot());
+        }
+
+        // For tests that open the legacy source themselves; the base disposes it.
+        protected void SetContext(V2PortContext context)
+        {
+            Context = context;
         }
 
         protected void Commit()

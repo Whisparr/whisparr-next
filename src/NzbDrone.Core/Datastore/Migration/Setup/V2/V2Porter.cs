@@ -1,4 +1,3 @@
-using System;
 using System.Data;
 using Dapper;
 
@@ -20,12 +19,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
         private readonly V2QualityPorter _qualityPorter;
         private readonly V2ProviderPorter _providerPorter;
 
-        public V2Porter(V2CopyPorter copyPorter, V2ConfigPorter configPorter, V2QualityPorter qualityPorter, V2ProviderPorter providerPorter)
+        private readonly V2LibrarySnapshot _librarySnapshot;
+
+        public V2Porter(V2CopyPorter copyPorter, V2ConfigPorter configPorter, V2QualityPorter qualityPorter, V2ProviderPorter providerPorter, V2LibrarySnapshot librarySnapshot)
         {
             _copyPorter = copyPorter;
             _configPorter = configPorter;
             _qualityPorter = qualityPorter;
             _providerPorter = providerPorter;
+            _librarySnapshot = librarySnapshot;
         }
 
         public V2PortContext Open(LegacyInstall install, IDbConnection v5, IDbTransaction transaction, DatabaseType v5Type)
@@ -54,7 +56,11 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
 
         public V2SnapshotCounts SnapshotLibrary(V2PortContext context)
         {
-            throw new NotImplementedException("The library snapshot is added in a later task.");
+            var counts = _librarySnapshot.Snapshot(context);
+
+            _librarySnapshot.CountLeftBehind(context);
+
+            return counts;
         }
 
         public void WriteReport(V2PortContext context)
