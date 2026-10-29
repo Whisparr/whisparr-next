@@ -52,6 +52,12 @@ namespace NzbDrone.Core.Http
 
         public bool ShouldProxyBeBypassed(HttpProxySettings proxySettings, HttpUri url)
         {
+            return IsBypassed(proxySettings, url);
+        }
+
+        // Static so setup mode, which has no IConfigService, applies the same bypass rules.
+        public static bool IsBypassed(HttpProxySettings proxySettings, HttpUri url)
+        {
             // We are utilizing the WebProxy implementation here to save us having to re-implement it. This way we use Microsofts implementation
             var proxy = new WebProxy(proxySettings.Host + ":" + proxySettings.Port, proxySettings.BypassLocalAddress, proxySettings.BypassListAsArray);
 
