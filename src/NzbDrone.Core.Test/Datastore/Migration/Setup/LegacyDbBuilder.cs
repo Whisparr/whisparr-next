@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
+using System.IO;
 using System.Linq;
 using Dapper;
 using NLog;
+using Npgsql;
+using NUnit.Framework;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Framework;
 
@@ -57,6 +60,42 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             connection.Execute("CREATE TABLE \"Episodes\" (\"Id\" INTEGER PRIMARY KEY, \"SeriesId\" INTEGER, \"Title\" TEXT, \"Monitored\" INTEGER, \"EpisodeFileId\" INTEGER)");
             connection.Execute("CREATE TABLE \"EpisodeFiles\" (\"Id\" INTEGER PRIMARY KEY, \"SeriesId\" INTEGER, \"RelativePath\" TEXT)");
             connection.Execute("CREATE TABLE \"Users\" (\"Id\" INTEGER PRIMARY KEY, \"Identifier\" TEXT, \"Username\" TEXT, \"Password\" TEXT)");
+        }
+
+        // A real v2 database at schema 221, from a fresh run of v2 develop (c55fdc66a).
+        public static void CreateV2SqliteFromDump(string path)
+        {
+            using var connection = OpenSqlite(path);
+
+            connection.Execute(File.ReadAllText(DumpPath("v2-fresh-221.sql")));
+        }
+
+        // The same database on PostgreSQL 16 (pg_dump --inserts). The database must exist and be empty.
+        public static void CreateV2PostgresFromDump(string connectionString)
+        {
+            var lines = File.ReadAllLines(DumpPath("v2-fresh-221.pg.sql")).Where(l => !l.StartsWith('\\'));
+            var builder = new NpgsqlConnectionStringBuilder(connectionString) { Pooling = false };
+
+            using (var connection = new NpgsqlConnection(builder.ConnectionString))
+            {
+                connection.Open();
+                connection.Execute(string.Join("\n", lines));
+            }
+        }
+
+        // Works on either database. Identifiers are quoted, values go in as parameters.
+        public static void InsertV2Row(IDbConnection connection, string table, object values)
+        {
+            var properties = values.GetType().GetProperties();
+            var columns = string.Join(", ", properties.Select(p => $"\"{p.Name}\""));
+            var parameters = string.Join(", ", properties.Select(p => "@" + p.Name));
+
+            connection.Execute($"INSERT INTO \"{table}\" ({columns}) VALUES ({parameters})", values);
+        }
+
+        private static string DumpPath(string name)
+        {
+            return Path.Combine(TestContext.CurrentContext.TestDirectory, "Files", "LegacyV2", name);
         }
 
         public static void InsertSeries(string path, int id)
