@@ -175,6 +175,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             AddMovie(1, Tmdb, MovieItem, 100, "Kept", 2020);
             AddMovie(2, TpdbMovie, MovieItem, 100, "First Twin", 2020);
             AddFile(2, "first.mp4", "f1");
+            _connection.Execute("UPDATE \"Movies\" SET \"Path\" = '/library/movies/Kept (2020)' WHERE \"Id\" = 2");
             AddMovie(3, TpdbMovie, MovieItem, 100, "Second Twin", 2020);
             AddFile(3, "second.mp4", "f2");
 
@@ -295,11 +296,72 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             var result = Resolve(MovieMetadataType.TMDB);
 
             result.Detached.Should().Be(0);
+            result.Seeded.Should().Be(1);
             Count("ImportFiles").Should().Be(0);
 
             var seed = _connection.QuerySingle<SeedRow>("SELECT * FROM \"LegacyMovieSeeds\"");
             seed.ImportFileId.Should().BeNull();
             seed.Title.Should().Be("Fileless");
+        }
+
+        [Test]
+        public void should_count_a_seed_with_a_file_as_seeded_and_detached()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Kept", 2020);
+            AddMovie(2, TpdbMovie, MovieItem, 200, "Lonely", 2018);
+            AddFile(2, "lonely.mp4", "ff");
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Seeded.Should().Be(1);
+            result.Detached.Should().Be(1);
+        }
+
+        [Test]
+        public void should_not_count_a_twin_as_seeded()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Twin", 2020);
+            AddMovie(2, TpdbMovie, MovieItem, 100, "Twin", 2020);
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Seeded.Should().Be(0);
+            result.Merged.Should().Be(1);
+        }
+
+        [Test]
+        public void should_detach_a_twin_file_that_lives_outside_the_kept_rows_folder()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Kept", 2020);
+            AddMovie(2, TpdbMovie, MovieItem, 100, "Other", 2020);
+            AddFile(2, "other.mp4", "gg");
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Merged.Should().Be(0);
+            result.Detached.Should().Be(1);
+            Count("MovieFiles").Should().Be(0);
+            _connection.ExecuteScalar<int>("SELECT \"MovieFileId\" FROM \"Movies\" WHERE \"Id\" = 1").Should().Be(0);
+
+            var import = _connection.QuerySingle<ImportRow>("SELECT * FROM \"ImportFiles\"");
+            import.Path.Should().Be("/library/movies/Other (2020)/other.mp4");
+            import.OsHash.Should().Be("gg");
+            Count("LegacyMovieSeeds").Should().Be(0);
+        }
+
+        [Test]
+        public void should_rewrite_the_relative_path_of_a_twin_file_inside_the_kept_rows_folder()
+        {
+            AddMovie(1, Tmdb, MovieItem, 100, "Twin", 2020);
+            AddMovie(2, TpdbMovie, MovieItem, 100, "Twin", 2020);
+            _connection.Execute("UPDATE \"Movies\" SET \"Path\" = '/library/movies/Twin (2020)/Extras' WHERE \"Id\" = 2");
+            AddFile(2, "twin.mp4", "hh");
+
+            var result = Resolve(MovieMetadataType.TMDB);
+
+            result.Merged.Should().Be(1);
+            result.Detached.Should().Be(0);
+            _connection.QuerySingle<string>("SELECT \"RelativePath\" FROM \"MovieFiles\"").Should().Be("Extras/twin.mp4");
         }
 
         [Test]

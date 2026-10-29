@@ -261,7 +261,7 @@ function SetupApp() {
         choice={activeChoice}
         envTargets={status.envTargets}
         isBusy={isBusy}
-        submitError={submitError}
+        submitError={submitError ?? progress.errorMessage}
         onChange={setChoice}
         onMigrate={handleMigrate}
         onShutDown={handleShutDown}

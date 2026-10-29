@@ -308,6 +308,20 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void should_leave_incomplete_when_a_movie_was_seeded_without_a_file()
+        {
+            _mixed.Seeded = 1;
+
+            var progress = Run();
+
+            _calls.Should().ContainInOrder("resolve", "preflight", "finish");
+            _finishedState.Phase.Should().Be("Phase2Pending");
+            _finishedState.Completed.Should().BeFalse();
+            _finishedState.CompletedAt.Should().BeNull();
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("done");
+        }
+
+        [Test]
         public void should_report_movies_outside_every_root_folder()
         {
             _mixed.Skipped = 2;
@@ -342,10 +356,63 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
         private void AssertNotAvailable(SetupProgress progress)
         {
-            progress.Status.Should().Be(SetupStatus.Failed);
+            // A refusal before anything started leaves the form usable, with the error above it.
+            progress.Status.Should().Be(SetupStatus.Idle);
             progress.ErrorKey.Should().Be("SetupNotAvailableYet");
+            progress.ErrorMessage.Should().NotBeNullOrEmpty();
             progress.CanRetry.Should().BeFalse();
             _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        public void should_accept_a_valid_choice_after_a_refusal()
+        {
+            var service = Service();
+
+            service.Start(new SetupChoice { Kind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
+            service.Start(Choice());
+
+            var progress = Await(service);
+
+            progress.Status.Should().Be(SetupStatus.Restarting);
+            progress.ErrorKey.Should().BeNull();
+            progress.ErrorMessage.Should().BeNull();
+        }
+
+        [Test]
+        public void start_and_retry_should_be_refused_after_the_migration_was_committed()
+        {
+            _runState.Setup(r => r.Complete()).Throws(new IOException("sidecar is locked"));
+
+            var service = Service();
+
+            Run(service).Status.Should().Be(SetupStatus.Failed);
+
+            service.Start(Choice());
+            service.Retry();
+
+            var progress = Await(service);
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.CanRetry.Should().BeFalse();
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Once);
+            _runState.Verify(r => r.DiscardIfPresent(), Times.Never);
+        }
+
+        [Test]
+        public void should_keep_an_existing_pre_setup_copy_of_config5()
+        {
+            _seededConfig5 = false;
+            File.WriteAllText(Path.Combine(_appData, "config5.xml"), "<Config>half-restored</Config>");
+
+            var copyPath = Path.Combine(_appData, "config5.xml.pre-v5-setup");
+
+            File.WriteAllText(copyPath, "<Config>users</Config>");
+
+            Run();
+
+            File.ReadAllText(copyPath).Should().Be("<Config>users</Config>");
+            _runState.Verify(r => r.RecordConfig5Backup(copyPath), Times.Once);
         }
 
         [Test]
@@ -355,7 +422,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var progress = Run();
 
-            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.Status.Should().Be(SetupStatus.Idle);
             progress.ErrorKey.Should().Be("Unexpected");
             _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
         }
@@ -367,7 +434,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
 
             var progress = Run();
 
-            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.Status.Should().Be(SetupStatus.Idle);
             progress.ErrorKey.Should().Be("Unexpected");
             _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
         }

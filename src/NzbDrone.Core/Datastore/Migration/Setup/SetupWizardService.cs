@@ -53,6 +53,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private readonly object _sync = new();
         private SetupProgress _progress = NewProgress();
         private SetupChoice _lastChoice;
+        private bool _committed;
 
         public SetupWizardService(
             ISetupModeState setupModeState,
@@ -110,7 +111,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             lock (_sync)
             {
                 // Succeeded and Restarting are final, and a pending env switch starts out as Succeeded.
-                if (_progress.Status is not (SetupStatus.Idle or SetupStatus.Failed))
+                // After a post-commit failure the v5 database is in place, so a second run would only undo it.
+                if (_committed || _progress.Status is not (SetupStatus.Idle or SetupStatus.Failed))
                 {
                     return;
                 }
@@ -122,7 +124,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 if (refusal != null)
                 {
-                    _progress.Status = SetupStatus.Failed;
+                    // Nothing has started, so the form stays usable with the error above it.
+                    _progress.Status = SetupStatus.Idle;
                     _progress.ErrorKey = refusal.Value.Key;
                     _progress.ErrorMessage = refusal.Value.Message;
                     _logger.Warn("Setup refused: {0}", refusal.Value.Message);
@@ -142,7 +145,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             lock (_sync)
             {
-                if (_progress.Status != SetupStatus.Failed || !_progress.CanRetry || _lastChoice == null)
+                if (_committed || _progress.Status != SetupStatus.Failed || !_progress.CanRetry || _lastChoice == null)
                 {
                     return;
                 }
@@ -221,7 +224,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     // The user's own file is about to be overwritten, so keep it until the run is complete.
                     var copy = config5Path + ".pre-v5-setup";
 
-                    File.Copy(config5Path, copy, true);
+                    // A retry after a failed restore finds the half-restored file here, and the copy is the real original.
+                    if (!File.Exists(copy))
+                    {
+                        File.Copy(config5Path, copy);
+                    }
+
                     _runState.RecordConfig5Backup(copy);
                 }
 
@@ -252,7 +260,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 current = SetupStep.SkyhookPreflight;
 
-                if (mixed.Detached == 0)
+                if (!mixed.NeedsPhase2)
                 {
                     SetStep(current, SetupStepState.Skipped);
                 }
@@ -293,6 +301,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 lock (_sync)
                 {
+                    _committed = true;
                     _progress.Status = SetupStatus.Failed;
                     _progress.ErrorKey = SetupErrorKey.Unexpected;
                     _progress.CanRetry = false;
@@ -327,7 +336,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         // One transaction: the locked sources, the renaming switch and the state row land together or not at all.
         private void FinishDatabase(BuiltDatabases built, SetupChoice choice, LegacyInstall install, MixedMovieResult mixed, string backupPath, DateTime startedAt)
         {
-            var detached = mixed.Detached > 0;
+            var detached = mixed.NeedsPhase2;
 
             var state = new LegacyMigrationState
             {

@@ -13,6 +13,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public int Merged { get; set; }
         public int Detached { get; set; }
 
+        // Movies with no twin that became a LegacyMovieSeeds row, with or without a file
+        public int Seeded { get; set; }
+
+        // Phase 2 re-identifies every detached file and every seed
+        public bool NeedsPhase2 => Detached > 0 || Seeded > 0;
+
         // Other-source movies outside every root folder: left untouched
         public int Skipped { get; set; }
         public List<string> SkippedPaths { get; } = new();
@@ -71,11 +77,11 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 var twin = other.TmdbId.GetValueOrDefault() > 0 && keptByTmdb.TryGetValue(other.TmdbId.Value, out var found) ? found : null;
                 var root = other.Path == null ? null : FindRoot(roots, other.Path);
-                var movesOntoTwin = twin != null && (other.MovieFileId == 0 || twin.MovieFileId == 0);
+                var move = PlanMove(v5Connection, transaction, other, twin);
 
                 // A detached file needs a root folder to hang off, and a seed needs one for its path. Without it the
                 // row is left exactly as it is, for the migration report.
-                if (other.Path == null || (root == null && !movesOntoTwin))
+                if (other.Path == null || (root == null && !move.OntoTwin))
                 {
                     result.Skipped++;
                     result.SkippedPaths.Add(other.Path ?? $"Movie {other.MovieId}");
@@ -83,7 +89,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     continue;
                 }
 
-                ResolveOther(v5Connection, transaction, result, other, twin, root, movesOntoTwin);
+                ResolveOther(v5Connection, transaction, result, other, twin, root, move);
                 DeleteMovie(v5Connection, transaction, other);
             }
 
@@ -91,15 +97,39 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         }
 
         // Merged counts twins whose file moved onto the kept row or that had none; a detached file counts as Detached.
-        private static void ResolveOther(IDbConnection connection, IDbTransaction transaction, MixedMovieResult result, MovieRow other, MovieRow twin, RootRow root, bool movesOntoTwin)
+        // Whether the row merges into its twin, and the path its file gets there.
+        private static (bool OntoTwin, string RelativePath) PlanMove(IDbConnection connection, IDbTransaction transaction, MovieRow other, MovieRow twin)
         {
-            if (movesOntoTwin)
+            if (twin == null || other.Path == null)
+            {
+                return (false, null);
+            }
+
+            if (other.MovieFileId == 0)
+            {
+                return (true, null);
+            }
+
+            if (twin.MovieFileId != 0)
+            {
+                return (false, null);
+            }
+
+            // A file is only linked to the kept row if it lives under that row's folder.
+            var relativePath = RelativeToTwin(connection, transaction, other, twin);
+
+            return (relativePath != null, relativePath);
+        }
+
+        private static void ResolveOther(IDbConnection connection, IDbTransaction transaction, MixedMovieResult result, MovieRow other, MovieRow twin, RootRow root, (bool OntoTwin, string RelativePath) move)
+        {
+            if (move.OntoTwin)
             {
                 result.Merged++;
 
                 if (other.MovieFileId > 0)
                 {
-                    MoveFile(connection, transaction, other, twin);
+                    MoveFile(connection, transaction, other, twin, move.RelativePath);
                 }
 
                 return;
@@ -114,13 +144,43 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             if (twin == null)
             {
+                result.Seeded++;
                 InsertSeed(connection, transaction, root, other, importFileId);
             }
         }
 
-        private static void MoveFile(IDbConnection connection, IDbTransaction transaction, MovieRow from, MovieRow to)
+        // The file's path relative to the kept row's folder, or null when it is not under it (or has no row).
+        private static string RelativeToTwin(IDbConnection connection, IDbTransaction transaction, MovieRow other, MovieRow twin)
         {
-            connection.Execute("UPDATE \"MovieFiles\" SET \"MovieId\" = @movieId WHERE \"Id\" = @fileId", new { movieId = to.MovieId, fileId = from.MovieFileId }, transaction);
+            if (twin.Path == null)
+            {
+                return null;
+            }
+
+            var relative = connection.QuerySingleOrDefault<string>(
+                "SELECT \"RelativePath\" FROM \"MovieFiles\" WHERE \"Id\" = @id",
+                new { id = other.MovieFileId },
+                transaction);
+
+            if (relative == null)
+            {
+                return null;
+            }
+
+            var absolute = Join(other.Path, relative);
+            var twinPath = TrimEnd(twin.Path);
+
+            if (absolute.Length <= twinPath.Length || !IsUnder(twinPath, absolute))
+            {
+                return null;
+            }
+
+            return absolute[twinPath.Length..].TrimStart('/', '\\');
+        }
+
+        private static void MoveFile(IDbConnection connection, IDbTransaction transaction, MovieRow from, MovieRow to, string relativePath)
+        {
+            connection.Execute("UPDATE \"MovieFiles\" SET \"MovieId\" = @movieId, \"RelativePath\" = @relativePath WHERE \"Id\" = @fileId", new { movieId = to.MovieId, relativePath, fileId = from.MovieFileId }, transaction);
             connection.Execute("UPDATE \"Movies\" SET \"MovieFileId\" = @fileId WHERE \"Id\" = @movieId", new { movieId = to.MovieId, fileId = from.MovieFileId }, transaction);
 
             to.MovieFileId = from.MovieFileId;
