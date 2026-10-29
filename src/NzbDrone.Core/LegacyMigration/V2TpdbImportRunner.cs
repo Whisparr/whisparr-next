@@ -259,9 +259,15 @@ namespace NzbDrone.Core.LegacyMigration
 
                     if (others.Count > 0)
                     {
-                        var titles = string.Join(", ", others.Select(e => e.Title));
+                        var unlinked = others.Where(e => e.TpdbSceneId <= 0 || !sceneUuids.ContainsKey(e.TpdbSceneId)).ToList();
+                        var detail = $"Multi-scene file linked to {target.Title}; also v2 scenes: {string.Join(", ", others.Select(e => e.Title))}";
 
-                        _migrationService.Report(LegacyReportCategory.NeedsAttention, FileArea, file.Path, $"Multi-scene file linked to {target.Title}; also v2 scenes: {titles}");
+                        if (unlinked.Count > 0)
+                        {
+                            detail += $"; skipped without a TPDB scene link: {string.Join(", ", unlinked.Select(e => e.Title))}";
+                        }
+
+                        _migrationService.Report(LegacyReportCategory.NeedsAttention, FileArea, file.Path, detail);
                     }
                 }
             }
@@ -328,16 +334,23 @@ namespace NzbDrone.Core.LegacyMigration
 
         private void ParkOrphanFiles(List<LegacyV2EpisodeFile> pendingFiles, List<LegacyV2Series> allSeries, ILegacyImportProgress progress)
         {
-            var knownSeries = allSeries.Select(s => s.LegacyId).ToHashSet();
+            var knownSeries = allSeries.ToDictionary(s => s.LegacyId);
 
             // An orphan has no profile of its own, so it borrows the first series' one
-            var qualityProfileId = allSeries.OrderBy(s => s.LegacyId).FirstOrDefault()?.QualityProfileId ?? 0;
+            var fallbackProfileId = allSeries.OrderBy(s => s.LegacyId).FirstOrDefault()?.QualityProfileId ?? 0;
 
-            foreach (var file in pendingFiles.Where(f => !f.Done && !knownSeries.Contains(f.LegacySeriesId)))
+            // A file still not done here has no series left to process it: its series is missing, or finished without it
+            foreach (var file in pendingFiles.Where(f => !f.Done && (!knownSeries.TryGetValue(f.LegacySeriesId, out var owner) || owner.Done)))
             {
+                var hasSeries = knownSeries.TryGetValue(file.LegacySeriesId, out var series);
+
                 try
                 {
-                    _fileLinker.Park(file.Path, qualityProfileId, FileArea, "No series in v2");
+                    _fileLinker.Park(
+                        file.Path,
+                        hasSeries ? series.QualityProfileId : fallbackProfileId,
+                        FileArea,
+                        hasSeries ? "Series finished without this file" : "No series in v2");
                 }
                 catch (Exception ex)
                 {

@@ -462,14 +462,76 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             var series = GivenSeries(1, 11, "site-uuid");
             var file = GivenFile(5, series);
+            GivenEpisode(3, series, 103, "scene-3", fileId: 5);
             GivenEpisode(2, series, 102, "scene-2", fileId: 5);
-            GivenEpisode(1, series, 101, "scene-1", fileId: 5);
+            GivenEpisode(1, series, 0, null, fileId: 5);
 
             Run();
 
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "scene-1"), file.Path, It.IsAny<Action<MovieFile>>()), Times.Once());
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "scene-2"), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Never());
-            VerifyReport(LegacyReportCategory.NeedsAttention, "Files", file.Path, "Multi-scene file linked to Scene 1; also v2 scenes: Scene 2", Times.Once());
+            // Scene 1 comes first but has no TPDB link, so the file goes to Scene 2 and the report says why
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "scene-2"), file.Path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "scene-3"), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Never());
+            VerifyReport(LegacyReportCategory.NeedsAttention, "Files", file.Path, "Multi-scene file linked to Scene 2; also v2 scenes: Scene 1, Scene 3; skipped without a TPDB scene link: Scene 1", Times.Once());
+        }
+
+        [Test]
+        public void rerun_mid_series_reuses_studio_and_scenes_and_stays_quiet_for_linked_files()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", monitored: false, monitorNewItems: 1);
+            var doneFile = GivenFile(1, series);
+            var linkedA = GivenFile(2, series);
+            var linkedB = GivenFile(3, series);
+            GivenEpisode(1, series, 101, "scene-1", fileId: 1);
+            GivenEpisode(2, series, 102, "scene-2", fileId: 2);
+            GivenEpisode(3, series, 103, "scene-3", fileId: 3);
+
+            // What the killed run left behind: the studio, every scene, and the first file done
+            _studios["site-uuid"] = new Studio { ForeignId = "site-uuid", Monitored = false };
+            _movies["scene-1"] = new Movie { Id = 1, ForeignId = "scene-1" };
+            _movies["scene-2"] = new Movie { Id = 2, ForeignId = "scene-2" };
+            _movies["scene-3"] = new Movie { Id = 3, ForeignId = "scene-3" };
+            doneFile.Done = true;
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()))
+                  .Returns(LinkOutcome.AlreadyLinked);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), doneFile.Path, It.IsAny<Action<MovieFile>>()), Times.Never());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), linkedA.Path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), linkedB.Path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+
+            series.Done.Should().BeTrue();
+            _files.Should().OnlyContain(f => f.Done);
+            _episodes.Should().OnlyContain(e => e.Done);
+
+            var studio = _studios["site-uuid"];
+
+            studio.Monitored.Should().BeFalse();
+            studio.WhisparrMonitorNewItems.Should().BeFalse();
+            studio.SearchOnAdd.Should().BeFalse();
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(studio), Times.Once());
+        }
+
+        [Test]
+        public void file_left_undone_by_a_finished_series_is_parked()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            var stray = GivenFile(5, series);
+
+            series.Done = true;
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            stray.Done.Should().BeTrue();
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(stray.Path, 4, "Files", "Series finished without this file"), Times.Once());
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(It.IsAny<TpdbIdKind>(), It.IsAny<IReadOnlyCollection<int>>()), Times.Never());
         }
 
         [Test]
