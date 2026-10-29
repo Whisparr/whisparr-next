@@ -8,8 +8,8 @@ export type MigrationReportCategory =
 export interface MigrationReportItem {
   category: MigrationReportCategory;
   area: string;
-  subject: string;
-  detail: string;
+  subject: string | null;
+  detail: string | null;
   count: number;
 }
 

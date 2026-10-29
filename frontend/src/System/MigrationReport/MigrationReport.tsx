@@ -75,8 +75,8 @@ const columns: Column[] = [
 const CSV_HEADER = ['Category', 'Area', 'Subject', 'Detail', 'Count'];
 
 // RFC 4180: quote a field holding a comma, quote or line break, doubling quotes.
-function escapeCsvField(value: string | number) {
-  const text = String(value);
+function escapeCsvField(value: string | number | null) {
+  const text = value === null ? '' : String(value);
 
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
@@ -121,9 +121,54 @@ function getSummary(report: MigrationReportModel) {
   });
 }
 
+interface CategorySectionProps {
+  category: MigrationReportCategory;
+  title: string;
+  items: MigrationReportItem[];
+}
+
+// An empty category is hidden.
+function CategorySection({
+  category,
+  title,
+  items,
+}: Readonly<CategorySectionProps>) {
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <section>
+      <h3>{title}</h3>
+
+      {category === 'UnmatchedFile' ? (
+        <p>
+          <Link to="/add/import">
+            {translate('MigrationReportManualImport')}
+          </Link>
+        </p>
+      ) : null}
+
+      <Table columns={columns}>
+        <TableBody>
+          {items.map((item, index) => (
+            <TableRow key={`${item.area}-${item.subject}-${index}`}>
+              <TableRowCell>{item.area}</TableRowCell>
+              <TableRowCell>{item.subject}</TableRowCell>
+              <TableRowCell>{item.detail}</TableRowCell>
+              <TableRowCell>{item.count}</TableRowCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </section>
+  );
+}
+
 function MigrationReport() {
   const { data: report, hasReport, isLoading } = useMigrationReport();
-  const { dismissReport, isDismissing } = useDismissMigrationReport();
+  const { dismissReport, isDismissing, dismissError } =
+    useDismissMigrationReport();
   const { longDateFormat, timeFormat, timeZone } = useUiSettingsValues();
 
   const items = useMemo(() => report?.items ?? [], [report]);
@@ -143,6 +188,10 @@ function MigrationReport() {
     <PageContent title={translate('MigrationReport')}>
       <PageContentBody>
         {isLoading ? <LoadingIndicator /> : null}
+
+        {!isLoading && !hasReport ? (
+          <Alert kind={kinds.INFO}>{translate('MigrationReportNone')}</Alert>
+        ) : null}
 
         {!isLoading && report && hasReport ? (
           <>
@@ -185,40 +234,24 @@ function MigrationReport() {
               </SpinnerButton>
             </div>
 
+            {dismissError ? (
+              <Alert kind={kinds.DANGER}>
+                {dismissError.statusBody?.message ?? dismissError.message}
+              </Alert>
+            ) : null}
+
             {CATEGORIES.map(({ category, title }) => {
               const categoryItems = items.filter(
                 (item) => item.category === category
               );
 
-              if (!categoryItems.length) {
-                return null;
-              }
-
               return (
-                <section key={category}>
-                  <h3>{title()}</h3>
-
-                  {category === 'UnmatchedFile' ? (
-                    <p>
-                      <Link to="/add/import">
-                        {translate('MigrationReportManualImport')}
-                      </Link>
-                    </p>
-                  ) : null}
-
-                  <Table columns={columns}>
-                    <TableBody>
-                      {categoryItems.map((item, index) => (
-                        <TableRow key={`${item.area}-${item.subject}-${index}`}>
-                          <TableRowCell>{item.area}</TableRowCell>
-                          <TableRowCell>{item.subject}</TableRowCell>
-                          <TableRowCell>{item.detail}</TableRowCell>
-                          <TableRowCell>{item.count}</TableRowCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </section>
+                <CategorySection
+                  key={category}
+                  category={category}
+                  title={title()}
+                  items={categoryItems}
+                />
               );
             })}
           </>
