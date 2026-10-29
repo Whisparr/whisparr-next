@@ -1,0 +1,212 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Text.Json;
+using NLog;
+using NzbDrone.Common.Disk;
+using NzbDrone.Common.Http;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.Movies;
+using NzbDrone.Core.Parser;
+using NzbDrone.Core.RootFolders;
+
+namespace NzbDrone.Core.LegacyMigration
+{
+    // Re-identifies the Eros movies that had no twin in the chosen metadata source and links their parked files
+    public class ErosSeedImportRunner : ILegacyImportRunner
+    {
+        private const string Area = "Movies";
+
+        private readonly ILegacyMovieSeedRepository _seedRepository;
+        private readonly ISearchForNewMovie _searchForNewMovie;
+        private readonly IAddMovieService _addMovieService;
+        private readonly IMovieService _movieService;
+        private readonly IImportlFileService _importFileService;
+        private readonly ILegacyFileLinker _fileLinker;
+        private readonly ILegacyMigrationService _migrationService;
+        private readonly IDiskProvider _diskProvider;
+        private readonly Logger _logger;
+
+        public ErosSeedImportRunner(ILegacyMovieSeedRepository seedRepository,
+                                    ISearchForNewMovie searchForNewMovie,
+                                    IAddMovieService addMovieService,
+                                    IMovieService movieService,
+                                    IImportlFileService importFileService,
+                                    ILegacyFileLinker fileLinker,
+                                    ILegacyMigrationService migrationService,
+                                    IDiskProvider diskProvider,
+                                    Logger logger)
+        {
+            _seedRepository = seedRepository;
+            _searchForNewMovie = searchForNewMovie;
+            _addMovieService = addMovieService;
+            _movieService = movieService;
+            _importFileService = importFileService;
+            _fileLinker = fileLinker;
+            _migrationService = migrationService;
+            _diskProvider = diskProvider;
+            _logger = logger;
+        }
+
+        public bool Handles(LegacyMigrationState state)
+        {
+            return state.SourceKind == LegacyKind.Eros;
+        }
+
+        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress)
+        {
+            var seeds = _seedRepository.All().ToList();
+
+            // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
+            progress.Total(seeds.Count);
+
+            var alreadyResolved = seeds.Count(s => s.Resolved);
+
+            if (alreadyResolved > 0)
+            {
+                progress.Advance(Area, alreadyResolved);
+            }
+
+            var pass = new LegacyImportPass();
+
+            foreach (var seed in seeds.Where(s => !s.Resolved))
+            {
+                try
+                {
+                    Resolve(state, seed);
+                    progress.Advance(Area);
+                }
+                catch (Exception ex) when (ex is HttpException || ex is WebException || ex is TimeoutException)
+                {
+                    _logger.Warn(ex, "Could not re-identify {0} ({1}), will retry", seed.Title, seed.Year);
+
+                    if (RecordFailure(seed, ex))
+                    {
+                        progress.Advance(Area);
+                        continue;
+                    }
+
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                    pass.NextAttempt = pass.NextAttempt == 0 ? seed.Attempts : Math.Min(pass.NextAttempt, seed.Attempts);
+                }
+            }
+
+            return pass;
+        }
+
+        private void Resolve(LegacyMigrationState state, LegacyMovieSeed seed)
+        {
+            var candidate = Find(state, seed);
+
+            if (candidate == null)
+            {
+                ReportUnmatched(seed);
+                MarkResolved(seed);
+
+                return;
+            }
+
+            var movie = _movieService.FindByForeignId(candidate.ForeignId);
+
+            if (movie == null)
+            {
+                candidate.Monitored = seed.Monitored;
+                candidate.QualityProfileId = seed.QualityProfileId;
+                candidate.RootFolderPath = seed.RootFolderPath;
+                candidate.Tags = ParseTags(seed.Tags);
+                candidate.AddOptions = new AddMovieOptions { SearchForMovie = false };
+
+                movie = _addMovieService.AddMovie(candidate);
+            }
+
+            if (seed.ImportFileId.HasValue)
+            {
+                LinkImportFile(seed, movie);
+            }
+
+            MarkResolved(seed);
+        }
+
+        private Movie Find(LegacyMigrationState state, LegacyMovieSeed seed)
+        {
+            if (state.MovieSource == MovieMetadataType.TMDB && seed.TmdbId > 0)
+            {
+                var byId = _searchForNewMovie.SearchForNewMovie($"tmdb:{seed.TmdbId}")
+                    .Where(m => m.TmdbId == seed.TmdbId)
+                    .ToList();
+
+                return byId.Count == 1 ? byId[0] : null;
+            }
+
+            var cleanTitle = seed.Title.CleanMovieTitle();
+            var byTitle = _searchForNewMovie.SearchForNewMovie($"{seed.Title} {seed.Year}")
+                .Where(m => m.Title.CleanMovieTitle() == cleanTitle && m.Year == seed.Year)
+                .ToList();
+
+            return byTitle.Count == 1 ? byTitle[0] : null;
+        }
+
+        private void LinkImportFile(LegacyMovieSeed seed, Movie movie)
+        {
+            var importFile = _importFileService.Get(seed.ImportFileId.Value);
+            var outcome = _fileLinker.Link(movie, importFile.Path, file =>
+            {
+                file.Size = _diskProvider.GetFileSize(importFile.Path);
+                file.DateAdded = DateTime.UtcNow;
+            });
+
+            if (outcome == LinkOutcome.Linked || outcome == LinkOutcome.AlreadyLinked)
+            {
+                _importFileService.Remove(importFile.Id);
+
+                return;
+            }
+
+            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, $"File could not be linked: {outcome}");
+        }
+
+        private void ReportUnmatched(LegacyMovieSeed seed)
+        {
+            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", seed.LegacyForeignId);
+        }
+
+        private void MarkResolved(LegacyMovieSeed seed)
+        {
+            seed.Resolved = true;
+            _seedRepository.Update(seed);
+        }
+
+        // Returns true when the seed was given up on
+        private bool RecordFailure(LegacyMovieSeed seed, Exception ex)
+        {
+            seed.Attempts++;
+            seed.LastAttemptAt = DateTime.UtcNow;
+
+            var giveUp = LegacyRetryPolicy.ShouldGiveUp(seed.Attempts);
+
+            if (giveUp)
+            {
+                seed.Resolved = true;
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", $"{seed.LegacyForeignId}: {ex.Message}");
+            }
+
+            _seedRepository.Update(seed);
+
+            return giveUp;
+        }
+
+        private static HashSet<int> ParseTags(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return new HashSet<int>();
+            }
+
+            return JsonSerializer.Deserialize<HashSet<int>>(json) ?? new HashSet<int>();
+        }
+    }
+}
