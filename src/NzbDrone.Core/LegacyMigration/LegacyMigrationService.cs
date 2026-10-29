@@ -98,6 +98,8 @@ namespace NzbDrone.Core.LegacyMigration
 
             state.ReportDismissed = true;
             _stateRepository.Update(state);
+
+            _eventAggregator.PublishEvent(new LegacyMigrationReportDismissedEvent());
         }
 
         public void Report(LegacyReportCategory category, string area, string subject, string detail, int count = 1)

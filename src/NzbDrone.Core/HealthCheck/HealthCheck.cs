@@ -87,6 +87,8 @@ namespace NzbDrone.Core.HealthCheck
         IndexerSearchNoInteractive,
         IndexerStatusAllUnavailable,
         IndexerStatusUnavailable,
+        LegacyMigrationInProgress,
+        LegacyMigrationReport,
         MetadataUrlMismatch,
         MinimumApiKeyLength,
         MountMovies,

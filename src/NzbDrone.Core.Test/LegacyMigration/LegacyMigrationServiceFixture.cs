@@ -100,6 +100,17 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void dismiss_report_publishes_event()
+        {
+            GivenState();
+
+            Subject.DismissReport();
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(e => e.PublishEvent(It.IsAny<LegacyMigrationReportDismissedEvent>()), Times.Once());
+        }
+
+        [Test]
         public void report_appends_item_with_count_default_1()
         {
             Subject.Report(LegacyReportCategory.NeedsAttention, "Series", "Studio", "No match");

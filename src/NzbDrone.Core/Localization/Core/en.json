@@ -1166,6 +1166,8 @@
   "LastUsed": "Last Used",
   "LastWriteTime": "Last Write Time",
   "LaunchBrowserHelpText": " Open a web browser and navigate to the {appName} homepage on app start.",
+  "LegacyMigrationInProgressHealthCheckMessage": "Library migration in progress, see System → Tasks. Searches and other metadata requests are slower until it finishes.",
+  "LegacyMigrationReportHealthCheckMessage": "Library migration finished. Review the migration report for anything that didn't carry over.",
   "Letterboxd": "Letterboxd",
   "Level": "Level",
   "LibrarySearchHint": "Type in the header search and press Enter to see every match in your library",
