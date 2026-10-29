@@ -76,7 +76,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
             };
 
             Transaction = V5.BeginTransaction();
-            Context = new V2Porter(new V2CopyPorter(), new V2ConfigPorter()).Open(install, V5, Transaction, V5Type);
+            Context = new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter()).Open(install, V5, Transaction, V5Type);
 
             return Context;
         }
