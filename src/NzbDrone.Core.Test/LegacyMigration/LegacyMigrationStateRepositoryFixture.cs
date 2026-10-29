@@ -1,7 +1,11 @@
 using System;
+using System.Linq;
+using Dapper;
 using FluentAssertions;
+using Npgsql;
 using NUnit.Framework;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Test.Framework;
@@ -38,6 +42,24 @@ namespace NzbDrone.Core.Test.LegacyMigration
             current.Completed.Should().BeFalse();
             current.StartedAt.Should().NotBeNull();
             current.CompletedAt.Should().BeNull();
+        }
+
+        [Test]
+        public void migration_305_should_store_the_hash_timestamps_as_timestamptz_on_postgres()
+        {
+            using var connection = Mocker.Resolve<IMainDatabase>().OpenConnection();
+
+            if (connection is not NpgsqlConnection)
+            {
+                Assert.Ignore("PostgreSQL only: SQLite stores both timestamp types as DATETIME");
+            }
+
+            var types = connection.Query<string>(
+                "SELECT data_type FROM information_schema.columns WHERE table_name IN ('MovieFiles', 'ImportFiles', 'LostMovieFiles') " +
+                "AND column_name IN ('PHashAttemptedAt', 'HashedFileModifiedAt', 'CandidatesCheckedAt', 'LostAt')").ToList();
+
+            types.Should().HaveCount(6);
+            types.Should().OnlyContain(t => t == "timestamp with time zone");
         }
     }
 }

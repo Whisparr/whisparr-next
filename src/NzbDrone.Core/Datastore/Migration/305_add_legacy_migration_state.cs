@@ -13,12 +13,13 @@ namespace NzbDrone.Core.Datastore.Migration
             // MovieFiles json_extract index, so only PostgreSQL is altered.
             var postgres = IfDatabase(ProcessorIdConstants.PostgreSQL);
 
-            postgres.Alter.Table("MovieFiles").AlterColumn("PHashAttemptedAt").AsDateTimeOffset().Nullable();
-            postgres.Alter.Table("MovieFiles").AlterColumn("HashedFileModifiedAt").AsDateTimeOffset().Nullable();
-            postgres.Alter.Table("ImportFiles").AlterColumn("PHashAttemptedAt").AsDateTimeOffset().Nullable();
-            postgres.Alter.Table("ImportFiles").AlterColumn("HashedFileModifiedAt").AsDateTimeOffset().Nullable();
-            postgres.Alter.Table("ImportFiles").AlterColumn("CandidatesCheckedAt").AsDateTimeOffset().Nullable();
-            postgres.Alter.Table("LostMovieFiles").AlterColumn("LostAt").AsDateTimeOffset().NotNullable();
+            // The existing values were written as UTC, so they are converted as UTC whatever the server's time zone is.
+            postgres.Execute.Sql("ALTER TABLE \"MovieFiles\" ALTER COLUMN \"PHashAttemptedAt\" TYPE timestamptz USING \"PHashAttemptedAt\" AT TIME ZONE 'UTC'");
+            postgres.Execute.Sql("ALTER TABLE \"MovieFiles\" ALTER COLUMN \"HashedFileModifiedAt\" TYPE timestamptz USING \"HashedFileModifiedAt\" AT TIME ZONE 'UTC'");
+            postgres.Execute.Sql("ALTER TABLE \"ImportFiles\" ALTER COLUMN \"PHashAttemptedAt\" TYPE timestamptz USING \"PHashAttemptedAt\" AT TIME ZONE 'UTC'");
+            postgres.Execute.Sql("ALTER TABLE \"ImportFiles\" ALTER COLUMN \"HashedFileModifiedAt\" TYPE timestamptz USING \"HashedFileModifiedAt\" AT TIME ZONE 'UTC'");
+            postgres.Execute.Sql("ALTER TABLE \"ImportFiles\" ALTER COLUMN \"CandidatesCheckedAt\" TYPE timestamptz USING \"CandidatesCheckedAt\" AT TIME ZONE 'UTC'");
+            postgres.Execute.Sql("ALTER TABLE \"LostMovieFiles\" ALTER COLUMN \"LostAt\" TYPE timestamptz USING \"LostAt\" AT TIME ZONE 'UTC'");
 
             Create.TableForModel("LegacyMigrationState")
                   .WithColumn("SourceKind").AsInt32().NotNullable()
