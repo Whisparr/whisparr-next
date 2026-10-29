@@ -22,5 +22,7 @@ namespace NzbDrone.Core.LegacyMigration
         public int SeriesType { get; set; }
         public DateTime? Added { get; set; }
         public bool Done { get; set; }
+        public int Attempts { get; set; }
+        public DateTime? LastAttemptAt { get; set; }
     }
 }

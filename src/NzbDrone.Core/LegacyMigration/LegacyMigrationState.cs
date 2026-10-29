@@ -19,5 +19,6 @@ namespace NzbDrone.Core.LegacyMigration
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public string BackupPath { get; set; }
+        public bool ReportDismissed { get; set; }
     }
 }

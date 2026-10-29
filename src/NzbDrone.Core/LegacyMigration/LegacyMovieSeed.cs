@@ -1,3 +1,4 @@
+using System;
 using NzbDrone.Core.Datastore;
 
 namespace NzbDrone.Core.LegacyMigration
@@ -19,5 +20,7 @@ namespace NzbDrone.Core.LegacyMigration
         public string Tags { get; set; }
         public int? ImportFileId { get; set; }
         public bool Resolved { get; set; }
+        public int Attempts { get; set; }
+        public DateTime? LastAttemptAt { get; set; }
     }
 }
