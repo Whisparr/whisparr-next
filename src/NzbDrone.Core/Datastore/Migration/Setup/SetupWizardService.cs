@@ -202,15 +202,45 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return null;
         }
 
+        // Whether the run will need Skyhook, from what is known before anything is written. A v2 install resolves its
+        // studios there, and an Eros one needs it for a scene source change or for movies that carry both ids.
+        internal static bool NeedsSkyhook(SetupChoice choice, LegacyInstall install)
+        {
+            if (install.Kind == LegacyKind.V2)
+            {
+                return install.Studios > 0;
+            }
+
+            if (choice.SceneSource != install.PreviousSceneSource)
+            {
+                return true;
+            }
+
+            return install.HasMixedMovies;
+        }
+
         private void Run(SetupChoice choice, LegacyInstall install)
         {
-            var current = SetupStep.Backup;
+            var current = SetupStep.SkyhookPreflight;
             var sidecarBegun = false;
             var committed = false;
             var startedAt = DateTime.UtcNow;
 
             try
             {
+                // First, so an unreachable metadata service stops the run before anything is backed up or written.
+                if (NeedsSkyhook(choice, install))
+                {
+                    SetStep(current, SetupStepState.Running);
+                    _skyhookPreflight.Check();
+                    SetStep(current, SetupStepState.Done);
+                }
+                else
+                {
+                    SetStep(current, SetupStepState.Skipped);
+                }
+
+                current = SetupStep.Backup;
                 SetStep(current, SetupStepState.Running);
 
                 var backupPath = _backupService.Backup(install, _setupModeState.Detection.LegacyConfigPath);
@@ -290,19 +320,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     SetStep(current, SetupStepState.Done);
 
                     needsPhase2 = mixed.NeedsPhase2;
-                }
-
-                current = SetupStep.SkyhookPreflight;
-
-                if (!needsPhase2)
-                {
-                    SetStep(current, SetupStepState.Skipped);
-                }
-                else
-                {
-                    SetStep(current, SetupStepState.Running);
-                    _skyhookPreflight.Check();
-                    SetStep(current, SetupStepState.Done);
                 }
 
                 current = SetupStep.LockSources;

@@ -4,6 +4,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 {
     public enum SetupStep
     {
+        SkyhookPreflight,
         Backup,
         SeedConfig,
         CreateDatabase,
@@ -11,7 +12,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         PortSettings,
         SnapshotLibrary,
         MixedMovies,
-        SkyhookPreflight,
         LockSources,
         Finish
     }

@@ -295,15 +295,6 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void should_skip_preflight_without_detached_movies()
-        {
-            var progress = Run();
-
-            _preflight.Verify(p => p.Check(), Times.Never);
-            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("skipped");
-        }
-
-        [Test]
         public void should_mark_completed_without_detached_movies()
         {
             Run();
@@ -319,11 +310,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         [Test]
         public void should_leave_incomplete_with_detached_movies()
         {
+            _install.HasMixedMovies = true;
             _mixed.Detached = 2;
 
             var progress = Run();
 
-            _calls.Should().ContainInOrder("resolve", "preflight", "finish");
+            _calls.Should().ContainInOrder("preflight", "backup", "resolve", "finish");
             _finishedState.Phase.Should().Be("Phase2Pending");
             _finishedState.Completed.Should().BeFalse();
             _finishedState.CompletedAt.Should().BeNull();
@@ -333,11 +325,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         [Test]
         public void should_leave_incomplete_when_a_movie_was_seeded_without_a_file()
         {
+            _install.HasMixedMovies = true;
             _mixed.Seeded = 1;
 
             var progress = Run();
 
-            _calls.Should().ContainInOrder("resolve", "preflight", "finish");
+            _calls.Should().ContainInOrder("preflight", "backup", "resolve", "finish");
             _finishedState.Phase.Should().Be("Phase2Pending");
             _finishedState.Completed.Should().BeFalse();
             _finishedState.CompletedAt.Should().BeNull();
@@ -385,11 +378,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         public void v2_should_run_port_and_snapshot_steps_in_order()
         {
             _counts.Series = 2;
+            _install.Studios = 1;
 
             var progress = RunV2();
 
             progress.Status.Should().Be(SetupStatus.Restarting, progress.ErrorMessage);
-            _calls.Should().Equal("backup", "begin", "seed", "create", "open", "port", "snapshot", "report", "dispose", "preflight", "finish", "complete", "restart");
+            _calls.Should().Equal("preflight", "backup", "begin", "seed", "create", "open", "port", "snapshot", "report", "dispose", "finish", "complete", "restart");
 
             var steps = progress.Steps.Select(s => s.Step).ToList();
 
@@ -433,10 +427,11 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         public void v2_with_series_should_be_phase2_pending()
         {
             _counts.Series = 3;
+            _install.Studios = 1;
 
             var progress = RunV2();
 
-            _calls.Should().ContainInOrder("report", "preflight", "finish");
+            _calls.Should().ContainInOrder("preflight", "backup", "report", "finish");
             _finishedState.Phase.Should().Be("Phase2Pending");
             _finishedState.Completed.Should().BeFalse();
             _finishedState.CompletedAt.Should().BeNull();
@@ -461,6 +456,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         public void v2_without_series_should_be_completed_and_skip_preflight()
         {
             _counts.Series = 0;
+            _install.Studios = 0;
 
             var progress = RunV2();
 
@@ -653,6 +649,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         [Test]
         public void retry_should_rerun_from_backup()
         {
+            _install.HasMixedMovies = true;
             _mixed.Detached = 1;
             _preflight.Setup(p => p.Check()).Throws(new SetupStepException("Skyhook didn't answer"));
 
@@ -663,7 +660,8 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.ErrorKey.Should().Be("SkyhookUnavailable");
             progress.CanRetry.Should().BeTrue();
             progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("failed");
-            _runState.Verify(r => r.DiscardIfPresent(), Times.Once);
+            _runState.Verify(r => r.DiscardIfPresent(), Times.Never);
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
 
             _preflight.Setup(p => p.Check()).Callback(() => _calls.Add("preflight"));
             _backup.Setup(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()))
@@ -677,7 +675,63 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.BackupPath.Should().Be("~/second.zip");
             progress.ErrorKey.Should().BeNull();
             progress.ErrorMessage.Should().BeNull();
-            _calls.Count(c => c == "backup").Should().Be(2);
+            _calls.Count(c => c == "backup").Should().Be(1);
+        }
+
+        [Test]
+        public void preflight_failure_stops_before_backup()
+        {
+            _install.HasMixedMovies = true;
+            _preflight.Setup(p => p.Check()).Throws(new SetupStepException("Skyhook didn't answer"));
+
+            var progress = Run();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.ErrorKey.Should().Be("SkyhookUnavailable");
+            progress.CanRetry.Should().BeTrue();
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("failed");
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
+            _runState.Verify(r => r.Begin(It.IsAny<bool>()), Times.Never);
+            _runState.Verify(r => r.DiscardIfPresent(), Times.Never);
+        }
+
+        [Test]
+        public void preflight_skipped_for_eros_same_source_without_mixed_movies()
+        {
+            var progress = Run();
+
+            _preflight.Verify(p => p.Check(), Times.Never);
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("skipped");
+        }
+
+        [Test]
+        public void preflight_runs_for_v2_with_studios()
+        {
+            _install.Studios = 2;
+
+            var progress = RunV2();
+
+            _preflight.Verify(p => p.Check(), Times.Once);
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("done");
+        }
+
+        [Test]
+        public void preflight_is_first_step()
+        {
+            Run().Steps[0].Step.Should().Be(SetupStep.SkyhookPreflight);
+        }
+
+        [TestCase(LegacyKind.V2, 3, SceneMetadataType.Tpdb, SceneMetadataType.Tpdb, false, true)]
+        [TestCase(LegacyKind.V2, 0, SceneMetadataType.Tpdb, SceneMetadataType.Tpdb, true, false)]
+        [TestCase(LegacyKind.Eros, 0, SceneMetadataType.Tpdb, SceneMetadataType.StashDb, false, true)]
+        [TestCase(LegacyKind.Eros, 0, SceneMetadataType.StashDb, SceneMetadataType.StashDb, true, true)]
+        [TestCase(LegacyKind.Eros, 0, SceneMetadataType.StashDb, SceneMetadataType.StashDb, false, false)]
+        public void needs_skyhook_table(LegacyKind kind, int studios, SceneMetadataType chosen, SceneMetadataType previous, bool mixed, bool expected)
+        {
+            var install = new LegacyInstall { Kind = kind, Studios = studios, PreviousSceneSource = previous, HasMixedMovies = mixed };
+            var choice = new SetupChoice { Kind = kind, SceneSource = chosen };
+
+            SetupWizardService.NeedsSkyhook(choice, install).Should().Be(expected);
         }
 
         [Test]
