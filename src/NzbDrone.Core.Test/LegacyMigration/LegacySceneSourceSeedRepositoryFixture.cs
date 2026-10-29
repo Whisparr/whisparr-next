@@ -102,6 +102,34 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void seed_rows_hold_null_strings()
+        {
+            var studios = Mocker.Resolve<LegacyStudioSeedRepository>();
+            var performers = Mocker.Resolve<LegacyPerformerSeedRepository>();
+            var scenes = Mocker.Resolve<LegacySceneSeedRepository>();
+
+            var studio = studios.Insert(new LegacyStudioSeed { LegacyForeignId = "s" });
+            var performer = performers.Insert(new LegacyPerformerSeed { LegacyForeignId = "p" });
+            var scene = scenes.Insert(new LegacySceneSeed { LegacyForeignId = "c" });
+
+            var s = studios.Get(studio.Id);
+            s.Title.Should().BeNull();
+            s.RootFolderPath.Should().BeNull();
+            s.Tags.Should().BeNull();
+
+            var p = performers.Get(performer.Id);
+            p.Name.Should().BeNull();
+            p.RootFolderPath.Should().BeNull();
+
+            var c = scenes.Get(scene.Id);
+            c.Title.Should().BeNull();
+            c.Path.Should().BeNull();
+            c.RootFolderPath.Should().BeNull();
+            c.FileQuality.Should().BeNull();
+            c.FileSize.Should().Be(0);
+        }
+
+        [Test]
         public void state_rebuild_defaults_false()
         {
             var states = Mocker.Resolve<LegacyMigrationStateRepository>();
