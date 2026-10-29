@@ -103,9 +103,9 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void discard_should_keep_sidecar_with_the_db_when_a_drop_fails()
+        public void discard_should_keep_everything_when_a_recorded_database_cannot_be_probed()
         {
-            // Nothing listens on port 1, so the drop cannot connect.
+            // Nothing listens on port 1, so the server can't be asked whether the recorded database is a finished v5.
             var unreachable = new PostgresOptions { Host = "127.0.0.1", Port = 1, User = "u", Password = "p" };
             var partial = Path5("whisparr5.db.partial");
             File.WriteAllText(partial, "x");
@@ -116,17 +116,99 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             state.RecordDatabase("stuck_db");
             state.RecordSqlitePartial(partial);
 
-            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+            // A recorded database that might be a committed migration is never dropped on a guess; the next start retries.
+            GivenState(unreachable).DiscardIfPresent().Should().BeFalse();
 
-            // What could be removed is gone, the database that could not be dropped stays recorded.
-            File.Exists(partial).Should().BeFalse();
-            File.Exists(Path5("config5.xml")).Should().BeFalse();
+            File.Exists(partial).Should().BeTrue();
+            File.Exists(Path5("config5.xml")).Should().BeTrue();
             File.Exists(Path5("v5-setup.json")).Should().BeTrue();
             File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_db");
 
-            // The next start retries it, and keeps it while the server stays unreachable.
-            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+            GivenState(unreachable).DiscardIfPresent().Should().BeFalse();
             File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_db");
+        }
+
+        [Test]
+        public void begin_should_carry_over_databases_that_are_still_waiting_to_be_dropped_or_emptied()
+        {
+            var unreachable = new PostgresOptions { Host = "127.0.0.1", Port = 1, User = "u", Password = "p" };
+
+            var first = GivenState(unreachable);
+            first.Begin(true);
+            first.RecordDatabase("stuck_db");
+            first.RecordReusedEmptyTarget("stuck_reused");
+
+            // The retry that follows a failed discard starts a new run.
+            var retry = GivenState(unreachable);
+            retry.Begin(false);
+
+            var sidecar = File.ReadAllText(Path5("v5-setup.json"));
+
+            sidecar.Should().Contain("stuck_db");
+            sidecar.Should().Contain("stuck_reused");
+        }
+
+        [Test]
+        public void discard_should_keep_what_it_could_not_delete_and_not_throw()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Ignore("Folder permissions are not applied the same way on Windows");
+            }
+
+            var locked = Path5("locked");
+            Directory.CreateDirectory(locked);
+
+            var partial = Path.Combine(locked, "whisparr5.db.partial");
+            File.WriteAllText(partial, "x");
+            File.WriteAllText(Path5("config5.xml"), "<Config />");
+
+            var state = GivenState();
+            state.Begin(true);
+            state.RecordSqlitePartial(partial);
+
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+            try
+            {
+                Action discard = () => GivenState().DiscardIfPresent();
+
+                discard.Should().NotThrow();
+
+                // The partial is still there, so it stays recorded for the next start.
+                File.Exists(partial).Should().BeTrue();
+                File.Exists(Path5("config5.xml")).Should().BeFalse();
+                File.ReadAllText(Path5("v5-setup.json")).Should().Contain("whisparr5.db.partial");
+            }
+            finally
+            {
+                File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+
+            GivenState().DiscardIfPresent().Should().BeTrue();
+
+            File.Exists(partial).Should().BeFalse();
+            File.Exists(Path5("v5-setup.json")).Should().BeFalse();
+        }
+
+        [TestCase(120000, false)]
+        [TestCase(129999, false)]
+        [TestCase(130000, true)]
+        [TestCase(160004, true)]
+        public void drop_should_use_force_only_where_the_server_supports_it(int serverVersionNum, bool force)
+        {
+            var statements = SetupRunState.DropStatements(serverVersionNum, "\"db\"");
+
+            if (force)
+            {
+                statements.Should().Equal("DROP DATABASE \"db\" WITH (FORCE)");
+            }
+            else
+            {
+                statements.Should().HaveCount(2);
+                statements[0].Should().Contain("pg_terminate_backend").And.Contain("pg_backend_pid()");
+                statements[1].Should().Be("DROP DATABASE \"db\"");
+            }
         }
 
         [Test]
@@ -389,7 +471,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             state.Begin(false);
             state.RecordReusedEmptyTarget("stuck_reused");
 
-            GivenState(unreachable).DiscardIfPresent().Should().BeTrue();
+            GivenState(unreachable).DiscardIfPresent().Should().BeFalse();
 
             File.ReadAllText(Path5("v5-setup.json")).Should().Contain("stuck_reused");
         }

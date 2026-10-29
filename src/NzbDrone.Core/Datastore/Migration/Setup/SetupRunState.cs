@@ -56,7 +56,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         public void Begin(bool seededConfig5)
         {
-            Save(new Sidecar { SeededConfig5 = seededConfig5 });
+            // A sidecar that is still here lists what an earlier run left to drop, empty or restore. Starting over
+            // without those records would orphan them.
+            var previous = Load();
+
+            Save(new Sidecar
+            {
+                SeededConfig5 = seededConfig5 || previous?.SeededConfig5 == true,
+                Config5Backup = previous?.Config5Backup,
+                Databases = previous?.Databases ?? new List<RecordedDatabase>(),
+                ReusedEmptyDatabases = previous?.ReusedEmptyDatabases ?? new List<RecordedDatabase>(),
+                SqlitePartials = previous?.SqlitePartials ?? new List<string>()
+            });
         }
 
         public void RecordDatabase(string name)
@@ -129,11 +140,22 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             }
 
             // A run that finished but left its sidecar behind (Complete threw) must not undo the database it built.
-            if (IsFinishedV5(sidecar))
+            var finished = ProbeFinishedV5(sidecar);
+
+            if (finished == Probe.Unknown)
+            {
+                // A recorded database that can't be asked might be a committed migration. Dropping it on a guess could
+                // destroy one, so everything stays recorded and the next start tries again.
+                _logger.Warn("Could not check whether the database recorded in {0} is a finished v5 database, so nothing is discarded yet", SidecarPath);
+
+                return false;
+            }
+
+            if (finished == Probe.Finished)
             {
                 _logger.Warn("{0} was left behind by a setup that finished, so nothing is discarded", SidecarPath);
-                DeleteConfig5Backup(sidecar);
-                File.Delete(SidecarPath);
+                TryDelete(() => DeleteConfig5Backup(sidecar));
+                TryDelete(() => File.Delete(SidecarPath));
 
                 return false;
             }
@@ -164,34 +186,17 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 }
             }
 
-            foreach (var path in sidecar.SqlitePartials.Where(File.Exists))
-            {
-                File.Delete(path);
-                _logger.Info("Discarded partial database {0} from an interrupted setup", path);
-                discarded = true;
-            }
+            // Anything that can't be removed (a locked file, say) stays recorded, so the next start tries again
+            // instead of stopping the app from starting.
+            var remaining = new Sidecar { Databases = failed, ReusedEmptyDatabases = failedReused };
 
-            var config5Path = _appFolderInfo.GetConfigPath();
+            discarded |= DiscardPartials(sidecar, remaining);
+            discarded |= RestoreConfig5(sidecar, remaining);
 
-            if (sidecar.Config5Backup != null && File.Exists(sidecar.Config5Backup))
+            if (remaining.Databases.Count > 0 || remaining.ReusedEmptyDatabases.Count > 0 || remaining.SqlitePartials.Count > 0 || remaining.Config5Backup != null || remaining.SeededConfig5)
             {
-                // The user's own file, which setup overwrote.
-                File.Move(sidecar.Config5Backup, config5Path, true);
-                _logger.Info("Restored {0} from before an interrupted setup", config5Path);
-                discarded = true;
-            }
-            else if (sidecar.SeededConfig5 && File.Exists(config5Path))
-            {
-                File.Delete(config5Path);
-                _logger.Info("Discarded {0} created by an interrupted setup", config5Path);
-                discarded = true;
-            }
-
-            if (failed.Count > 0 || failedReused.Count > 0)
-            {
-                // Keep the sidecar, with only the databases still to drop or empty, so the next start tries again
-                // instead of orphaning them. Everything else it recorded is already gone.
-                Save(new Sidecar { Databases = failed, ReusedEmptyDatabases = failedReused });
+                // Keep the sidecar, with only what is still to undo. Everything else it recorded is already gone.
+                Save(remaining);
 
                 return true;
             }
@@ -201,27 +206,120 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return discarded;
         }
 
-        // True when a v5 database this run built already holds its LegacyMigrationState row, which the finisher writes
-        // in the same transaction that completes the build.
-        private bool IsFinishedV5(Sidecar sidecar)
+        private bool DiscardPartials(Sidecar sidecar, Sidecar remaining)
+        {
+            var discarded = false;
+
+            foreach (var path in sidecar.SqlitePartials.Where(File.Exists))
+            {
+                try
+                {
+                    File.Delete(path);
+                    _logger.Info("Discarded partial database {0} from an interrupted setup", path);
+                    discarded = true;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.Error(ex, "Could not delete partial database {0} from an interrupted setup, it stays recorded and is retried on the next start", path);
+                    remaining.SqlitePartials.Add(path);
+                }
+            }
+
+            return discarded;
+        }
+
+        private bool RestoreConfig5(Sidecar sidecar, Sidecar remaining)
+        {
+            var config5Path = _appFolderInfo.GetConfigPath();
+
+            try
+            {
+                if (sidecar.Config5Backup != null && File.Exists(sidecar.Config5Backup))
+                {
+                    // The user's own file, which setup overwrote.
+                    File.Move(sidecar.Config5Backup, config5Path, true);
+                    _logger.Info("Restored {0} from before an interrupted setup", config5Path);
+
+                    return true;
+                }
+
+                if (sidecar.SeededConfig5 && File.Exists(config5Path))
+                {
+                    File.Delete(config5Path);
+                    _logger.Info("Discarded {0} created by an interrupted setup", config5Path);
+
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Error(ex, "Could not restore {0} from before an interrupted setup, it stays recorded and is retried on the next start", config5Path);
+                remaining.Config5Backup = sidecar.Config5Backup;
+                remaining.SeededConfig5 = sidecar.Config5Backup == null && sidecar.SeededConfig5;
+            }
+
+            return false;
+        }
+
+        private void TryDelete(Action delete)
+        {
+            try
+            {
+                delete();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Warn(ex, "Could not clean up after a finished setup, it is retried on the next start");
+            }
+        }
+
+        private enum Probe
+        {
+            NotFinished,
+            Finished,
+
+            // A recorded Postgres database could not be asked
+            Unknown
+        }
+
+        // Finished when a v5 database this run built already holds its LegacyMigrationState row, which the finisher
+        // writes in the same transaction that completes the build.
+        private Probe ProbeFinishedV5(Sidecar sidecar)
         {
             foreach (var partial in sidecar.SqlitePartials)
             {
                 var final = Path.Combine(Path.GetDirectoryName(partial), "whisparr5.db");
 
-                if (File.Exists(final) && HasStateRow(() => new SQLiteConnection(new SQLiteConnectionStringBuilder { DataSource = final, ReadOnly = true, Pooling = false }.ConnectionString), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'LegacyMigrationState'"))
+                if (File.Exists(final) && HasStateRow(() => new SQLiteConnection(new SQLiteConnectionStringBuilder { DataSource = final, ReadOnly = true, Pooling = false }.ConnectionString), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'LegacyMigrationState'", false) == Probe.Finished)
                 {
-                    return true;
+                    return Probe.Finished;
                 }
             }
 
-            return sidecar.Databases.Concat(sidecar.ReusedEmptyDatabases).Any(d =>
-                HasStateRow(
-                    () => new NpgsqlConnection(new NpgsqlConnectionStringBuilder(d.Server) { Database = d.Name, Pooling = false, Enlist = false }.ConnectionString),
-                    "SELECT to_regclass('\"LegacyMigrationState\"')::text"));
+            var result = Probe.NotFinished;
+
+            foreach (var database in sidecar.Databases.Concat(sidecar.ReusedEmptyDatabases))
+            {
+                var probe = HasStateRow(
+                    () => new NpgsqlConnection(new NpgsqlConnectionStringBuilder(database.Server) { Database = database.Name, Pooling = false, Enlist = false }.ConnectionString),
+                    "SELECT to_regclass('\"LegacyMigrationState\"')::text",
+                    true);
+
+                if (probe == Probe.Finished)
+                {
+                    return Probe.Finished;
+                }
+
+                if (probe == Probe.Unknown)
+                {
+                    result = Probe.Unknown;
+                }
+            }
+
+            return result;
         }
 
-        private bool HasStateRow(Func<System.Data.IDbConnection> open, string tableCheck)
+        private Probe HasStateRow(Func<System.Data.IDbConnection> open, string tableCheck, bool failureIsUnknown)
         {
             try
             {
@@ -229,13 +327,20 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 connection.Open();
 
                 return connection.ExecuteScalar<string>(tableCheck) != null &&
-                       connection.ExecuteScalar<int>("SELECT COUNT(*) FROM \"LegacyMigrationState\"") > 0;
+                       connection.ExecuteScalar<int>("SELECT COUNT(*) FROM \"LegacyMigrationState\"") > 0
+                    ? Probe.Finished
+                    : Probe.NotFinished;
             }
-            catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidCatalogName)
+            {
+                // The database is gone, so there is nothing finished to protect.
+                return Probe.NotFinished;
+            }
+            catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or IOException)
             {
                 _logger.Debug(ex, "Could not check whether a recorded database is a finished v5 database");
 
-                return false;
+                return failureIsUnknown ? Probe.Unknown : Probe.NotFinished;
             }
         }
 
@@ -264,9 +369,15 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     return false;
                 }
 
+                var version = connection.ExecuteScalar<int>("SELECT current_setting('server_version_num')::int");
+
+                foreach (var statement in DropStatements(version, quoted))
+                {
 #pragma warning disable S2077 // A database name cannot be a parameter, and it is quoted above.
-                connection.Execute($"DROP DATABASE {quoted} WITH (FORCE)");
+                    connection.Execute(statement, new { name = database.Name });
 #pragma warning restore S2077
+                }
+
                 _logger.Info("Dropped database {0} from an interrupted setup", database.Name);
 
                 return true;
@@ -278,6 +389,21 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
                 return false;
             }
+        }
+
+        // WITH (FORCE) needs PostgreSQL 13. Older servers get their sessions terminated first, then a plain drop.
+        internal static string[] DropStatements(int serverVersionNum, string quotedName)
+        {
+            if (serverVersionNum >= 130000)
+            {
+                return new[] { $"DROP DATABASE {quotedName} WITH (FORCE)" };
+            }
+
+            return new[]
+            {
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @name AND pid <> pg_backend_pid()",
+                $"DROP DATABASE {quotedName}"
+            };
         }
 
         // The database existed and was empty before this run, so it goes back to empty, never dropped.
@@ -395,7 +521,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 return JsonSerializer.Deserialize<Sidecar>(File.ReadAllText(SidecarPath), JsonOptions);
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
             {
                 _logger.Warn(ex, "{0} is unreadable, so it is ignored", SidecarPath);
 
