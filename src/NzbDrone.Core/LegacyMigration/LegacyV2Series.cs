@@ -24,5 +24,8 @@ namespace NzbDrone.Core.LegacyMigration
         public bool Done { get; set; }
         public int Attempts { get; set; }
         public DateTime? LastAttemptAt { get; set; }
+
+        // When Skyhook first answered 202 for this series; null while it isn't waiting
+        public DateTime? WaitingSince { get; set; }
     }
 }

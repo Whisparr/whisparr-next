@@ -42,6 +42,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly IMovieService _movieService;
         private readonly ILegacyFileLinker _fileLinker;
         private readonly ILegacyMigrationService _migrationService;
+        private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
 
         public V2TpdbImportRunner(ILegacyV2SeriesRepository seriesRepository,
@@ -56,8 +57,10 @@ namespace NzbDrone.Core.LegacyMigration
                                   IMovieService movieService,
                                   ILegacyFileLinker fileLinker,
                                   ILegacyMigrationService migrationService,
+                                  ISkyhookPacer pacer,
                                   Logger logger)
         {
+            _pacer = pacer;
             _seriesRepository = seriesRepository;
             _episodeRepository = episodeRepository;
             _fileRepository = fileRepository;
@@ -103,8 +106,17 @@ namespace NzbDrone.Core.LegacyMigration
                 }
                 catch (ResolvePendingException ex)
                 {
-                    // Skyhook is still working on it: not a failure, so no attempt is spent and the series is never given up for it
+                    // Skyhook is still working on it: not a failure, so no attempt is spent, but the wait has a ceiling
                     _logger.Debug("{0} for {1}", ex.Message, series.Title);
+
+                    if (WaitedTooLong(series))
+                    {
+                        const string reason = "TPDB did not finish resolving ids within 24 hours";
+
+                        _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, reason);
+                        ParkAndFinish(series, seriesEpisodes, seriesFiles, reason, progress);
+                        continue;
+                    }
 
                     pass.Waiting++;
                 }
@@ -219,6 +231,11 @@ namespace NzbDrone.Core.LegacyMigration
 
             var result = _idResolver.Resolve(TpdbIdKind.Site, new[] { series.TpdbSiteId });
 
+            if (result.Throttled)
+            {
+                throw new ResolveThrottledException(series.Title);
+            }
+
             if (result.Pending)
             {
                 throw new ResolvePendingException(series.Title);
@@ -237,6 +254,11 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             var result = _idResolver.Resolve(TpdbIdKind.Scene, ids);
+
+            if (result.Throttled)
+            {
+                throw new ResolveThrottledException("scenes");
+            }
 
             if (result.Pending)
             {
@@ -391,11 +413,25 @@ namespace NzbDrone.Core.LegacyMigration
             progress.Advance(StudioArea);
         }
 
+        // Remembers when the series first waited on a 202; true once that is longer ago than the ceiling allows
+        private bool WaitedTooLong(LegacyV2Series series)
+        {
+            var now = _pacer.UtcNow;
+
+            if (series.WaitingSince == null)
+            {
+                series.WaitingSince = now;
+                _seriesRepository.Update(series);
+            }
+
+            return now - series.WaitingSince.Value > LegacyRetryPolicy.MaxPendingWait;
+        }
+
         // Returns true when the series was given up on
         private bool RecordFailure(LegacyV2Series series, Exception ex)
         {
             series.Attempts++;
-            series.LastAttemptAt = DateTime.UtcNow;
+            series.LastAttemptAt = _pacer.UtcNow;
 
             var giveUp = LegacyRetryPolicy.ShouldGiveUp(series.Attempts);
 
@@ -413,7 +449,7 @@ namespace NzbDrone.Core.LegacyMigration
 
         private static bool IsTransient(Exception ex)
         {
-            return ex is HttpException or WebException or TimeoutException;
+            return ex is HttpException or WebException or TimeoutException or ResolveThrottledException;
         }
 
         private static HashSet<int> ParseTags(string json)
@@ -425,6 +461,15 @@ namespace NzbDrone.Core.LegacyMigration
         {
             public ResolvePendingException(string subject)
                 : base($"TPDB is still resolving ids for {subject}")
+            {
+            }
+        }
+
+        // Skyhook answered 429 or 503: a transient failure, unlike the 202 above
+        public sealed class ResolveThrottledException : Exception
+        {
+            public ResolveThrottledException(string subject)
+                : base($"TPDB is throttling id lookups for {subject}")
             {
             }
         }

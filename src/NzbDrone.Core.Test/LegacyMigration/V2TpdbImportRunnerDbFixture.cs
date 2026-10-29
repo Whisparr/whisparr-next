@@ -147,6 +147,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                 Mocker.GetMock<IMovieService>().Object,
                 Mocker.GetMock<ILegacyFileLinker>().Object,
                 migrationService,
+                new SkyhookPacer(),
                 NLog.LogManager.GetCurrentClassLogger());
 
             var state = new LegacyMigrationState { SourceKind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb };
@@ -169,6 +170,53 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Once());
             migrationService.GetReport().Should().HaveCount(report.Count);
+        }
+
+        [Test]
+        public void db_backed_waiting_since_is_persisted_on_the_first_202()
+        {
+            InsertV2("RootFolders", new { Id = 1, Path = "/data" });
+            InsertV2("Series", SeriesRow(1, 11, "Known Studio"));
+
+            new V2LibrarySnapshot().Snapshot(OpenContext());
+            Commit();
+
+            var seriesRepository = Mocker.Resolve<LegacyV2SeriesRepository>();
+
+            Mocker.SetConstant<ILegacyMigrationStateRepository>(Mocker.Resolve<LegacyMigrationStateRepository>());
+            Mocker.SetConstant<ILegacyMigrationReportRepository>(Mocker.Resolve<LegacyMigrationReportRepository>());
+
+            Mocker.GetMock<ITpdbIdResolver>()
+                  .Setup(r => r.Resolve(TpdbIdKind.Site, It.IsAny<IReadOnlyCollection<int>>()))
+                  .Returns(new TpdbResolveResult { Pending = true });
+
+            var runner = new V2TpdbImportRunner(
+                seriesRepository,
+                Mocker.Resolve<LegacyV2EpisodeRepository>(),
+                Mocker.Resolve<LegacyV2EpisodeFileRepository>(),
+                Mocker.GetMock<ITpdbIdResolver>().Object,
+                Mocker.GetMock<IAddStudioService>().Object,
+                Mocker.GetMock<IStudioService>().Object,
+                Mocker.GetMock<ISceneCatalogImporter>().Object,
+                Mocker.GetMock<IProvideMovieInfo>().Object,
+                Mocker.GetMock<IAddMovieService>().Object,
+                Mocker.GetMock<IMovieService>().Object,
+                Mocker.GetMock<ILegacyFileLinker>().Object,
+                Mocker.Resolve<LegacyMigrationService>(),
+                new SkyhookPacer(),
+                NLog.LogManager.GetCurrentClassLogger());
+
+            var state = new LegacyMigrationState { SourceKind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb };
+
+            var pass = runner.RunPass(state, new Mock<ILegacyImportProgress>().Object);
+
+            pass.Waiting.Should().Be(1);
+
+            var series = seriesRepository.All().Single();
+
+            series.WaitingSince.Should().NotBeNull();
+            series.WaitingSince.Value.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+            series.Attempts.Should().Be(0);
         }
     }
 }

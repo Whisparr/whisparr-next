@@ -133,17 +133,42 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             result.Ids.Should().NotContainKey(1);
         }
 
-        [TestCase(HttpStatusCode.Accepted)]
-        [TestCase(HttpStatusCode.TooManyRequests)]
-        [TestCase(HttpStatusCode.ServiceUnavailable)]
-        public void accepted_sets_pending_and_keeps_partial(HttpStatusCode status)
+        [Test]
+        public void accepted_sets_pending_and_keeps_partial()
         {
-            GivenResolve(ids => (status, new Dictionary<int, string> { { ids[0], "partial" } }));
+            GivenResolve(ids => (HttpStatusCode.Accepted, new Dictionary<int, string> { { ids[0], "partial" } }));
 
             var result = Subject.Resolve(TpdbIdKind.Scene, new[] { 1, 2 });
 
             result.Pending.Should().BeTrue();
+            result.Throttled.Should().BeFalse();
             result.Ids.Should().ContainKey(1).WhoseValue.Should().Be("partial");
+        }
+
+        [Test]
+        public void accepted_keeps_sending_the_remaining_batches()
+        {
+            GivenResolve(ids => (HttpStatusCode.Accepted, new Dictionary<int, string>()));
+
+            Subject.Resolve(TpdbIdKind.Scene, Enumerable.Range(1, 2500).ToList());
+
+            _requests.Should().HaveCount(3);
+        }
+
+        [TestCase(HttpStatusCode.TooManyRequests)]
+        [TestCase(HttpStatusCode.ServiceUnavailable)]
+        public void throttled_is_not_pending_and_stops_further_batches(HttpStatusCode status)
+        {
+            GivenResolve(ids => ids.Contains(1)
+                ? (HttpStatusCode.OK, new Dictionary<int, string> { { 1, "first" } })
+                : (status, new Dictionary<int, string>()));
+
+            var result = Subject.Resolve(TpdbIdKind.Scene, Enumerable.Range(1, 3500).ToList());
+
+            result.Throttled.Should().BeTrue();
+            result.Pending.Should().BeFalse();
+            result.Ids.Should().ContainKey(1);
+            _requests.Should().HaveCount(2);
         }
 
         [Test]

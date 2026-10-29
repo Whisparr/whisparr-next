@@ -36,6 +36,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private Action<MovieFile> _fill;
         private bool _sitePending;
         private bool _scenePending;
+        private bool _siteThrottled;
+        private DateTime _now;
         private int _nextId;
 
         [SetUp]
@@ -52,7 +54,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _progress = new Mock<ILegacyImportProgress>();
             _sitePending = false;
             _scenePending = false;
+            _siteThrottled = false;
+            _now = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
             _nextId = 100;
+
+            Mocker.GetMock<ISkyhookPacer>().SetupGet(p => p.UtcNow).Returns(() => _now);
 
             Mocker.GetMock<ILegacyV2SeriesRepository>().Setup(r => r.All()).Returns(() => _series);
             Mocker.GetMock<ILegacyV2EpisodeRepository>().Setup(r => r.All()).Returns(() => _episodes);
@@ -63,6 +69,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns<TpdbIdKind, IReadOnlyCollection<int>>((_, ids) => new TpdbResolveResult
                   {
                       Pending = _sitePending,
+                      Throttled = _siteThrottled,
                       Ids = ids.Where(_sites.ContainsKey).ToDictionary(i => i, i => _sites[i])
                   });
             Mocker.GetMock<ITpdbIdResolver>()
@@ -559,7 +566,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             series.LastAttemptAt.Should().BeNull();
             series.Done.Should().BeFalse();
             file.Done.Should().BeFalse();
-            Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(It.IsAny<LegacyV2Series>()), Times.Never());
+            series.WaitingSince.Should().Be(_now);
+            Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(series), Times.Once());
             Mocker.GetMock<ILegacyMigrationService>().Verify(m => m.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
             Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
         }
@@ -583,7 +591,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
-        public void resolve_pending_never_gives_up()
+        public void resolve_pending_spends_no_attempts_within_the_ceiling()
         {
             var series = GivenSeries(1, 11, "site-uuid");
             _sitePending = true;
@@ -594,11 +602,79 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
                 pass.Waiting.Should().Be(1);
                 pass.Pending.Should().Be(1);
+
+                _now = _now.AddHours(3);
             }
 
             series.Attempts.Should().Be(0);
             series.Done.Should().BeFalse();
+            series.WaitingSince.Should().Be(new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc));
             Mocker.GetMock<ILegacyMigrationService>().Verify(m => m.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void resolve_pending_for_more_than_24_hours_needs_attention_and_parks_files()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 101, "scene-1", fileId: 5);
+            _sitePending = true;
+            series.WaitingSince = _now.AddHours(-24).AddMinutes(-1);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            pass.Waiting.Should().Be(0);
+            series.Done.Should().BeTrue();
+            file.Done.Should().BeTrue();
+            series.Attempts.Should().Be(0);
+            VerifyReport(LegacyReportCategory.NeedsAttention, "Studios", series.Title, "TPDB did not finish resolving ids within 24 hours", Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", It.IsAny<string>()), Times.Once());
+        }
+
+        [Test]
+        public void resolve_pending_right_at_24_hours_keeps_waiting()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            _sitePending = true;
+            series.WaitingSince = _now.AddHours(-24);
+
+            var pass = Run();
+
+            pass.Waiting.Should().Be(1);
+            series.Done.Should().BeFalse();
+        }
+
+        [Test]
+        public void site_throttled_spends_an_attempt_rather_than_waiting()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            _siteThrottled = true;
+
+            var pass = Run();
+
+            pass.Waiting.Should().Be(0);
+            pass.WaitingRetry.Should().Be(1);
+            series.Attempts.Should().Be(1);
+            series.LastAttemptAt.Should().Be(_now);
+            series.WaitingSince.Should().BeNull();
+            series.Done.Should().BeFalse();
+        }
+
+        [Test]
+        public void scene_throttled_spends_an_attempt_rather_than_waiting()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 101, "scene-1");
+            Mocker.GetMock<ITpdbIdResolver>()
+                  .Setup(r => r.Resolve(TpdbIdKind.Scene, It.IsAny<IReadOnlyCollection<int>>()))
+                  .Returns(new TpdbResolveResult { Throttled = true });
+
+            var pass = Run();
+
+            pass.Waiting.Should().Be(0);
+            pass.WaitingRetry.Should().Be(1);
+            series.Attempts.Should().Be(1);
         }
 
         [Test]

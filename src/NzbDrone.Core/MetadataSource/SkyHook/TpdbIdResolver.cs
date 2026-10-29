@@ -21,8 +21,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     {
         public Dictionary<int, string> Ids { get; set; } = new();
 
-        // The server is still resolving, or throttling us; ask again later.
+        // The server answered 202: still resolving, so ask again shortly. Not a failure.
         public bool Pending { get; set; }
+
+        // The server answered 429 or 503: a transient failure, and no further batches were sent.
+        public bool Throttled { get; set; }
     }
 
     // Skyhook binds this body case-sensitively. The app's camel-case resolver overrides explicit
@@ -45,7 +48,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     }
 
     // Turns v2's numeric TPDB ids into TPDB UUIDs through the Skyhook metadata server.
-    // Callers treat Pending and exceptions as transient.
+    // Pending (202) means ask again shortly; Throttled (429/503) and exceptions are transient failures.
     public class TpdbIdResolver : ITpdbIdResolver
     {
         private const string RouteConst = "route";
@@ -99,10 +102,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                     case HttpStatusCode.OK:
                         break;
                     case HttpStatusCode.Accepted:
-                    case HttpStatusCode.TooManyRequests:
-                    case HttpStatusCode.ServiceUnavailable:
                         result.Pending = true;
                         break;
+                    case HttpStatusCode.TooManyRequests:
+                    case HttpStatusCode.ServiceUnavailable:
+                        // Sending more batches into a throttled server only digs deeper
+                        result.Throttled = true;
+                        return result;
                     default:
                         throw new HttpException(httpRequest, httpResponse);
                 }
