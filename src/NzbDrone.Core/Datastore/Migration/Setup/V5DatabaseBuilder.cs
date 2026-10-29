@@ -8,6 +8,7 @@ using NLog;
 using Npgsql;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Datastore.Migration.Framework;
+using NzbDrone.Core.Datastore.Migration.Setup.V2;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
 {
@@ -328,15 +329,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 File.Delete(temp);
             }
 
-            foreach (var table in tables)
-            {
-                var sequence = target.ExecuteScalar<string>("SELECT pg_get_serial_sequence(@table, 'Id')", new { table = Quote(table) });
-
-                if (sequence != null)
-                {
-                    target.Execute($"SELECT setval(@sequence, COALESCE((SELECT MAX(\"Id\") FROM {Quote(table)}), 1), (SELECT MAX(\"Id\") FROM {Quote(table)}) IS NOT NULL)", new { sequence });
-                }
-            }
+            PostgresSequences.Reset(target, tables, null);
         }
 
         private static string ConnectionStringFor(NpgsqlConnectionStringBuilder legacyBuilder, string database)
