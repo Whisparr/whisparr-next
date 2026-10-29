@@ -11,6 +11,7 @@ using Npgsql;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup.V2;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Lifecycle;
@@ -177,7 +178,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             install = _setupModeState.Detection.Installs.FirstOrDefault(i => i.Kind == choice.Kind);
 
-            // A v2 install starts empty, so it takes any scene and movie source.
+            // A v2 install starts empty, so it takes any movie source, but only TPDB scenes can be seeded from its ids.
+            if (choice.Kind == LegacyKind.V2 && choice.SceneSource != SceneMetadataType.Tpdb)
+            {
+                return (SetupErrorKey.SetupNotAvailableYet, "Migrating Whisparr v2 to StashDB scenes isn't available yet. Your existing data has not been changed.");
+            }
+
             if (choice.Kind == LegacyKind.Eros && install != null && choice.SceneSource != install.PreviousSceneSource)
             {
                 return (SetupErrorKey.SetupNotAvailableYet, "Changing the scene source of this install isn't available yet. Your existing data has not been changed.");

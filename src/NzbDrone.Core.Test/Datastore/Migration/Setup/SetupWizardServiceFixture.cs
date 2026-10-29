@@ -415,18 +415,18 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void v2_should_accept_any_scene_and_movie_source()
+        public void v2_should_accept_any_movie_source_with_tpdb_scenes()
         {
             UseV2Install();
 
             var service = Service();
-            service.Start(V2Choice(SceneMetadataType.StashDb, MovieMetadataType.TMDB));
+            service.Start(V2Choice(SceneMetadataType.Tpdb, MovieMetadataType.TMDB));
 
             var progress = Await(service);
 
             progress.ErrorKey.Should().BeNull();
             progress.Status.Should().Be(SetupStatus.Restarting);
-            _finisher.Verify(f => f.Finish(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), SceneMetadataType.StashDb, MovieMetadataType.TMDB, It.IsAny<LegacyMigrationState>()), Times.Once);
+            _finisher.Verify(f => f.Finish(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), SceneMetadataType.Tpdb, MovieMetadataType.TMDB, It.IsAny<LegacyMigrationState>()), Times.Once);
         }
 
         [Test]
@@ -442,6 +442,19 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             _finishedState.CompletedAt.Should().BeNull();
             _finishedState.SourceKind.Should().Be(LegacyKind.V2);
             progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("done");
+        }
+
+        [Test]
+        public void v2_with_stashdb_refused_not_available_yet()
+        {
+            UseV2Install();
+
+            var service = Service();
+
+            service.Start(V2Choice(SceneMetadataType.StashDb));
+
+            AssertNotAvailable(service.Progress);
+            service.Progress.ErrorMessage.Should().Be("Migrating Whisparr v2 to StashDB scenes isn't available yet. Your existing data has not been changed.");
         }
 
         [Test]
