@@ -557,6 +557,24 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void scene_that_already_has_a_file_reports_and_parks_the_second_one()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 101, "scene-1", fileId: 5);
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), file.Path, It.IsAny<Action<MovieFile>>()))
+                  .Returns(LinkOutcome.SceneHasOtherFile);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            file.Done.Should().BeTrue();
+            VerifyReport(LegacyReportCategory.NeedsAttention, "Files", file.Path, $"Scene already has a file; v2 also had {file.Path}", Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "Scene already has a file"), Times.Once());
+        }
+
+        [Test]
         public void site_resolve_pending_waits_without_spending_an_attempt()
         {
             var series = GivenSeries(1, 11, "site-uuid");

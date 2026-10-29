@@ -230,7 +230,12 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, $"File could not be linked: {outcome}");
+            // The file stays parked in the import list either way
+            var detail = outcome == LinkOutcome.SceneHasOtherFile
+                ? $"Scene already has a file; legacy also had {importFile.Path}"
+                : $"File could not be linked: {outcome}";
+
+            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, detail);
         }
 
         private void ReportUnmatched(LegacyMovieSeed seed)

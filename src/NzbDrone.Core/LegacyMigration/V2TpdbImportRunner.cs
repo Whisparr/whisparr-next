@@ -164,7 +164,7 @@ namespace NzbDrone.Core.LegacyMigration
             catch (ResolvePendingException ex)
             {
                 // Skyhook is still working on it: not a failure, so no attempt is spent, but the wait has a ceiling
-                _logger.Debug("{0} for {1}", ex.Message, series.Title);
+                _logger.Debug(ex, "Still waiting on TPDB for {0}", series.Title);
 
                 if (!WaitedTooLong(series))
                 {
@@ -344,7 +344,14 @@ namespace NzbDrone.Core.LegacyMigration
                 }
                 else
                 {
-                    ReportOutcome(file, target, _fileLinker.Link(movie, file.Path, f => Fill(f, file)));
+                    var outcome = _fileLinker.Link(movie, file.Path, f => Fill(f, file));
+
+                    ReportOutcome(file, target, outcome);
+
+                    if (outcome == LinkOutcome.SceneHasOtherFile)
+                    {
+                        _fileLinker.Park(file.Path, series.QualityProfileId, FileArea, "Scene already has a file");
+                    }
 
                     var others = fileEpisodes.Where(e => e != target).ToList();
 
@@ -377,6 +384,7 @@ namespace NzbDrone.Core.LegacyMigration
             var detail = outcome switch
             {
                 LinkOutcome.LinkedElsewhere => $"Already linked to another scene; v2 had TPDB scene {target.TpdbSceneId}",
+                LinkOutcome.SceneHasOtherFile => $"Scene already has a file; v2 also had {file.Path}",
                 LinkOutcome.Missing => "File not found",
                 LinkOutcome.IsDirectory => "v2 stored no file name",
                 LinkOutcome.OutsideRootFolders => "File is outside every root folder",

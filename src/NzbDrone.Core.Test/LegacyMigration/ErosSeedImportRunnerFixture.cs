@@ -214,6 +214,22 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void scene_that_already_has_a_file_reports_and_keeps_the_import_file()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
+                  .Returns(LinkOutcome.SceneHasOtherFile);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", _path, It.Is<string>(d => d.StartsWith("Scene already has a file") && d.Contains(_path)), 1), Times.Once());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
         public void transient_error_records_attempt_and_stays_pending()
         {
             AddHealthySeed();

@@ -16,6 +16,7 @@ namespace NzbDrone.Core.LegacyMigration
         Linked,
         AlreadyLinked,
         LinkedElsewhere,
+        SceneHasOtherFile,
         Missing,
         IsDirectory,
         OutsideRootFolders
@@ -96,6 +97,11 @@ namespace NzbDrone.Core.LegacyMigration
                 return ClaimExisting(movie, existing, movieFolder);
             }
 
+            if (HasOtherFile(movie, path))
+            {
+                return LinkOutcome.SceneHasOtherFile;
+            }
+
             var movieFile = new MovieFile
             {
                 Path = path,
@@ -138,9 +144,27 @@ namespace NzbDrone.Core.LegacyMigration
                 return LinkOutcome.LinkedElsewhere;
             }
 
+            if (HasOtherFile(movie, existing.Path))
+            {
+                return LinkOutcome.SceneHasOtherFile;
+            }
+
             MoveToMovie(movie, existing, movieFolder);
 
             return LinkOutcome.Linked;
+        }
+
+        // A scene keeps the file it has; a second one is the user's to place
+        private bool HasOtherFile(Movie movie, string path)
+        {
+            if (movie.MovieFileId <= 0)
+            {
+                return false;
+            }
+
+            var current = _mediaFileService.GetMovie(movie.MovieFileId);
+
+            return current != null && !current.Path.PathEquals(path);
         }
 
         private void MoveToMovie(Movie movie, MovieFile existing, string movieFolder)
