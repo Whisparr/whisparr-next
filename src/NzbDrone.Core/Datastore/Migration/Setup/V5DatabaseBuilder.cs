@@ -32,6 +32,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         // recordReused is called with each pre-existing empty Postgres database the build accepts, before
         // anything is written to it, so a failed run can return it to empty instead of leaving it non-empty.
         BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused);
+
+        // A fresh, migrated v5 database next to (SQLite) or alongside (PostgreSQL) the legacy one, with none of its
+        // data. The callbacks are the same as CopyEros's.
+        BuiltDatabases CreateEmpty(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused);
     }
 
     public class V5DatabaseBuilder : IV5DatabaseBuilder
@@ -55,11 +59,23 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         public BuiltDatabases CopyEros(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
         {
+            return Wrap(() => install.Database.Type == DatabaseType.PostgreSQL
+                ? CopyPostgres(install, targets, recordCreated, recordReused)
+                : CopySqlite(install));
+        }
+
+        public BuiltDatabases CreateEmpty(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
+        {
+            return Wrap(() => install.Database.Type == DatabaseType.PostgreSQL
+                ? CreateEmptyPostgres(install, targets, recordCreated, recordReused)
+                : CreateEmptySqlite(install));
+        }
+
+        private static BuiltDatabases Wrap(Func<BuiltDatabases> build)
+        {
             try
             {
-                return install.Database.Type == DatabaseType.PostgreSQL
-                    ? CopyPostgres(install, targets, recordCreated, recordReused)
-                    : CopySqlite(install);
+                return build();
             }
             catch (SetupStepException)
             {
@@ -69,6 +85,75 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 throw new SetupStepException("The v5 database could not be built from your existing database. Your existing database has not been changed. " + ex.Message, ex);
             }
+        }
+
+        private BuiltDatabases CreateEmptySqlite(LegacyInstall install)
+        {
+            var directory = Path.GetDirectoryName(install.Database.SqlitePath);
+            var partial = Path.Combine(directory, PartialFileName);
+
+            DeletePartial(partial);
+
+            try
+            {
+                var migrationConnectionString = SqliteConnectionString(partial, SQLiteJournalModeEnum.Default);
+
+                _migrationController.Migrate(migrationConnectionString, new MigrationContext(MigrationType.Main), DatabaseType.SQLite);
+
+                return new BuiltDatabases
+                {
+                    Type = DatabaseType.SQLite,
+                    SqlitePartialPath = partial,
+                    MainConnectionString = migrationConnectionString,
+                    LogConnectionString = SqliteConnectionString(Path.Combine(directory, SqliteLogFileName), SQLiteJournalModeEnum.Default)
+                };
+            }
+            catch
+            {
+                DeletePartial(partial);
+                throw;
+            }
+        }
+
+        private BuiltDatabases CreateEmptyPostgres(LegacyInstall install, V5DatabaseTargets targets, Action<string> recordCreated, Action<string> recordReused)
+        {
+            var legacyBuilder = new NpgsqlConnectionStringBuilder(install.Database.PostgresConnectionString) { Enlist = false };
+            var legacyMain = install.Database.PostgresMainDb ?? legacyBuilder.Database;
+
+            ValidateTargets(targets, legacyMain);
+
+            var result = new BuiltDatabases { Type = DatabaseType.PostgreSQL };
+
+            using (var admin = OpenAdmin(legacyBuilder))
+            {
+                var reusedMain = RequireEmptyOrMissing(legacyBuilder, admin, targets.MainDb);
+                var reusedLog = RequireEmptyOrMissing(legacyBuilder, admin, targets.LogDb);
+
+                // Both are acceptable, so record them before anything is written to either.
+                if (reusedMain)
+                {
+                    recordReused(targets.MainDb);
+                }
+
+                if (reusedLog)
+                {
+                    recordReused(targets.LogDb);
+                }
+
+                foreach (var name in new[] { targets.MainDb, targets.LogDb }.Where(n => !DatabaseExists(admin, n)))
+                {
+                    TryCreate(admin, targets, result, name, null, recordCreated);
+                }
+            }
+
+            var mainConnectionString = ConnectionStringFor(legacyBuilder, targets.MainDb);
+
+            _migrationController.Migrate(mainConnectionString, new MigrationContext(MigrationType.Main), DatabaseType.PostgreSQL);
+
+            result.MainConnectionString = mainConnectionString;
+            result.LogConnectionString = ConnectionStringFor(legacyBuilder, targets.LogDb);
+
+            return result;
         }
 
         private BuiltDatabases CopySqlite(LegacyInstall install)

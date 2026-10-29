@@ -13,6 +13,7 @@ using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Framework;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.Datastore.Migration.Setup.V2;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Test.Common;
 
@@ -74,6 +75,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 new Config5Seeder(_ => null),
                 new SetupRunState(_folders.Object) { PostgresOptions = new PostgresOptions() },
                 new V5DatabaseBuilder(new MigrationController(LogManager.GetCurrentClassLogger()), copier),
+                new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter(), new V2LibrarySnapshot()),
                 new MixedMovieResolver(),
                 _preflight.Object,
                 new V5DatabaseFinisher(),

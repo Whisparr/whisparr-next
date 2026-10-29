@@ -14,6 +14,7 @@ using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.Datastore.Migration.Setup.V2;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Test.Common;
@@ -29,6 +30,8 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private Mock<IConfig5Seeder> _seeder;
         private Mock<ISetupRunState> _runState;
         private Mock<IV5DatabaseBuilder> _builder;
+        private Mock<IV2Porter> _porter;
+        private V2SnapshotCounts _counts;
         private Mock<IMixedMovieResolver> _resolver;
         private Mock<ISkyhookPreflight> _preflight;
         private Mock<IV5DatabaseFinisher> _finisher;
@@ -39,6 +42,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private MixedMovieResult _mixed;
         private PostgresOptions _options;
         private LegacyMigrationState _finishedState;
+        private Mock<IDbConnection> _legacyConnection;
         private bool _seededConfig5;
 
         [SetUp]
@@ -82,6 +86,24 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             _builder.Setup(b => b.CopyEros(It.IsAny<LegacyInstall>(), It.IsAny<V5DatabaseTargets>(), It.IsAny<Action<string>>(), It.IsAny<Action<string>>()))
                 .Callback(() => _calls.Add("copy"))
                 .Returns(CreatePartial);
+
+            _builder.Setup(b => b.CreateEmpty(It.IsAny<LegacyInstall>(), It.IsAny<V5DatabaseTargets>(), It.IsAny<Action<string>>(), It.IsAny<Action<string>>()))
+                .Callback(() => _calls.Add("create"))
+                .Returns(CreatePartial);
+
+            _counts = new V2SnapshotCounts();
+            _legacyConnection = new Mock<IDbConnection>();
+            _legacyConnection.Setup(c => c.Dispose()).Callback(() => _calls.Add("dispose"));
+
+            _porter = new Mock<IV2Porter>();
+            _porter.Setup(p => p.Open(It.IsAny<LegacyInstall>(), It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<DatabaseType>()))
+                .Callback(() => _calls.Add("open"))
+                .Returns(() => new V2PortContext(_legacyConnection.Object, null, null, DatabaseType.SQLite));
+            _porter.Setup(p => p.PortSettings(It.IsAny<V2PortContext>())).Callback(() => _calls.Add("port"));
+            _porter.Setup(p => p.SnapshotLibrary(It.IsAny<V2PortContext>()))
+                .Callback(() => _calls.Add("snapshot"))
+                .Returns(() => _counts);
+            _porter.Setup(p => p.WriteReport(It.IsAny<V2PortContext>())).Callback(() => _calls.Add("report"));
 
             _resolver = new Mock<IMixedMovieResolver>();
             _resolver.Setup(r => r.Resolve(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<MovieMetadataType>()))
@@ -128,6 +150,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 _seeder.Object,
                 _runState.Object,
                 _builder.Object,
+                _porter.Object,
                 _resolver.Object,
                 _preflight.Object,
                 _finisher.Object,
@@ -173,7 +196,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.BackupPath.Should().Be("~/backup.zip");
             progress.EnvVarsToChange.Should().BeEmpty();
             progress.Steps.Select(s => s.Step).Should().Equal(Enum.GetValues<SetupStep>());
-            progress.Steps.Where(s => s.Step != SetupStep.SkyhookPreflight).Should().OnlyContain(s => s.State == "done");
+            progress.Steps.Where(s => s.Step is not (SetupStep.SkyhookPreflight or SetupStep.PortSettings or SetupStep.SnapshotLibrary)).Should().OnlyContain(s => s.State == "done");
             _runState.Verify(r => r.Begin(true), Times.Once);
         }
 
@@ -334,18 +357,138 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.SkippedMoviePaths.Should().Equal("/elsewhere/a", "/elsewhere/b");
         }
 
-        [Test]
-        public void should_refuse_v2_as_not_available_yet()
+        private void UseV2Install()
         {
+            _install.Kind = LegacyKind.V2;
+            _install.PreviousSceneSource = SceneMetadataType.Tpdb;
+            _install.PreviousMovieSource = MovieMetadataType.TPDB;
+        }
+
+        private static SetupChoice V2Choice(SceneMetadataType scene = SceneMetadataType.Tpdb, MovieMetadataType movie = MovieMetadataType.TPDB) => new()
+        {
+            Kind = LegacyKind.V2,
+            SceneSource = scene,
+            MovieSource = movie
+        };
+
+        private SetupProgress RunV2()
+        {
+            UseV2Install();
+
             var service = Service();
+            service.Start(V2Choice());
 
-            service.Start(new SetupChoice { Kind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
-
-            AssertNotAvailable(service.Progress);
+            return Await(service);
         }
 
         [Test]
-        public void should_refuse_scene_source_change_as_not_available_yet()
+        public void v2_should_run_port_and_snapshot_steps_in_order()
+        {
+            _counts.Series = 2;
+
+            var progress = RunV2();
+
+            progress.Status.Should().Be(SetupStatus.Restarting, progress.ErrorMessage);
+            _calls.Should().Equal("backup", "begin", "seed", "create", "open", "port", "snapshot", "report", "dispose", "preflight", "finish", "complete", "restart");
+
+            var steps = progress.Steps.Select(s => s.Step).ToList();
+
+            steps.IndexOf(SetupStep.PortSettings).Should().Be(steps.IndexOf(SetupStep.Migrate) + 1);
+            steps.IndexOf(SetupStep.SnapshotLibrary).Should().Be(steps.IndexOf(SetupStep.PortSettings) + 1);
+
+            progress.Steps.Single(s => s.Step == SetupStep.Migrate).State.Should().Be("done");
+            progress.Steps.Single(s => s.Step == SetupStep.PortSettings).State.Should().Be("done");
+            progress.Steps.Single(s => s.Step == SetupStep.SnapshotLibrary).State.Should().Be("done");
+            progress.Steps.Single(s => s.Step == SetupStep.MixedMovies).State.Should().Be("skipped");
+
+            _builder.Verify(b => b.CopyEros(It.IsAny<LegacyInstall>(), It.IsAny<V5DatabaseTargets>(), It.IsAny<Action<string>>(), It.IsAny<Action<string>>()), Times.Never);
+            _resolver.Verify(r => r.Resolve(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<MovieMetadataType>()), Times.Never);
+        }
+
+        [Test]
+        public void v2_should_no_longer_be_refused()
+        {
+            var progress = RunV2();
+
+            progress.ErrorKey.Should().BeNull();
+            progress.Status.Should().Be(SetupStatus.Restarting);
+        }
+
+        [Test]
+        public void v2_should_accept_any_scene_and_movie_source()
+        {
+            UseV2Install();
+
+            var service = Service();
+            service.Start(V2Choice(SceneMetadataType.StashDb, MovieMetadataType.TMDB));
+
+            var progress = Await(service);
+
+            progress.ErrorKey.Should().BeNull();
+            progress.Status.Should().Be(SetupStatus.Restarting);
+            _finisher.Verify(f => f.Finish(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), SceneMetadataType.StashDb, MovieMetadataType.TMDB, It.IsAny<LegacyMigrationState>()), Times.Once);
+        }
+
+        [Test]
+        public void v2_with_series_should_be_phase2_pending()
+        {
+            _counts.Series = 3;
+
+            var progress = RunV2();
+
+            _calls.Should().ContainInOrder("report", "preflight", "finish");
+            _finishedState.Phase.Should().Be("Phase2Pending");
+            _finishedState.Completed.Should().BeFalse();
+            _finishedState.CompletedAt.Should().BeNull();
+            _finishedState.SourceKind.Should().Be(LegacyKind.V2);
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("done");
+        }
+
+        [Test]
+        public void v2_without_series_should_be_completed_and_skip_preflight()
+        {
+            _counts.Series = 0;
+
+            var progress = RunV2();
+
+            _preflight.Verify(p => p.Check(), Times.Never);
+            _finishedState.Phase.Should().Be("Done");
+            _finishedState.Completed.Should().BeTrue();
+            _finishedState.CompletedAt.Should().NotBeNull();
+            progress.Steps.Single(s => s.Step == SetupStep.SkyhookPreflight).State.Should().Be("skipped");
+        }
+
+        [Test]
+        public void porter_failure_should_discard_sidecar_items()
+        {
+            _porter.Setup(p => p.PortSettings(It.IsAny<V2PortContext>())).Throws(new InvalidOperationException("bad row"));
+
+            var progress = RunV2();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.ErrorKey.Should().Be("Unexpected");
+            progress.CanRetry.Should().BeFalse();
+            progress.ErrorMessage.Should().Contain("bad row");
+            progress.Steps.Single(s => s.Step == SetupStep.PortSettings).State.Should().Be("failed");
+            _runState.Verify(r => r.DiscardIfPresent(), Times.Once);
+            _runState.Verify(r => r.Complete(), Times.Never);
+            _lifecycle.Verify(l => l.Restart(), Times.Never);
+            _calls.Should().Contain("dispose");
+            File.Exists(Path.Combine(_appData, "whisparr5.db")).Should().BeFalse();
+        }
+
+        [Test]
+        public void eros_should_skip_the_v2_steps()
+        {
+            var progress = Run();
+
+            progress.Steps.Single(s => s.Step == SetupStep.PortSettings).State.Should().Be("skipped");
+            progress.Steps.Single(s => s.Step == SetupStep.SnapshotLibrary).State.Should().Be("skipped");
+            _porter.Verify(p => p.Open(It.IsAny<LegacyInstall>(), It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<DatabaseType>()), Times.Never);
+        }
+
+        [Test]
+        public void eros_scene_change_should_still_be_refused()
         {
             var service = Service();
 
@@ -369,7 +512,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         {
             var service = Service();
 
-            service.Start(new SetupChoice { Kind = LegacyKind.V2, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
+            service.Start(new SetupChoice { Kind = LegacyKind.Eros, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
             service.Start(Choice());
 
             var progress = Await(service);

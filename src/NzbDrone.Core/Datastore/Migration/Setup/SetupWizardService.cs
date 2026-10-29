@@ -11,6 +11,7 @@ using Npgsql;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Datastore.Migration.Setup.V2;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.Lifecycle;
 
@@ -42,6 +43,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private readonly IConfig5Seeder _config5Seeder;
         private readonly ISetupRunState _runState;
         private readonly IV5DatabaseBuilder _databaseBuilder;
+        private readonly IV2Porter _v2Porter;
         private readonly IMixedMovieResolver _mixedMovieResolver;
         private readonly ISkyhookPreflight _skyhookPreflight;
         private readonly IV5DatabaseFinisher _databaseFinisher;
@@ -61,6 +63,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             IConfig5Seeder config5Seeder,
             ISetupRunState runState,
             IV5DatabaseBuilder databaseBuilder,
+            IV2Porter v2Porter,
             IMixedMovieResolver mixedMovieResolver,
             ISkyhookPreflight skyhookPreflight,
             IV5DatabaseFinisher databaseFinisher,
@@ -73,6 +76,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _config5Seeder = config5Seeder;
             _runState = runState;
             _databaseBuilder = databaseBuilder;
+            _v2Porter = v2Porter;
             _mixedMovieResolver = mixedMovieResolver;
             _skyhookPreflight = skyhookPreflight;
             _databaseFinisher = databaseFinisher;
@@ -173,9 +177,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             install = _setupModeState.Detection.Installs.FirstOrDefault(i => i.Kind == choice.Kind);
 
-            if (choice.Kind == LegacyKind.V2 || (install != null && choice.SceneSource != install.PreviousSceneSource))
+            // A v2 install starts empty, so it takes any scene and movie source.
+            if (choice.Kind == LegacyKind.Eros && install != null && choice.SceneSource != install.PreviousSceneSource)
             {
-                return (SetupErrorKey.SetupNotAvailableYet, "Migrating this install, or changing its scene source, isn't available yet. Your existing data has not been changed.");
+                return (SetupErrorKey.SetupNotAvailableYet, "Changing the scene source of this install isn't available yet. Your existing data has not been changed.");
             }
 
             if (install == null)
@@ -246,21 +251,44 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     _runState.RecordSqlitePartial(Path.Combine(Path.GetDirectoryName(install.Database.SqlitePath), V5DatabaseBuilder.PartialFileName));
                 }
 
-                var built = _databaseBuilder.CopyEros(install, targets, _runState.RecordDatabase, _runState.RecordReusedEmptyTarget);
+                var isV2 = install.Kind == LegacyKind.V2;
+
+                // A v2 install starts from an empty v5 database, an Eros one from a copy of its own.
+                var built = isV2
+                    ? _databaseBuilder.CreateEmpty(install, targets, _runState.RecordDatabase, _runState.RecordReusedEmptyTarget)
+                    : _databaseBuilder.CopyEros(install, targets, _runState.RecordDatabase, _runState.RecordReusedEmptyTarget);
 
                 SetStep(current, SetupStepState.Done);
                 SetStep(SetupStep.Migrate, SetupStepState.Done);
 
-                current = SetupStep.MixedMovies;
-                SetStep(current, SetupStepState.Running);
+                bool needsPhase2;
 
-                var mixed = ResolveMixedMovies(built, choice);
+                if (isV2)
+                {
+                    var counts = PortV2(built, install, step => current = step);
 
-                SetStep(current, SetupStepState.Done);
+                    SetStep(SetupStep.MixedMovies, SetupStepState.Skipped);
+
+                    needsPhase2 = counts.Series > 0;
+                }
+                else
+                {
+                    SetStep(SetupStep.PortSettings, SetupStepState.Skipped);
+                    SetStep(SetupStep.SnapshotLibrary, SetupStepState.Skipped);
+
+                    current = SetupStep.MixedMovies;
+                    SetStep(current, SetupStepState.Running);
+
+                    var mixed = ResolveMixedMovies(built, choice);
+
+                    SetStep(current, SetupStepState.Done);
+
+                    needsPhase2 = mixed.NeedsPhase2;
+                }
 
                 current = SetupStep.SkyhookPreflight;
 
-                if (!mixed.NeedsPhase2)
+                if (!needsPhase2)
                 {
                     SetStep(current, SetupStepState.Skipped);
                 }
@@ -275,7 +303,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 SetStep(current, SetupStepState.Running);
                 SetStep(SetupStep.Finish, SetupStepState.Running);
 
-                FinishDatabase(built, choice, install, mixed, backupPath, startedAt);
+                FinishDatabase(built, choice, install, needsPhase2, backupPath, startedAt);
 
                 SetStep(current, SetupStepState.Done);
                 current = SetupStep.Finish;
@@ -333,11 +361,38 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return result;
         }
 
-        // One transaction: the locked sources, the renaming switch and the state row land together or not at all.
-        private void FinishDatabase(BuiltDatabases built, SetupChoice choice, LegacyInstall install, MixedMovieResult mixed, string backupPath, DateTime startedAt)
+        // One transaction: the settings, the library snapshot and the report land together or not at all. enter is
+        // told which step is about to run, so a failure is attributed to it.
+        private V2SnapshotCounts PortV2(BuiltDatabases built, LegacyInstall install, Action<SetupStep> enter)
         {
-            var detached = mixed.NeedsPhase2;
+            using var connection = OpenMain(built);
+            using var transaction = connection.BeginTransaction();
+            using var context = _v2Porter.Open(install, connection, transaction, built.Type);
 
+            enter(SetupStep.PortSettings);
+            SetStep(SetupStep.PortSettings, SetupStepState.Running);
+
+            _v2Porter.PortSettings(context);
+
+            SetStep(SetupStep.PortSettings, SetupStepState.Done);
+
+            enter(SetupStep.SnapshotLibrary);
+            SetStep(SetupStep.SnapshotLibrary, SetupStepState.Running);
+
+            var counts = _v2Porter.SnapshotLibrary(context);
+
+            _v2Porter.WriteReport(context);
+
+            transaction.Commit();
+
+            SetStep(SetupStep.SnapshotLibrary, SetupStepState.Done);
+
+            return counts;
+        }
+
+        // One transaction: the locked sources, the renaming switch and the state row land together or not at all.
+        private void FinishDatabase(BuiltDatabases built, SetupChoice choice, LegacyInstall install, bool detached, string backupPath, DateTime startedAt)
+        {
             var state = new LegacyMigrationState
             {
                 SourceKind = install.Kind,

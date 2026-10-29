@@ -8,6 +8,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         SeedConfig,
         CreateDatabase,
         Migrate,
+        PortSettings,
+        SnapshotLibrary,
         MixedMovies,
         SkyhookPreflight,
         LockSources,

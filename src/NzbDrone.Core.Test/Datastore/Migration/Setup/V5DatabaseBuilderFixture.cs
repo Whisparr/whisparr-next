@@ -152,6 +152,83 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             File.Exists(db + "-shm").Should().BeFalse();
         }
 
+        private string LegacyV2()
+        {
+            var db = Path.Combine(_dir, "whisparr2.db");
+
+            LegacyDbBuilder.CreateV2SqliteFromDump(db);
+
+            return db;
+        }
+
+        private static LegacyInstall V2SqliteInstall(string path)
+        {
+            return new LegacyInstall
+            {
+                Kind = LegacyKind.V2,
+                MaxMigration = 221,
+                Database = new LegacyDatabaseLocation { Type = DatabaseType.SQLite, SqlitePath = path }
+            };
+        }
+
+        [Test]
+        public void create_empty_should_build_migrated_partial()
+        {
+            var db = LegacyV2();
+
+            var built = Builder().CreateEmpty(V2SqliteInstall(db), Targets(), _ => { }, _ => { });
+
+            built.Type.Should().Be(DatabaseType.SQLite);
+            built.SqlitePartialPath.Should().Be(Path.Combine(_dir, "whisparr5.db.partial"));
+            built.CreatedPostgresDatabases.Should().BeEmpty();
+            built.LogConnectionString.Should().Contain("logs5.db");
+            File.Exists(built.SqlitePartialPath).Should().BeTrue();
+
+            using var connection = new SQLiteConnection(built.MainConnectionString);
+            connection.Open();
+
+            LegacyDatabaseGuard.IsLegacy(connection, DatabaseType.SQLite).Should().BeFalse();
+            connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"VersionInfo\" WHERE \"Version\" = 300").Should().Be(1);
+            connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"Movies\"").Should().Be(0);
+            connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"LegacyV2Series\"").Should().Be(0);
+        }
+
+        [Test]
+        public void create_empty_should_leave_legacy_bytes_unchanged()
+        {
+            var db = LegacyV2();
+            var before = Hash(db);
+
+            Builder().CreateEmpty(V2SqliteInstall(db), Targets(), _ => { }, _ => { });
+
+            Hash(db).Should().Be(before);
+            File.Exists(db + "-wal").Should().BeFalse();
+            File.Exists(db + "-shm").Should().BeFalse();
+        }
+
+        [Test]
+        public void create_empty_should_replace_a_stale_partial()
+        {
+            var db = LegacyV2();
+            var partial = Path.Combine(_dir, "whisparr5.db.partial");
+
+            File.WriteAllText(partial, "stale");
+            File.WriteAllText(partial + "-wal", "stale");
+
+            var built = Builder().CreateEmpty(V2SqliteInstall(db), Targets(), _ => { }, _ => { });
+
+            File.Exists(partial + "-wal").Should().BeFalse();
+            Count(built.MainConnectionString, "Movies").Should().Be(0);
+        }
+
+        [Test]
+        public void create_empty_should_wrap_failures()
+        {
+            var missing = V2SqliteInstall(Path.Combine(_dir, "no-such-folder", "whisparr2.db"));
+
+            Assert.Throws<SetupStepException>(() => Builder().CreateEmpty(missing, Targets(), _ => { }, _ => { }));
+        }
+
         [Test]
         public void should_lock_stashdb_via_migration_301()
         {
@@ -384,6 +461,74 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             created.Should().Equal(_targetMain, _targetLog);
 
             AssertCopied(built);
+        }
+
+        [Test]
+        public void create_empty_should_create_both_databases_without_template()
+        {
+            StartPostgres();
+
+            var created = new List<string>();
+
+            var built = Builder().CreateEmpty(PgInstall(), PgTargets(), created.Add, _ => { });
+
+            built.Type.Should().Be(DatabaseType.PostgreSQL);
+            built.SqlitePartialPath.Should().BeNull();
+            built.CreatedPostgresDatabases.Should().Equal(_targetMain, _targetLog);
+            created.Should().Equal(_targetMain, _targetLog);
+
+            using var connection = new NpgsqlConnection(built.MainConnectionString);
+            connection.Open();
+
+            LegacyDatabaseGuard.IsLegacy(connection, DatabaseType.PostgreSQL).Should().BeFalse();
+
+            // Nothing of the legacy rows came along.
+            connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"Config\" WHERE \"Key\" IN ('pg1', 'pg2')").Should().Be(0);
+            connection.ExecuteScalar<long>("SELECT COUNT(*) FROM \"Tags\"").Should().Be(0);
+            Exists(_targetLog).Should().BeTrue();
+        }
+
+        [Test]
+        public void create_empty_should_reuse_an_empty_target_and_refuse_a_non_empty_one()
+        {
+            StartPostgres();
+
+            using (var admin = OpenAdmin(_options.User, _options.Password))
+            {
+                admin.Execute($"CREATE DATABASE \"{_targetMain}\"");
+            }
+
+            var created = new List<string>();
+            var reused = new List<string>();
+
+            Builder().CreateEmpty(PgInstall(), PgTargets(), created.Add, reused.Add);
+
+            created.Should().Equal(_targetLog);
+            reused.Should().Equal(_targetMain);
+
+            // Now populated, so a second run is refused.
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CreateEmpty(PgInstall(), PgTargets(), _ => { }, _ => { }));
+
+            ex.UserMessage.Should().Contain(_targetMain);
+        }
+
+        [Test]
+        public void create_empty_should_report_sql_when_create_denied()
+        {
+            StartPostgres();
+
+            var role = "nocreate_" + TestBase.GetUID();
+            _createdRoles.Add(role);
+
+            using (var admin = OpenAdmin(_options.User, _options.Password))
+            {
+                admin.Execute($"CREATE ROLE \"{role}\" LOGIN PASSWORD 'pw' NOCREATEDB");
+            }
+
+            var ex = Assert.Throws<SetupStepException>(() => Builder().CreateEmpty(PgInstall(role, "pw"), PgTargets(), _ => { }, _ => { }));
+
+            ex.UserMessage.Should().Contain($"CREATE DATABASE \"{_targetMain}\"");
+            ex.UserMessage.Should().Contain($"CREATE DATABASE \"{_targetLog}\"");
         }
 
         [Test]
