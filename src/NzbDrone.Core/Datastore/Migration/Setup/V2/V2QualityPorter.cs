@@ -420,12 +420,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
 
         // ---- Helpers ----
 
-        private static List<IDictionary<string, object>> ReadRows(V2PortContext context, string table)
+        internal static List<IDictionary<string, object>> ReadRows(V2PortContext context, string table)
         {
             return context.Legacy.Query($"SELECT * FROM {Quote(table)} ORDER BY \"Id\"").Cast<IDictionary<string, object>>().ToList();
         }
 
-        private static void Insert(V2PortContext context, string table, bool explicitId, Dictionary<string, object> values)
+        internal static void Insert(V2PortContext context, string table, bool explicitId, Dictionary<string, object> values)
         {
             // v5 PostgreSQL Ids are GENERATED ALWAYS, so explicit Ids need the override.
             var overriding = explicitId && context.V5Type == DatabaseType.PostgreSQL ? " OVERRIDING SYSTEM VALUE" : string.Empty;
@@ -443,13 +443,13 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             context.V5.Execute($"INSERT INTO {Quote(table)} ({columns}){overriding} VALUES ({names})", parameters, context.Transaction);
         }
 
-        private static string Text(IDictionary<string, object> row, string column)
+        internal static string Text(IDictionary<string, object> row, string column)
         {
             return row.TryGetValue(column, out var value) && value is not DBNull ? value as string : null;
         }
 
         // SQLite stores booleans as integers and PostgreSQL has a real type; either converts here.
-        private static bool Bool(IDictionary<string, object> row, string column)
+        internal static bool Bool(IDictionary<string, object> row, string column)
         {
             return row.TryGetValue(column, out var value) && value != null && value is not DBNull && Convert.ToBoolean(value);
         }

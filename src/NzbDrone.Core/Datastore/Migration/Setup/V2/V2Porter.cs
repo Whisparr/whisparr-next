@@ -18,12 +18,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
         private readonly V2ConfigPorter _configPorter;
 
         private readonly V2QualityPorter _qualityPorter;
+        private readonly V2ProviderPorter _providerPorter;
 
-        public V2Porter(V2CopyPorter copyPorter, V2ConfigPorter configPorter, V2QualityPorter qualityPorter)
+        public V2Porter(V2CopyPorter copyPorter, V2ConfigPorter configPorter, V2QualityPorter qualityPorter, V2ProviderPorter providerPorter)
         {
             _copyPorter = copyPorter;
             _configPorter = configPorter;
             _qualityPorter = qualityPorter;
+            _providerPorter = providerPorter;
         }
 
         public V2PortContext Open(LegacyInstall install, IDbConnection v5, IDbTransaction transaction, DatabaseType v5Type)
@@ -42,6 +44,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             _copyPorter.Port(context);
             _configPorter.Port(context);
             _qualityPorter.Port(context);
+            _providerPorter.Port(context);
 
             if (context.V5Type == DatabaseType.PostgreSQL)
             {
