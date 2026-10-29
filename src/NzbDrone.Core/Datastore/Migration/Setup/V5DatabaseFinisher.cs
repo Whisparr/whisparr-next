@@ -11,7 +11,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         void Finish(IDbConnection v5, IDbTransaction tx, SceneMetadataType scene, MovieMetadataType movie, LegacyMigrationState state);
     }
 
-    // Locks the chosen metadata sources, disables renaming and records the migration state. Raw SQL on the connection it is
+    // Locks the chosen metadata sources, disables file and folder renaming and records the migration state. Raw SQL on the connection it is
     // handed, because in setup mode the container's main database is a dummy.
     public class V5DatabaseFinisher : IV5DatabaseFinisher
     {
@@ -21,6 +21,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             UpsertConfig(v5, tx, "whisparrscenemetadatasource", scene.ToString().ToLower());
             UpsertConfig(v5, tx, "whisparrmoviemetadatasource", movie.ToString().ToLower());
             UpsertConfig(v5, tx, "metadatasourceslocked", true.ToString());
+
+            // Eros copies its Config wholesale, and a refresh of a movie with a file would rename its folder mid-migration
+            UpsertConfig(v5, tx, "autorenamefolders", false.ToString());
 
             v5.Execute(
                 "UPDATE \"NamingConfig\" SET \"RenameScenes\" = @rename, \"RenameMovies\" = @rename",

@@ -80,6 +80,26 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void finisher_should_turn_off_auto_rename_folders_copied_from_eros()
+        {
+            _connection.Execute("INSERT INTO \"Config\" (\"Key\", \"Value\") VALUES ('autorenamefolders', 'True')");
+
+            Finish(SceneMetadataType.Tpdb, MovieMetadataType.TPDB);
+
+            Mocker.Resolve<ConfigService>().AutoRenameFolders.Should().BeFalse();
+            _connection.ExecuteScalar<int>("SELECT COUNT(*) FROM \"Config\" WHERE \"Key\" = 'autorenamefolders'").Should().Be(1);
+        }
+
+        [Test]
+        public void finisher_should_write_auto_rename_folders_off_when_the_source_never_set_it()
+        {
+            Finish(SceneMetadataType.Tpdb, MovieMetadataType.TPDB);
+
+            _connection.ExecuteScalar<string>("SELECT \"Value\" FROM \"Config\" WHERE \"Key\" = 'autorenamefolders'").Should().Be("False");
+            Mocker.Resolve<ConfigService>().AutoRenameFolders.Should().BeFalse();
+        }
+
+        [Test]
         public void finisher_should_overwrite_stashdb_lock_from_301_with_choice()
         {
             _connection.Execute("INSERT INTO \"Config\" (\"Key\", \"Value\") VALUES ('whisparrscenemetadatasource', 'stashdb')");
