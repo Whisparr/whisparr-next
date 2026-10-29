@@ -40,6 +40,7 @@ namespace NzbDrone.Core.MediaFiles
         List<MovieFile> GetMovies(IEnumerable<int> ids);
         List<MovieFile> GetFilesWithBasePath(string path);
         List<MovieFile> GetFilesWithRelativePath(int movieIds, string relativePath);
+        MovieFile FindByFullPath(string path);
     }
 
     public class MediaFileService : IMediaFileService, IHandleAsync<MoviesDeletedEvent>
@@ -262,6 +263,11 @@ namespace NzbDrone.Core.MediaFiles
         public List<MovieFile> GetFilesWithRelativePath(int movieId, string relativePath)
         {
             return _mediaFileRepository.GetFilesWithRelativePath(movieId, relativePath);
+        }
+
+        public MovieFile FindByFullPath(string path)
+        {
+            return _mediaFileRepository.FindByFullPath(path);
         }
 
         public List<MovieFile> GetUnmappedFiles()

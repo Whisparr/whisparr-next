@@ -29,14 +29,6 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists(_file)).Returns(true);
 
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
-                  .Returns(new List<MovieFile>());
-
-            Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.FilterExistingFiles(It.IsAny<List<string>>()))
-                  .Returns<List<string>>(f => f);
-
-            Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.Add(It.IsAny<MovieFile>()))
                   .Returns<MovieFile>(f =>
                   {
@@ -51,10 +43,6 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IRootFolderService>()
                   .Setup(s => s.GetBestRootFolderPath(It.IsAny<string>(), It.IsAny<List<RootFolder>>()))
                   .Returns<string, List<RootFolder>>((p, r) => p.StartsWith(_root) ? _root : System.IO.Path.GetDirectoryName(p));
-
-            Mocker.GetMock<IImportFileRepository>()
-                  .Setup(s => s.FindByRootFolderId(3))
-                  .Returns(new List<ImportFile>());
         }
 
         [Test]
@@ -83,7 +71,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _movie.MovieFileId.Should().Be(99);
             _movie.Path.Should().Be("/data/library/Studio".AsOsAgnostic());
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.AtLeastOnce());
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.Once());
 
             var disk = Mocker.GetMock<IDiskProvider>();
             disk.Verify(d => d.FolderExists(_file), Times.Once());
@@ -107,7 +95,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             _movie.Path.Should().Be("/data/library/Studio".AsOsAgnostic());
             added.RelativePath.Should().Be("scene.mp4");
-            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.AtLeastOnce());
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.Once());
         }
 
         [Test]
@@ -135,8 +123,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         public void already_linked_same_movie_is_noop()
         {
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.GetFilesByMovie(7))
-                  .Returns(new List<MovieFile> { new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4" } });
+                  .Setup(s => s.FindByFullPath(_file))
+                  .Returns(new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4" });
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.AlreadyLinked);
 
@@ -148,8 +136,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         public void linked_to_other_movie_is_left_alone()
         {
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.FilterExistingFiles(It.IsAny<List<string>>()))
-                  .Returns(new List<string>());
+                  .Setup(s => s.FindByFullPath(_file))
+                  .Returns(new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4" });
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.LinkedElsewhere);
 
@@ -207,8 +195,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         public void park_is_idempotent()
         {
             Mocker.GetMock<IImportFileRepository>()
-                  .Setup(s => s.FindByRootFolderId(3))
-                  .Returns(new List<ImportFile> { new ImportFile { Id = 1, RootFolderId = 3, Path = _file } });
+                  .Setup(s => s.FindByPath(_file))
+                  .Returns(new ImportFile { Id = 1, RootFolderId = 3, Path = _file });
 
             Subject.Park(_file, 4, "Files", "No match").Should().BeTrue();
 

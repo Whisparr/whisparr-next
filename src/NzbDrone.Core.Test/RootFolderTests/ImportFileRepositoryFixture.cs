@@ -40,6 +40,19 @@ namespace NzbDrone.Core.Test.RootFolderTests
             afterFirst.Should().OnlyContain(f => f.Id > all[0].Id);
         }
 
+        [Test]
+        public void find_by_path_should_return_the_exact_match_or_null()
+        {
+            Db.InsertMany(new List<ImportFile>
+            {
+                new ImportFile { RootFolderId = 1, Path = "/import/a.mp4", RelativePath = "a.mp4", Name = "a" },
+                new ImportFile { RootFolderId = 1, Path = "/import/b.mp4", RelativePath = "b.mp4", Name = "b" }
+            });
+
+            Subject.FindByPath("/import/b.mp4").Name.Should().Be("b");
+            Subject.FindByPath("/import/c.mp4").Should().BeNull();
+        }
+
         private ImportFile GivenStoredFile()
         {
             var file = new ImportFile

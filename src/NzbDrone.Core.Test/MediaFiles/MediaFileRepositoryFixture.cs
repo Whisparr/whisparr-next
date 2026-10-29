@@ -9,6 +9,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Test.Framework;
+using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MediaFiles
 {
@@ -231,6 +232,51 @@ namespace NzbDrone.Core.Test.MediaFiles
             var afterFirst = Subject.GetFilesNeedingPHash(all[0].Id, 100);
             afterFirst.Should().HaveCount(3);
             afterFirst.Should().NotContain(c => c.Id <= all[0].Id);
+        }
+
+        private MovieFile GivenTrackedFile(string foreignId, string folder, string relativePath)
+        {
+            var metadata = Db.Insert(Builder<MovieMetadata>.CreateNew()
+                .With(m => m.Id = 0)
+                .With(m => m.ForeignId = foreignId)
+                .BuildNew());
+
+            var movie = Db.Insert(Builder<Movie>.CreateNew()
+                .With(m => m.Id = 0)
+                .With(m => m.MovieMetadataId = metadata.Id)
+                .With(m => m.Path = folder)
+                .BuildNew());
+
+            return Subject.Insert(Builder<MovieFile>.CreateNew()
+                .With(f => f.Id = 0)
+                .With(f => f.MovieId = movie.Id)
+                .With(f => f.RelativePath = relativePath)
+                .With(f => f.Quality = new QualityModel())
+                .With(f => f.Languages = new List<Language> { Language.English })
+                .BuildNew());
+        }
+
+        [Test]
+        public void find_by_full_path_should_match_movie_folder_plus_relative_path()
+        {
+            var flat = GivenTrackedFile("flat", "/media/Studio".AsOsAgnostic(), "scene.mp4");
+            var nested = GivenTrackedFile("nested", "/media".AsOsAgnostic(), "Studio2/scene.mp4".AsOsAgnostic());
+
+            var foundFlat = Subject.FindByFullPath("/media/Studio/scene.mp4".AsOsAgnostic());
+            var foundNested = Subject.FindByFullPath("/media/Studio2/scene.mp4".AsOsAgnostic());
+
+            foundFlat.Id.Should().Be(flat.Id);
+            foundFlat.MovieId.Should().Be(flat.MovieId);
+            foundNested.Id.Should().Be(nested.Id);
+        }
+
+        [Test]
+        public void find_by_full_path_should_return_null_for_untracked_paths()
+        {
+            GivenTrackedFile("flat", "/media/Studio".AsOsAgnostic(), "scene.mp4");
+
+            Subject.FindByFullPath("/media/Studio/other.mp4".AsOsAgnostic()).Should().BeNull();
+            Subject.FindByFullPath("/media/Elsewhere/scene.mp4".AsOsAgnostic()).Should().BeNull();
         }
     }
 }

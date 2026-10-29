@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Dapper;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
 
@@ -21,6 +23,7 @@ namespace NzbDrone.Core.MediaFiles
         void DeleteForMovies(List<int> movieIds);
         List<MovieFile> GetFilesWithBasePath(string path);
         List<MovieFile> GetFilesWithRelativePath(int movieId, string relativePath);
+        MovieFile FindByFullPath(string path);
     }
 
     public class MediaFileRepository : BasicRepository<MovieFile>, IMediaFileRepository
@@ -101,6 +104,62 @@ namespace NzbDrone.Core.MediaFiles
         public List<MovieFile> GetFilesWithRelativePath(int movieId, string relativePath)
         {
             return Query(c => c.MovieId == movieId && c.RelativePath == relativePath);
+        }
+
+        // MovieFile.Path isn't stored, so a file is tracked when some movie folder plus the row's RelativePath
+        // makes the path. Only the path's ancestors can be that folder, so the join narrows on Movies.Path.
+        // Returns a light row (Id, MovieId, RelativePath, Path), not a hydrated MovieFile.
+        public MovieFile FindByFullPath(string path)
+        {
+            var folders = new List<string>();
+            var folder = path.GetParentPath();
+
+            while (folder.IsNotNullOrWhiteSpace())
+            {
+                folders.Add(folder);
+                folder = folder.GetParentPath();
+            }
+
+            if (folders.Count == 0)
+            {
+                return null;
+            }
+
+            // One (folder, relative path) pair per ancestor, as indexed parameters: list expansion differs between SQLite and Postgres
+            var parameters = new DynamicParameters();
+            var pairs = new List<string>();
+
+            for (var i = 0; i < folders.Count; i++)
+            {
+                parameters.Add($"F{i}", folders[i]);
+                parameters.Add($"R{i}", folders[i].GetRelativePath(path));
+                pairs.Add($"(\"Movies\".\"Path\" = @F{i} AND \"MovieFiles\".\"RelativePath\" = @R{i})");
+            }
+
+            using (var conn = _database.OpenConnection())
+            {
+                var rows = conn.Query<(int Id, int MovieId, string RelativePath, string Folder)>(
+                    "SELECT \"MovieFiles\".\"Id\", \"MovieFiles\".\"MovieId\", \"MovieFiles\".\"RelativePath\", \"Movies\".\"Path\" AS \"Folder\" " +
+                    "FROM \"MovieFiles\" JOIN \"Movies\" ON \"Movies\".\"Id\" = \"MovieFiles\".\"MovieId\" " +
+                    "WHERE " + string.Join(" OR ", pairs),
+                    parameters);
+
+                var match = rows.FirstOrDefault(r => r.Folder.IsNotNullOrWhiteSpace() &&
+                                                     System.IO.Path.Combine(r.Folder, r.RelativePath).PathEquals(path));
+
+                if (match.Id == 0)
+                {
+                    return null;
+                }
+
+                return new MovieFile
+                {
+                    Id = match.Id,
+                    MovieId = match.MovieId,
+                    RelativePath = match.RelativePath,
+                    Path = path
+                };
+            }
         }
     }
 }

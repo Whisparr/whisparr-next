@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
 
@@ -7,6 +8,7 @@ namespace NzbDrone.Core.RootFolders
     public interface IImportFileRepository : IBasicRepository<ImportFile>
     {
         List<ImportFile> FindByRootFolderId(int rootFolderId);
+        ImportFile FindByPath(string path);
         List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<ImportFile> importFiles);
@@ -27,6 +29,11 @@ namespace NzbDrone.Core.RootFolders
         public List<ImportFile> FindByRootFolderId(int rootFolderId)
         {
             return Query(x => x.RootFolderId == rootFolderId);
+        }
+
+        public ImportFile FindByPath(string path)
+        {
+            return Query(x => x.Path == path).FirstOrDefault();
         }
 
         public List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit)

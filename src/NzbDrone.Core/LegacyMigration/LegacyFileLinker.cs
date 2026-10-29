@@ -29,12 +29,17 @@ namespace NzbDrone.Core.LegacyMigration
     // Links legacy files to scenes by writing rows only; nothing on disk is moved, renamed or deleted.
     public class LegacyFileLinker : ILegacyFileLinker
     {
+        private static readonly TimeSpan RootFolderCacheTime = TimeSpan.FromSeconds(30);
+
         private readonly IMediaFileService _mediaFileService;
         private readonly IMovieService _movieService;
         private readonly IDiskProvider _diskProvider;
         private readonly IRootFolderService _rootFolderService;
         private readonly IImportFileRepository _importFileRepository;
         private readonly ILegacyMigrationService _migrationService;
+
+        private List<RootFolder> _rootFolders;
+        private DateTime _rootFoldersLoadedAt;
 
         public LegacyFileLinker(IMediaFileService mediaFileService,
                                 IMovieService movieService,
@@ -63,27 +68,21 @@ namespace NzbDrone.Core.LegacyMigration
                 return LinkOutcome.Missing;
             }
 
-            if (_mediaFileService.GetFilesByMovie(movie.Id).Any(f => f.Path.IsNotNullOrWhiteSpace() && f.Path.PathEquals(path)))
+            var existing = _mediaFileService.FindByFullPath(path);
+
+            if (existing != null)
             {
-                return LinkOutcome.AlreadyLinked;
+                return existing.MovieId == movie.Id ? LinkOutcome.AlreadyLinked : LinkOutcome.LinkedElsewhere;
             }
 
-            // FilterExistingFiles drops every file a MovieFile row points at, whichever movie owns it
-            if (_mediaFileService.FilterExistingFiles(new List<string> { path }).Count == 0)
-            {
-                return LinkOutcome.LinkedElsewhere;
-            }
-
-            if (movie.Path.IsNullOrWhiteSpace() || !movie.Path.IsParentPath(path))
-            {
-                movie.Path = Path.GetDirectoryName(path);
-                _movieService.UpdateMovie(movie);
-            }
+            var movieFolder = movie.Path.IsNullOrWhiteSpace() || !movie.Path.IsParentPath(path)
+                ? Path.GetDirectoryName(path)
+                : movie.Path;
 
             var movieFile = new MovieFile
             {
                 Path = path,
-                RelativePath = movie.Path.GetRelativePath(path),
+                RelativePath = movieFolder.GetRelativePath(path),
                 MovieId = movie.Id,
                 MatchTier = MatchTier.Confirmed,
                 MediaInfo = null
@@ -93,10 +92,24 @@ namespace NzbDrone.Core.LegacyMigration
 
             movieFile = _mediaFileService.Add(movieFile);
 
+            // One save covers the repoint and the file id; Add's handler wrote the movie with its old path first
+            movie.Path = movieFolder;
             movie.MovieFileId = movieFile.Id;
             _movieService.UpdateMovie(movie);
 
             return LinkOutcome.Linked;
+        }
+
+        private List<RootFolder> GetRootFolders()
+        {
+            // Root folders barely change during an import, so a short cache spares a query per file
+            if (_rootFolders == null || DateTime.UtcNow - _rootFoldersLoadedAt > RootFolderCacheTime)
+            {
+                _rootFolders = _rootFolderService.All();
+                _rootFoldersLoadedAt = DateTime.UtcNow;
+            }
+
+            return _rootFolders;
         }
 
         public bool Park(string path, int qualityProfileId, string area, string reason)
@@ -113,7 +126,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return false;
             }
 
-            var rootFolders = _rootFolderService.All();
+            var rootFolders = GetRootFolders();
             var rootPath = _rootFolderService.GetBestRootFolderPath(path, rootFolders);
             var root = rootFolders.FirstOrDefault(r => r.Path.PathEquals(rootPath));
 
@@ -123,7 +136,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return false;
             }
 
-            if (_importFileRepository.FindByRootFolderId(root.Id).Any(f => f.Path.PathEquals(path)))
+            if (_importFileRepository.FindByPath(path) != null)
             {
                 return true;
             }
