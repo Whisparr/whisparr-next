@@ -108,7 +108,7 @@ namespace NzbDrone.Core.MediaFiles
 
         // MovieFile.Path isn't stored, so a file is tracked when some movie folder plus the row's RelativePath
         // makes the path. Only the path's ancestors can be that folder, so the join narrows on Movies.Path.
-        // Returns a light row (Id, MovieId, RelativePath, Path), not a hydrated MovieFile.
+        // Returns a light row (Id, MovieId, RelativePath, MatchTier, Path), not a hydrated MovieFile.
         public MovieFile FindByFullPath(string path)
         {
             var folders = new List<string>();
@@ -138,8 +138,8 @@ namespace NzbDrone.Core.MediaFiles
 
             using (var conn = _database.OpenConnection())
             {
-                var rows = conn.Query<(int Id, int MovieId, string RelativePath, string Folder)>(
-                    "SELECT \"MovieFiles\".\"Id\", \"MovieFiles\".\"MovieId\", \"MovieFiles\".\"RelativePath\", \"Movies\".\"Path\" AS \"Folder\" " +
+                var rows = conn.Query<(int Id, int MovieId, string RelativePath, int MatchTier, string Folder)>(
+                    "SELECT \"MovieFiles\".\"Id\", \"MovieFiles\".\"MovieId\", \"MovieFiles\".\"RelativePath\", \"MovieFiles\".\"MatchTier\", \"Movies\".\"Path\" AS \"Folder\" " +
                     "FROM \"MovieFiles\" JOIN \"Movies\" ON \"Movies\".\"Id\" = \"MovieFiles\".\"MovieId\" " +
                     "WHERE " + string.Join(" OR ", pairs),
                     parameters);
@@ -157,6 +157,7 @@ namespace NzbDrone.Core.MediaFiles
                     Id = match.Id,
                     MovieId = match.MovieId,
                     RelativePath = match.RelativePath,
+                    MatchTier = (MatchTier)match.MatchTier,
                     Path = path
                 };
             }

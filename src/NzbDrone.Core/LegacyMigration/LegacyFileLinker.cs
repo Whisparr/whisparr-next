@@ -72,7 +72,20 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (existing != null)
             {
-                return existing.MovieId == movie.Id ? LinkOutcome.AlreadyLinked : LinkOutcome.LinkedElsewhere;
+                if (existing.MovieId != movie.Id)
+                {
+                    return LinkOutcome.LinkedElsewhere;
+                }
+
+                // The disk scan may have linked it by name already; the v2 TPDB link agrees, so it is confirmed.
+                // Hash, Manual and Conflict are left as they are.
+                if (existing.MatchTier is MatchTier.Unknown or MatchTier.Name)
+                {
+                    existing.MatchTier = MatchTier.Confirmed;
+                    _mediaFileService.SaveMatchTiers(new List<MovieFile> { existing });
+                }
+
+                return LinkOutcome.AlreadyLinked;
             }
 
             var movieFolder = movie.Path.IsNullOrWhiteSpace() || !movie.Path.IsParentPath(path)

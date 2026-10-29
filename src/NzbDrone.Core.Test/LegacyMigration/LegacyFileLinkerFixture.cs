@@ -132,14 +132,47 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(It.IsAny<Movie>()), Times.Never());
         }
 
+        [TestCase(MatchTier.Unknown)]
+        [TestCase(MatchTier.Name)]
+        public void already_linked_below_confirmed_is_confirmed(MatchTier tier)
+        {
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FindByFullPath(_file))
+                  .Returns(new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4", MatchTier = tier });
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.AlreadyLinked);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.Is<List<MovieFile>>(l => l.Count == 1 && l[0].Id == 5 && l[0].MatchTier == MatchTier.Confirmed)), Times.Once());
+        }
+
+        [TestCase(MatchTier.Hash)]
+        [TestCase(MatchTier.Manual)]
+        [TestCase(MatchTier.Conflict)]
+        [TestCase(MatchTier.Confirmed)]
+        public void already_linked_at_or_above_confirmed_is_untouched(MatchTier tier)
+        {
+            var existing = new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4", MatchTier = tier };
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FindByFullPath(_file))
+                  .Returns(existing);
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.AlreadyLinked);
+
+            existing.MatchTier.Should().Be(tier);
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()), Times.Never());
+        }
+
         [Test]
         public void linked_to_other_movie_is_left_alone()
         {
             Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.FindByFullPath(_file))
-                  .Returns(new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4" });
+                  .Returns(new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4", MatchTier = MatchTier.Name });
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.LinkedElsewhere);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()), Times.Never());
 
             Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
             Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(It.IsAny<Movie>()), Times.Never());

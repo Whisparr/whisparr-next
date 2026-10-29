@@ -271,6 +271,16 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void find_by_full_path_should_return_the_stored_match_tier()
+        {
+            var tracked = GivenTrackedFile("tiered", "/media/Studio".AsOsAgnostic(), "scene.mp4");
+            tracked.MatchTier = MatchTier.Name;
+            Subject.SaveMatchTiers(new List<MovieFile> { tracked });
+
+            Subject.FindByFullPath("/media/Studio/scene.mp4".AsOsAgnostic()).MatchTier.Should().Be(MatchTier.Name);
+        }
+
+        [Test]
         public void find_by_full_path_should_return_null_for_untracked_paths()
         {
             GivenTrackedFile("flat", "/media/Studio".AsOsAgnostic(), "scene.mp4");
