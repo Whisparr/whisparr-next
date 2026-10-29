@@ -1,4 +1,5 @@
 using DryIoc;
+using NzbDrone.Common.Http.Proxy;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Datastore.Migration.Framework;
 using NzbDrone.Core.Datastore.Migration.Setup;
@@ -32,11 +33,12 @@ namespace NzbDrone.Core.Datastore.Extensions
             return container;
         }
 
-        // Setup mode: the state instance, and a read-only user service in place of the one that needs the v5 database.
+        // Setup mode: the state instance, and a read-only user service and a no-proxy provider in place of the ones that need the v5 database.
         public static IContainer AddSetupMode(this IContainer container, ISetupModeState state)
         {
             container.RegisterInstance(state, ifAlreadyRegistered: IfAlreadyRegistered.Replace);
             container.Register<IUserService, LegacyUserService>(Reuse.Singleton, ifAlreadyRegistered: IfAlreadyRegistered.Replace);
+            container.Register<IHttpProxySettingsProvider, SetupModeProxySettingsProvider>(Reuse.Singleton, ifAlreadyRegistered: IfAlreadyRegistered.Replace);
 
             return container;
         }

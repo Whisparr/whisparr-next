@@ -9,6 +9,8 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Composition.Extensions;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Http;
+using NzbDrone.Common.Http.Proxy;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Common.Options;
@@ -80,6 +82,15 @@ namespace NzbDrone.App.Test
 
             wizard.Should().BeOfType<SetupWizardService>();
             wizard.Progress.Status.Should().Be(SetupStatus.Idle);
+        }
+
+        [Test]
+        public void should_resolve_proxy_settings_without_the_config_database()
+        {
+            var provider = _services.GetRequiredService<IHttpProxySettingsProvider>();
+
+            provider.GetProxySettings().Should().BeNull();
+            provider.GetProxySettings(new HttpUri("https://api.example.test/route")).Should().BeNull();
         }
 
         [Test]
