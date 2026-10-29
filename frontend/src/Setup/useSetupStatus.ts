@@ -129,8 +129,15 @@ export default function useSetupStatus() {
     }
 
     const current = latest.current;
+
+    // The env-switch screen only waits for the user to change the variables
+    // and restart, so nothing on the server changes while it is open.
+    const isEnvSwitch =
+      current !== null &&
+      (current.pendingEnvSwitch || current.progress.envVarsToChange.length > 0);
     const busy =
       current !== null &&
+      !isEnvSwitch &&
       (current.progress.status === 'running' ||
         current.progress.status === 'succeeded' ||
         current.progress.status === 'restarting');

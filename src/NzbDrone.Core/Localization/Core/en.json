@@ -2169,7 +2169,7 @@
   "SetupDowngradeTitle": "Going back to the old version",
   "SetupEnvBeforeMigrating": "Your database is named by environment variables. After migrating you will change them to these values. Setting them before migrating works too.",
   "SetupEnvPasswordKept": "A password shown as <unchanged> means you keep the password you already use.",
-  "SetupEnvSwitchInstruction": "Change these variables, then recreate or restart the container",
+  "SetupEnvSwitchInstruction": "Change these variables, then recreate the container (a restart keeps the old values)",
   "SetupEnvSwitchReady": "Your v5 database is ready",
   "SetupFoundSummary": "Found {app} on {database}: {studios} studios, {scenes} scenes, {movies} movies and {files} files.",
   "SetupHeader": "Migration needed",
