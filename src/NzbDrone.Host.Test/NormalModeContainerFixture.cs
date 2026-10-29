@@ -8,12 +8,14 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Composition.Extensions;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Http.Proxy;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Common.Options;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Extensions;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.Http;
 using NzbDrone.Host;
 using NzbDrone.Test.Common;
 using IServiceProvider = System.IServiceProvider;
@@ -54,6 +56,12 @@ namespace NzbDrone.App.Test
         public void should_resolve_user_service_as_user_service()
         {
             _services.GetRequiredService<IUserService>().Should().BeOfType<UserService>();
+        }
+
+        [Test]
+        public void should_resolve_the_config_proxy_provider_not_the_setup_mode_one()
+        {
+            _services.GetRequiredService<IHttpProxySettingsProvider>().Should().BeOfType<HttpProxySettingsProvider>();
         }
 
         [Test]
