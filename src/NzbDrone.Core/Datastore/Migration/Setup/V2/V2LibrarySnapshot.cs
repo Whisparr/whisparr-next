@@ -395,7 +395,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
                 ? dt
                 : DateTime.Parse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
 
-            return DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
+            // v2 stores UTC, and the staging columns are timestamptz on PostgreSQL, which refuses an unspecified kind.
+            return DateTime.SpecifyKind(date, DateTimeKind.Utc);
         }
 
         private static int? ReadInt(JsonNode node)

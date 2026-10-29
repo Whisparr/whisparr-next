@@ -21,7 +21,7 @@ namespace NzbDrone.Core.Datastore.Migration
                   .WithColumn("QualityProfileId").AsInt32().NotNullable()
                   .WithColumn("Tags").AsString().NotNullable()
                   .WithColumn("SeriesType").AsInt32().NotNullable()
-                  .WithColumn("Added").AsDateTime().Nullable()
+                  .WithColumn("Added").AsDateTimeOffset().Nullable()
                   .WithColumn("Done").AsBoolean().NotNullable().WithDefaultValue(false);
 
             Create.Index("IX_LegacyV2Series_LegacyId").OnTable("LegacyV2Series").OnColumn("LegacyId");
@@ -55,7 +55,7 @@ namespace NzbDrone.Core.Datastore.Migration
                   .WithColumn("OriginalFilePath").AsString().Nullable()
                   .WithColumn("MediaInfo").AsString().Nullable()
                   .WithColumn("IndexerFlags").AsInt32().NotNullable().WithDefaultValue(0)
-                  .WithColumn("DateAdded").AsDateTime().NotNullable()
+                  .WithColumn("DateAdded").AsDateTimeOffset().NotNullable()
                   .WithColumn("Done").AsBoolean().NotNullable().WithDefaultValue(false);
 
             Create.Index("IX_LegacyV2EpisodeFiles_LegacyId").OnTable("LegacyV2EpisodeFiles").OnColumn("LegacyId");
