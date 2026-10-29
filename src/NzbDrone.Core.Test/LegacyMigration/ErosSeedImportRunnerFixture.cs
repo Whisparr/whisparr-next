@@ -251,6 +251,49 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void non_transient_add_failure_resolves_as_needs_attention()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovie(It.IsAny<Movie>()))
+                  .Throws(new FluentValidation.ValidationException("Path conflict"));
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", It.Is<string>(d => d.Contains("Path conflict")), 1), Times.Once());
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved && s.Attempts == 0)), Times.Once());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void malformed_tags_resolve_as_needs_attention()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            _seed.Tags = "not json";
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
+        }
+
+        [Test]
+        public void missing_import_file_resolves_as_needs_attention()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(5)).Returns((ImportFile)null);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Never());
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
+        }
+
+        [Test]
         public void added_movie_never_searches()
         {
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));

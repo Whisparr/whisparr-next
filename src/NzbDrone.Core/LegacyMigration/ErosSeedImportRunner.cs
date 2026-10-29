@@ -93,6 +93,15 @@ namespace NzbDrone.Core.LegacyMigration
                     pass.WaitingRetry++;
                     pass.NextAttempt = pass.NextAttempt == 0 ? seed.Attempts : Math.Min(pass.NextAttempt, seed.Attempts);
                 }
+                catch (Exception ex)
+                {
+                    // Retrying won't help; report it and move on so one bad seed can't hold the migration open
+                    _logger.Warn(ex, "Could not import {0} ({1})", seed.Title, seed.Year);
+
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", ex.Message);
+                    MarkResolved(seed);
+                    progress.Advance(Area);
+                }
             }
 
             return pass;
@@ -153,6 +162,14 @@ namespace NzbDrone.Core.LegacyMigration
         private void LinkImportFile(LegacyMovieSeed seed, Movie movie)
         {
             var importFile = _importFileService.Get(seed.ImportFileId.Value);
+
+            if (importFile == null)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", "Parked file no longer exists");
+
+                return;
+            }
+
             var outcome = _fileLinker.Link(movie, importFile.Path, file =>
             {
                 file.Size = _diskProvider.GetFileSize(importFile.Path);
