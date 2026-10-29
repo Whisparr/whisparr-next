@@ -56,7 +56,7 @@ namespace Whisparr.Http.Middleware
 
         private bool HasUsableCredentials()
         {
-            return _setupModeState.Detection.Installs.Any(i => i.HasUsableCredentials);
+            return _setupModeState.Detection.HasUsableCredentials;
         }
 
         private static bool IsBlocked(HttpRequest request)

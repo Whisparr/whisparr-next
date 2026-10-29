@@ -65,27 +65,35 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
         // Eros wins when both installs exist, as it does for config5.xml. Setup mode can be required with no
         // install at all (an unreadable legacy database), which leaves nobody to sign in.
-        private LegacyInstall ChooseInstall()
+        private LegacyDatabaseLocation ChooseSource()
         {
-            var installs = _setupModeState.Detection.Installs;
+            var detection = _setupModeState.Detection;
 
-            return installs.FirstOrDefault(i => i.Kind == LegacyKind.Eros) ?? installs.FirstOrDefault();
+            // A finished migration waiting for an env switch lists no install, its Users are in the v5 database.
+            if (detection.PendingEnvSwitch)
+            {
+                return detection.UserSource;
+            }
+
+            var installs = detection.Installs;
+
+            return (installs.FirstOrDefault(i => i.Kind == LegacyKind.Eros) ?? installs.FirstOrDefault())?.Database;
         }
 
         private User[] ReadUsers()
         {
-            var install = ChooseInstall();
+            var source = ChooseSource();
 
-            if (install?.Database == null)
+            if (source == null)
             {
                 return Array.Empty<User>();
             }
 
             try
             {
-                using var connection = install.Database.Type == DatabaseType.SQLite
-                    ? LegacyConnections.OpenSqliteReadOnly(install.Database.SqlitePath)
-                    : LegacyConnections.OpenPostgres(install.Database.PostgresConnectionString);
+                using var connection = source.Type == DatabaseType.SQLite
+                    ? LegacyConnections.OpenSqliteReadOnly(source.SqlitePath)
+                    : LegacyConnections.OpenPostgres(source.PostgresConnectionString);
 
                 return ReadUsers(connection);
             }

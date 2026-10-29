@@ -149,7 +149,32 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             result.SetupModeRequired = true;
             result.EnvTargets = Config5Seeder.EnvTargetsFor(offenders, v5Main, v5Log, envMainConnectionString, envLogConnectionString);
 
+            // No install is listed, but the page still has to be signed in to. The copied Users are in the v5 database.
+            result.UserSource = new LegacyDatabaseLocation
+            {
+                Type = DatabaseType.PostgreSQL,
+                PostgresMainDb = v5Main,
+                PostgresConnectionString = v5Postgres.ConnectionString
+            };
+            result.PendingSwitchHasUsableCredentials = HasUsableCredentials(v5Postgres, v5Config);
+
             return true;
+        }
+
+        private bool HasUsableCredentials(PostgresSettings v5Postgres, Dictionary<string, string> v5Config)
+        {
+            try
+            {
+                using var connection = LegacyConnections.OpenPostgres(v5Postgres.ConnectionString);
+
+                return HasUsableCredentials(connection, DatabaseType.PostgreSQL, v5Config);
+            }
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException)
+            {
+                _logger.Debug(ex, "Unable to check the v5 database for a user to sign in with");
+
+                return false;
+            }
         }
 
         private static string Blank(string value) => value.IsNotNullOrWhiteSpace() ? value : null;

@@ -133,6 +133,18 @@ namespace NzbDrone.Api.Test.Middleware
             _nextCalled.Should().BeTrue();
         }
 
+        [TestCase(true, true)]
+        [TestCase(false, false)]
+        public async Task should_gate_a_pending_env_switch_on_the_users_of_the_v5_database(bool usableCredentials, bool reachable)
+        {
+            // No install is listed for a pending env switch, so the install flags can't decide.
+            var detection = new DetectionResult { SetupModeRequired = true, PendingEnvSwitch = true, PendingSwitchHasUsableCredentials = usableCredentials };
+            var context = await Send(new SetupModeState(detection, false), "/", "8.8.8.8");
+
+            _nextCalled.Should().Be(reachable);
+            context.Response.StatusCode.Should().Be(reachable ? 200 : 403);
+        }
+
         [TestCase("/api/v5/system/status", "8.8.8.8")]
         [TestCase("/", "8.8.8.8")]
         [TestCase("/signalr/messages", "127.0.0.1")]

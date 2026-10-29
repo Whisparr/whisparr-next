@@ -59,6 +59,32 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void should_read_users_from_the_user_source_for_a_pending_env_switch()
+        {
+            // Installs stays empty for a pending env switch, and the copied Users live in the v5 main database.
+            var detection = new DetectionResult
+            {
+                SetupModeRequired = true,
+                PendingEnvSwitch = true,
+                UserSource = new LegacyDatabaseLocation { Type = DatabaseType.SQLite, SqlitePath = _dbPath }
+            };
+
+            var service = new LegacyUserService(new SetupModeState(detection, false));
+
+            service.FindUser("user", Password).Should().NotBeNull();
+            service.FindUser("user", "wrong").Should().BeNull();
+            service.FindUser().Should().NotBeNull();
+        }
+
+        [Test]
+        public void should_find_nobody_for_a_pending_env_switch_without_a_user_source()
+        {
+            var detection = new DetectionResult { SetupModeRequired = true, PendingEnvSwitch = true };
+
+            new LegacyUserService(new SetupModeState(detection, false)).FindUser("user", Password).Should().BeNull();
+        }
+
+        [Test]
         public void should_find_user_with_correct_password()
         {
             var user = GivenService(ErosInstall(_dbPath)).FindUser("USER", Password);

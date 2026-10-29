@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using NzbDrone.Core.Configuration;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
@@ -64,6 +65,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public List<EnvTarget> EnvTargets { get; set; } = new();
         public List<LegacyInstall> Installs { get; set; } = new();
         public string LegacyConfigPath { get; set; }
+
+        // Where the sign-in users live when Installs is empty. For a pending env switch that is the v5 main
+        // database, which holds the Users rows the migration copied.
+        public LegacyDatabaseLocation UserSource { get; set; }
+
+        // For a pending env switch: whether that database has a user (or OIDC) to sign in with.
+        public bool PendingSwitchHasUsableCredentials { get; set; }
+
+        // Whether somebody off the local network could sign in to the setup page.
+        public bool HasUsableCredentials => PendingEnvSwitch ? PendingSwitchHasUsableCredentials : Installs.Any(i => i.HasUsableCredentials);
 
         // Legacy databases that exist but could not be inspected. Never null.
         public List<string> Errors { get; set; } = new();
