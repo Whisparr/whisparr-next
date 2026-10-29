@@ -12,6 +12,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
     {
         private const string ConfigArea = "Config";
         private const string NamingArea = "Naming";
+        private const string FileDateKey = "filedate";
         private const string DefaultSceneFolderFormat = "{Studio Title}";
 
         // v2 develop NamingConfig defaults, for installs that never saved naming settings (no row at all).
@@ -58,8 +59,26 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
                 // v5 stores lowercase keys.
                 var key = (RenamedKeys.TryGetValue(legacyKey, out var renamed) ? renamed : legacyKey).ToLowerInvariant();
 
-                Upsert(context, key, value);
+                Upsert(context, key, key == FileDateKey ? MapFileDate(context, legacyKey, value) : value);
             }
+        }
+
+        // v2 FileDateType is None/LocalAirDate/UtcAirDate; v5's is None/Cinemas/Release and is read with Enum.Parse.
+        private static string MapFileDate(V2PortContext context, string legacyKey, string value)
+        {
+            var mapped = (value ?? string.Empty).Trim().ToLowerInvariant() switch
+            {
+                "none" => "none",
+                "localairdate" or "utcairdate" => "release",
+                _ => "none"
+            };
+
+            if (!string.Equals(value, mapped, StringComparison.OrdinalIgnoreCase))
+            {
+                context.Add(LegacyReportCategory.SkippedSetting, ConfigArea, legacyKey, $"{value} → {mapped}");
+            }
+
+            return mapped;
         }
 
         private static void Upsert(V2PortContext context, string key, string value)

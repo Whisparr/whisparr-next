@@ -3,8 +3,10 @@ using System.Linq;
 using Dapper;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup.V2;
 using NzbDrone.Core.LegacyMigration;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Organizer;
 
 namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
@@ -261,6 +263,47 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
             PortConfig();
 
             V5.ExecuteScalar<int>("SELECT COUNT(*) FROM \"NamingConfig\"", transaction: Transaction).Should().Be(1);
+        }
+
+        [TestCase("none", "none", false)]
+        [TestCase("localairdate", "release", true)]
+        [TestCase("utcairdate", "release", true)]
+        [TestCase("LocalAirDate", "release", true)]
+        [TestCase("garbage", "none", true)]
+        public void should_translate_filedate(string v2Value, string expected, bool reported)
+        {
+            InsertV2("Config", new { Key = "filedate", Value = v2Value });
+
+            PortConfig();
+
+            ConfigValue("filedate").Should().Be(expected);
+
+            var rows = Context.Report.Where(r => r.Subject == "filedate").ToList();
+            rows.Count.Should().Be(reported ? 1 : 0);
+
+            if (reported)
+            {
+                rows[0].Category.Should().Be(LegacyReportCategory.SkippedSetting);
+                rows[0].Area.Should().Be("Config");
+                rows[0].Detail.Should().Be($"{v2Value} → {expected}");
+            }
+        }
+
+        [TestCase("localairdate", FileDateType.Release)]
+        [TestCase("utcairdate", FileDateType.Release)]
+        [TestCase("none", FileDateType.None)]
+        [TestCase("garbage", FileDateType.None)]
+        public void filedate_should_read_back_through_v5_service(string v2Value, FileDateType expected)
+        {
+            InsertV2("Config", new { Key = "filedate", Value = v2Value });
+
+            PortConfig();
+            Commit();
+            Context.Dispose();
+
+            Mocker.SetConstant<IConfigRepository>(Mocker.Resolve<ConfigRepository>());
+
+            Mocker.Resolve<ConfigService>().FileDate.Should().Be(expected);
         }
 
         [Test]
