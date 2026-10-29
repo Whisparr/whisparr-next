@@ -17,6 +17,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
         private const string NotificationsArea = "Notifications";
         private const string MetadataArea = "Metadata";
 
+        // The first v2 DiscordImportFieldType value (CustomFormats) that v5 moved up by one.
+        private const int V2FirstShiftedDiscordImportField = 13;
+
         private static readonly HashSet<string> SkippedDownloadClients = new (StringComparer.Ordinal) { "RQBit", "Tribler" };
         private static readonly HashSet<string> SkippedIndexers = new (StringComparer.Ordinal) { "Fanzub" };
         private static readonly HashSet<string> MappedMetadata = new (StringComparer.Ordinal) { "XbmcMetadata", "RoksboxMetadata", "WdtvMetadata" };
@@ -177,6 +180,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
                     case "Telegram":
                         TryTake(settings, "linkPreview", out _);
                         break;
+                    case "Discord":
+                        ShiftDiscordImportFields(settings);
+                        break;
                 }
 
                 if (V2QualityPorter.Bool(row, "OnImportComplete"))
@@ -262,6 +268,34 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
         }
 
         // ---- Helpers ----
+
+        // v5 inserted Tags at 13 in DiscordImportFieldType, ahead of CustomFormats and CustomFormatScore. The grab and
+        // manual-interaction enums only gained Tags at the end, so their values carry over unchanged.
+        private static void ShiftDiscordImportFields(JsonObject settings)
+        {
+            var key = FindKey(settings, "importFields");
+
+            if (key == null || settings[key] is not JsonArray fields)
+            {
+                return;
+            }
+
+            var shifted = new JsonArray();
+
+            foreach (var field in fields)
+            {
+                if (field is JsonValue value && value.TryGetValue<int>(out var number))
+                {
+                    shifted.Add(number >= V2FirstShiftedDiscordImportField ? number + 1 : number);
+                }
+                else
+                {
+                    shifted.Add(field?.DeepClone());
+                }
+            }
+
+            settings[key] = shifted;
+        }
 
         private static JsonObject ParseSettings(string json)
         {

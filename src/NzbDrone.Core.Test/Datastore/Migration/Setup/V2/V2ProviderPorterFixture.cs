@@ -256,6 +256,36 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
         }
 
         [Test]
+        public void should_shift_discord_import_fields_past_the_inserted_tags_value()
+        {
+            // v5 inserted Tags at 13 in DiscordImportFieldType; v2's CustomFormats (13) and CustomFormatScore (14) move up.
+            // Grab and manual-interaction fields only gained Tags at the end, so they keep their values.
+            InsertNotification(
+                1,
+                "Disc",
+                "Discord",
+                "{\"webHookUrl\":\"u\",\"grabFields\":[0,11,12],\"importFields\":[0,12,13,14],\"manualInteractionFields\":[0,9]}");
+
+            PortProviders();
+
+            var settings = V5Settings("Notifications", 1);
+
+            settings["importFields"].AsArray().Select(n => n.GetValue<int>()).Should().Equal(0, 12, 14, 15);
+            settings["grabFields"].AsArray().Select(n => n.GetValue<int>()).Should().Equal(0, 11, 12);
+            settings["manualInteractionFields"].AsArray().Select(n => n.GetValue<int>()).Should().Equal(0, 9);
+        }
+
+        [Test]
+        public void should_leave_import_fields_alone_for_other_notifications()
+        {
+            InsertNotification(1, "Hook", "Webhook", "{\"importFields\":[13,14]}");
+
+            PortProviders();
+
+            V5Settings("Notifications", 1)["importFields"].AsArray().Select(n => n.GetValue<int>()).Should().Equal(13, 14);
+        }
+
+        [Test]
         public void should_report_on_import_complete()
         {
             InsertNotification(1, "Imp", "Webhook", "{}", new { });
