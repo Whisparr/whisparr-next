@@ -206,7 +206,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
         [Test]
         public void should_report_a_jav_format()
         {
-            InsertNaming("{Site Title}", "{Site Title}", jav: "{External Id}");
+            InsertNaming("{Site Title}", "{Site Title}", jav: "{External Id} - {Site Title}");
 
             PortConfig();
 
@@ -214,7 +214,43 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
 
             skipped.Should().ContainSingle();
             skipped.Single().Area.Should().Be("Naming");
-            skipped.Single().Detail.Should().Be("{External Id}");
+            skipped.Single().Detail.Should().Be("{External Id} - {Site Title}");
+        }
+
+        [Test]
+        public void should_not_report_the_v2_default_jav_format()
+        {
+            InsertNaming("{Site Title}", "{Site Title}", jav: " {External Id} ");
+
+            PortConfig();
+
+            ReportFor(LegacyReportCategory.SkippedSetting).Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_report_a_customised_jav_format()
+        {
+            InsertNaming("{Site Title}", "{Site Title}", jav: "{External Id} custom");
+
+            PortConfig();
+
+            ReportFor(LegacyReportCategory.SkippedSetting).Should().ContainSingle().Which.Detail.Should().Be("{External Id} custom");
+        }
+
+        [Test]
+        public void should_use_default_standard_format_and_flag_when_it_is_empty()
+        {
+            InsertNaming(string.Empty, "{Site Title}");
+
+            PortConfig();
+
+            Naming().Standard.Should().Be("{Studio Title} - {Release-Date} - {Scene Title} [{Quality Full}]");
+
+            var flagged = ReportFor(LegacyReportCategory.NeedsAttention);
+
+            flagged.Should().ContainSingle();
+            flagged.Single().Area.Should().Be("Naming");
+            flagged.Single().Subject.Should().Be("StandardSceneFormat");
         }
 
         [Test]

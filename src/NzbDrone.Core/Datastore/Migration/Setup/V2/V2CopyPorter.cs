@@ -24,6 +24,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             var quoted = Quote(table);
             var booleans = BooleanColumns(context, table);
 
+            // v5 PostgreSQL Ids are GENERATED ALWAYS, so explicit Ids need the override.
+            var overriding = context.V5Type == DatabaseType.PostgreSQL ? " OVERRIDING SYSTEM VALUE" : string.Empty;
+
             context.V5.Execute($"DELETE FROM {quoted}", transaction: context.Transaction);
 
             foreach (var row in context.Legacy.Query($"SELECT * FROM {quoted} ORDER BY \"Id\"").Cast<IDictionary<string, object>>().ToList())
@@ -37,9 +40,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
 
                 var columns = string.Join(", ", row.Keys.Select(Quote));
                 var names = string.Join(", ", row.Keys.Select(k => "@" + k));
-
-                // v5 PostgreSQL Ids are GENERATED ALWAYS, so explicit Ids need the override.
-                var overriding = context.V5Type == DatabaseType.PostgreSQL ? " OVERRIDING SYSTEM VALUE" : string.Empty;
 
                 context.V5.Execute($"INSERT INTO {quoted} ({columns}){overriding} VALUES ({names})", parameters, context.Transaction);
             }

@@ -17,6 +17,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
         // v2 develop NamingConfig defaults, for installs that never saved naming settings (no row at all).
         private const string V2DefaultEpisodeFormat = "{Site Title} - {Release-Date} - {Episode Title} [{Quality Full}]";
         private const string V2DefaultSeriesFolderFormat = "{Site Title}";
+        private const string V2DefaultJavFormat = "{External Id}";
 
         // v2 stores ColonReplacementFormat 5 as Custom; v5 has no such value.
         private const int V2CustomColon = 5;
@@ -99,10 +100,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
 
                 var jav = Text(legacy, "JavEpisodeFormat");
 
-                if (!string.IsNullOrEmpty(jav))
+                if (!string.IsNullOrWhiteSpace(jav) && !string.Equals(jav.Trim(), V2DefaultJavFormat, StringComparison.Ordinal))
                 {
                     context.Add(LegacyReportCategory.SkippedSetting, NamingArea, "JavEpisodeFormat", jav);
                 }
+            }
+
+            if (string.IsNullOrEmpty(episodeFormat))
+            {
+                episodeFormat = V2DefaultEpisodeFormat;
+                context.Add(LegacyReportCategory.NeedsAttention, NamingArea, "StandardSceneFormat", "The scene file format was empty, so the v2 default is used.");
             }
 
             var standard = Map(context, "StandardSceneFormat", episodeFormat);
