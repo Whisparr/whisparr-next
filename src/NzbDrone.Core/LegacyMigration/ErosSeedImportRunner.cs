@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
 using NLog;
 using NzbDrone.Common.Disk;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
@@ -119,6 +121,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
+            var importFile = seed.ImportFileId.HasValue ? _importFileService.Get(seed.ImportFileId.Value) : null;
             var movie = _movieService.FindByForeignId(candidate.ForeignId);
 
             if (movie == null)
@@ -129,12 +132,25 @@ namespace NzbDrone.Core.LegacyMigration
                 candidate.Tags = ParseTags(seed.Tags);
                 candidate.AddOptions = new AddMovieOptions { SearchForMovie = false };
 
-                movie = _addMovieService.AddMovie(candidate);
+                // The stub's folder is the file's own, so a refresh of a movie that doesn't exist on disk yet
+                // can never see the file as missing and clean its row away
+                var fileFolder = importFile == null ? null : Path.GetDirectoryName(importFile.Path);
+
+                if (fileFolder.IsNotNullOrWhiteSpace() && !fileFolder.PathEquals(seed.RootFolderPath))
+                {
+                    candidate.Path = fileFolder;
+                }
+
+                // Inline, so no refresh queued by the add is still running with a stale movie when the file is linked.
+                // Errors are not ignored: a failed add is the seed's failure, not an empty result.
+                movie = _addMovieService.AddMovies(new List<Movie> { candidate }, false, refreshInline: true).FirstOrDefault()
+                    ?? _movieService.FindByForeignId(candidate.ForeignId)
+                    ?? throw new InvalidOperationException($"{seed.Title} ({seed.Year}) was not added");
             }
 
             if (seed.ImportFileId.HasValue)
             {
-                LinkImportFile(seed, movie);
+                LinkImportFile(seed, movie, importFile);
             }
 
             MarkResolved(seed);
@@ -159,10 +175,8 @@ namespace NzbDrone.Core.LegacyMigration
             return byTitle.Count == 1 ? byTitle[0] : null;
         }
 
-        private void LinkImportFile(LegacyMovieSeed seed, Movie movie)
+        private void LinkImportFile(LegacyMovieSeed seed, Movie movie, ImportFile importFile)
         {
-            var importFile = _importFileService.Get(seed.ImportFileId.Value);
-
             if (importFile == null)
             {
                 _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", "Parked file no longer exists");

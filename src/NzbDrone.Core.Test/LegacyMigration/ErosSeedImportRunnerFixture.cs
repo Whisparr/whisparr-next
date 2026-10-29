@@ -52,11 +52,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(5)).Returns(_importFile);
             Mocker.GetMock<IDiskProvider>().Setup(d => d.GetFileSize(_path)).Returns(1234);
             Mocker.GetMock<IAddMovieService>()
-                  .Setup(s => s.AddMovie(It.IsAny<Movie>()))
-                  .Returns<Movie>(m =>
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                  .Returns<List<Movie>, bool, bool>((movies, _, _) =>
                   {
-                      m.Id = 77;
-                      return m;
+                      movies.ForEach(m => m.Id = 77);
+                      return movies;
                   });
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
@@ -90,6 +90,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
             return Subject.RunPass(_state, _progress.Object);
         }
 
+        private void VerifyNeverAdded()
+        {
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never());
+        }
+
         private void VerifyNeedsAttention(Times times)
         {
             Mocker.GetMock<ILegacyMigrationService>()
@@ -113,7 +118,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             Mocker.GetMock<IAddMovieService>()
-                  .Verify(s => s.AddMovie(It.Is<Movie>(m => m.Monitored && m.QualityProfileId == 4 && m.RootFolderPath == _seed.RootFolderPath && m.Tags.SetEquals(new[] { 2, 3 }) && !m.AddOptions.SearchForMovie)), Times.Once());
+                  .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l.Count == 1 && l[0].Monitored && l[0].QualityProfileId == 4 && l[0].RootFolderPath == _seed.RootFolderPath && l[0].Tags.SetEquals(new[] { 2, 3 }) && !l[0].AddOptions.SearchForMovie), false, true), Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 77), _path, It.IsAny<Action<MovieFile>>()), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(5), Times.Once());
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
@@ -160,7 +165,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             pass.Pending.Should().Be(0);
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", "legacy-1", 1), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
-            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovie(It.IsAny<Movie>()), Times.Never());
+            VerifyNeverAdded();
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
         }
 
@@ -172,7 +177,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             VerifyNeedsAttention(Times.Once());
-            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovie(It.IsAny<Movie>()), Times.Never());
+            VerifyNeverAdded();
         }
 
         [Test]
@@ -185,7 +190,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovie(It.IsAny<Movie>()), Times.Never());
+            VerifyNeverAdded();
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 50), _path, It.IsAny<Action<MovieFile>>()), Times.Once());
         }
 
@@ -255,7 +260,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
             Mocker.GetMock<IAddMovieService>()
-                  .Setup(s => s.AddMovie(It.IsAny<Movie>()))
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
                   .Throws(new FluentValidation.ValidationException("Path conflict"));
 
             var pass = Run();
@@ -300,7 +305,44 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovie(It.Is<Movie>(m => m.AddOptions != null && !m.AddOptions.SearchForMovie)), Times.Once());
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l[0].AddOptions != null && !l[0].AddOptions.SearchForMovie), It.IsAny<bool>(), It.IsAny<bool>()), Times.Once());
+        }
+
+        [Test]
+        public void added_movie_takes_the_parked_files_folder_as_its_path()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+
+            Run();
+
+            Mocker.GetMock<IAddMovieService>()
+                  .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l[0].Path == "/data/library/Studio".AsOsAgnostic()), false, true), Times.Once());
+        }
+
+        [Test]
+        public void file_directly_in_the_root_folder_leaves_the_path_to_the_naming_scheme()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            _importFile.Path = "/data/library/movie.mp4".AsOsAgnostic();
+
+            Run();
+
+            Mocker.GetMock<IAddMovieService>()
+                  .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => string.IsNullOrEmpty(l[0].Path)), false, true), Times.Once());
+        }
+
+        [Test]
+        public void add_that_returns_nothing_and_finds_nothing_needs_attention()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                  .Returns(new List<Movie>());
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            VerifyNeedsAttention(Times.Once());
         }
     }
 }
