@@ -101,6 +101,13 @@ namespace NzbDrone.Core.LegacyMigration
                 {
                     Import(series, seriesEpisodes, seriesFiles, progress);
                 }
+                catch (ResolvePendingException ex)
+                {
+                    // Skyhook is still working on it: not a failure, so no attempt is spent and the series is never given up for it
+                    _logger.Debug("{0} for {1}", ex.Message, series.Title);
+
+                    pass.Waiting++;
+                }
                 catch (Exception ex) when (IsTransient(ex))
                 {
                     _logger.Warn(ex, "Could not import {0}, will retry", series.Title);
@@ -406,7 +413,7 @@ namespace NzbDrone.Core.LegacyMigration
 
         private static bool IsTransient(Exception ex)
         {
-            return ex is HttpException or WebException or TimeoutException or ResolvePendingException;
+            return ex is HttpException or WebException or TimeoutException;
         }
 
         private static HashSet<int> ParseTags(string json)

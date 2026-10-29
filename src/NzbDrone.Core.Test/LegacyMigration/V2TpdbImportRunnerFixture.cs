@@ -35,6 +35,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private Func<string, Movie> _buildStub;
         private Action<MovieFile> _fill;
         private bool _sitePending;
+        private bool _scenePending;
         private int _nextId;
 
         [SetUp]
@@ -50,6 +51,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _movies = new Dictionary<string, Movie>();
             _progress = new Mock<ILegacyImportProgress>();
             _sitePending = false;
+            _scenePending = false;
             _nextId = 100;
 
             Mocker.GetMock<ILegacyV2SeriesRepository>().Setup(r => r.All()).Returns(() => _series);
@@ -67,6 +69,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Setup(r => r.Resolve(TpdbIdKind.Scene, It.IsAny<IReadOnlyCollection<int>>()))
                   .Returns<TpdbIdKind, IReadOnlyCollection<int>>((_, ids) => new TpdbResolveResult
                   {
+                      Pending = _scenePending,
                       Ids = ids.Where(_scenes.ContainsKey).ToDictionary(i => i, i => _scenes[i])
                   });
 
@@ -540,7 +543,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
-        public void resolve_pending_records_attempt_and_leaves_series_pending()
+        public void site_resolve_pending_waits_without_spending_an_attempt()
         {
             var series = GivenSeries(1, 11, "site-uuid");
             var file = GivenFile(5, series);
@@ -550,14 +553,75 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(2);
+            pass.Waiting.Should().Be(1);
+            pass.WaitingRetry.Should().Be(0);
+            series.Attempts.Should().Be(0);
+            series.LastAttemptAt.Should().BeNull();
+            series.Done.Should().BeFalse();
+            file.Done.Should().BeFalse();
+            Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(It.IsAny<LegacyV2Series>()), Times.Never());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(m => m.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_resolve_pending_waits_without_spending_an_attempt()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 101, "scene-1");
+            _scenePending = true;
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(1);
+            pass.Waiting.Should().Be(1);
+            pass.WaitingRetry.Should().Be(0);
+            series.Attempts.Should().Be(0);
+            series.LastAttemptAt.Should().BeNull();
+            series.Done.Should().BeFalse();
+            Mocker.GetMock<ILegacyMigrationService>().Verify(m => m.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void resolve_pending_never_gives_up()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            _sitePending = true;
+
+            for (var i = 0; i < LegacyRetryPolicy.MaxAttempts + 1; i++)
+            {
+                var pass = Run();
+
+                pass.Waiting.Should().Be(1);
+                pass.Pending.Should().Be(1);
+            }
+
+            series.Attempts.Should().Be(0);
+            series.Done.Should().BeFalse();
+            Mocker.GetMock<ILegacyMigrationService>().Verify(m => m.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void transient_exception_from_the_catalog_records_attempt_and_leaves_series_pending()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Throws(new TimeoutException("slow"));
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(2);
             pass.WaitingRetry.Should().Be(1);
+            pass.Waiting.Should().Be(0);
             pass.NextAttempt.Should().Be(1);
             series.Attempts.Should().Be(1);
             series.LastAttemptAt.Should().NotBeNull();
             series.Done.Should().BeFalse();
             file.Done.Should().BeFalse();
             Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(series), Times.Once());
-            Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
         }
 
         [Test]
@@ -582,7 +646,10 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var series = GivenSeries(1, 11, "site-uuid", title: "Slow Studio");
             var file = GivenFile(5, series);
             series.Attempts = LegacyRetryPolicy.MaxAttempts - 1;
-            _sitePending = true;
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Throws(new TimeoutException("TPDB is still resolving ids for Slow Studio"));
 
             var pass = Run();
 

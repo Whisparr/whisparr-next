@@ -9,6 +9,9 @@ namespace NzbDrone.Core.LegacyMigration
         // Items that failed transiently this pass
         public int WaitingRetry { get; set; }
 
+        // Items still waiting on server-side work this pass; not failures, so they spend no attempts
+        public int Waiting { get; set; }
+
         // The smallest attempt count among the waiting items; picks the delay before the next pass
         public int NextAttempt { get; set; }
     }

@@ -44,9 +44,9 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.SetConstant<IEnumerable<ILegacyImportRunner>>(new[] { _runner.Object });
         }
 
-        private static LegacyImportPass Pass(int pending, int waiting = 0, int nextAttempt = 0)
+        private static LegacyImportPass Pass(int pending, int waiting = 0, int nextAttempt = 0, int resolving = 0)
         {
-            return new LegacyImportPass { Pending = pending, WaitingRetry = waiting, NextAttempt = nextAttempt };
+            return new LegacyImportPass { Pending = pending, WaitingRetry = waiting, NextAttempt = nextAttempt, Waiting = resolving };
         }
 
         [Test]
@@ -115,6 +115,33 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Subject.Execute(new LegacyMigrationImportCommand());
 
             Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(4)), Times.Once());
+        }
+
+        [Test]
+        public void sleeps_the_pending_delay_while_skyhook_is_resolving()
+        {
+            _passes.Enqueue(Pass(2, resolving: 2));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(LegacyRetryPolicy.PendingDelay), Times.Once());
+            _runner.Verify(r => r.RunPass(It.IsAny<LegacyMigrationState>(), It.IsAny<ILegacyImportProgress>()), Times.Exactly(2));
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.MarkCompleted(), Times.Once());
+        }
+
+        [Test]
+        public void sleeps_the_shorter_delay_when_both_kinds_wait()
+        {
+            _passes.Enqueue(Pass(3, 1, 1, resolving: 2));
+            _passes.Enqueue(Pass(1, 1, 1, resolving: 0));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            // Attempt 1 backs off a minute, so the 30 second resolve delay wins the first pass
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(LegacyRetryPolicy.PendingDelay), Times.Once());
+            Mocker.GetMock<ISkyhookPacer>().Verify(p => p.Sleep(TimeSpan.FromMinutes(1)), Times.Once());
         }
 
         [Test]

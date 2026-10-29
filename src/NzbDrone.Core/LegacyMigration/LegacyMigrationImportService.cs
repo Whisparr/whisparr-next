@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NLog;
@@ -78,18 +79,38 @@ namespace NzbDrone.Core.LegacyMigration
                     return;
                 }
 
-                if (pass.WaitingRetry == 0)
+                if (pass.WaitingRetry == 0 && pass.Waiting == 0)
                 {
                     _logger.Error("Legacy import runner left {0} items pending with none waiting to retry", pass.Pending);
 
                     return;
                 }
 
-                var delay = LegacyRetryPolicy.DelayBefore(pass.NextAttempt);
-
-                _logger.Info("{0} legacy import items failed transiently, retrying in {1}", pass.WaitingRetry, delay);
-                _pacer.Sleep(delay);
+                _pacer.Sleep(DelayAfter(pass));
             }
+        }
+
+        // The shorter of the two delays when both kinds of item are waiting
+        private TimeSpan DelayAfter(LegacyImportPass pass)
+        {
+            var delay = pass.WaitingRetry > 0 ? LegacyRetryPolicy.DelayBefore(pass.NextAttempt) : LegacyRetryPolicy.PendingDelay;
+
+            if (pass.WaitingRetry > 0 && pass.Waiting > 0 && delay > LegacyRetryPolicy.PendingDelay)
+            {
+                delay = LegacyRetryPolicy.PendingDelay;
+            }
+
+            if (pass.WaitingRetry > 0)
+            {
+                _logger.Info("{0} legacy import items failed transiently, retrying in {1}", pass.WaitingRetry, delay);
+            }
+
+            if (pass.Waiting > 0)
+            {
+                _logger.Info("Skyhook is still resolving ids for {0} studio(s), checking again in {1}", pass.Waiting, delay);
+            }
+
+            return delay;
         }
 
         public void Handle(ApplicationStartedEvent message)
