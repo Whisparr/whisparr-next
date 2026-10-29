@@ -18,6 +18,7 @@ import { icons } from 'Helpers/Props';
 import { VERTICAL } from 'Helpers/Props/scrollDirections';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
 import dimensions from 'Styles/Variables/dimensions';
+import useMigrationReport from 'System/MigrationReport/useMigrationReport';
 import HealthStatus from 'System/Status/Health/HealthStatus';
 import translate from 'Utilities/String/translate';
 import Messages from './Messages/Messages';
@@ -42,6 +43,9 @@ interface SidebarItem {
     statusComponent?: React.ElementType;
   }[];
 }
+
+// Only listed once the server has a migration report; a 404 hides it.
+const MIGRATION_REPORT_PATH = '/system/migration-report';
 
 let LINKS: SidebarItem[] = [
   {
@@ -237,6 +241,10 @@ let LINKS: SidebarItem[] = [
         to: '/system/events',
       },
       {
+        title: () => translate('MigrationReport'),
+        to: MIGRATION_REPORT_PATH,
+      },
+      {
         title: () => translate('LogFiles'),
         to: '/system/logs/files',
       },
@@ -287,6 +295,19 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
       return acc;
     }, [] as SidebarItem[]);
   }
+
+  const { hasReport: hasMigrationReport } = useMigrationReport();
+
+  const visibleLinks = LINKS.map((link) =>
+    !hasMigrationReport && link.children
+      ? {
+          ...link,
+          children: link.children.filter(
+            (child) => child.to !== MIGRATION_REPORT_PATH
+          ),
+        }
+      : link
+  );
 
   const pathname = location.pathname;
 
@@ -546,7 +567,7 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
         autoScroll={false}
       >
         <div>
-          {LINKS.map((link) => {
+          {visibleLinks.map((link) => {
             const childWithStatusComponent = link.children?.find((child) => {
               return !!child.statusComponent;
             });

@@ -36,6 +36,7 @@ import StudioIndex from 'Studio/Index/StudioIndex';
 import Backups from 'System/Backup/Backups';
 import LogsTable from 'System/Events/LogsTable';
 import Logs from 'System/Logs/Logs';
+import MigrationReport from 'System/MigrationReport/MigrationReport';
 import Status from 'System/Status/Status';
 import Tasks from 'System/Tasks/Tasks';
 import Updates from 'System/Updates/Updates';
@@ -160,6 +161,8 @@ function AppRoutes() {
       <Route path="/system/updates" element={<Updates />} />
 
       <Route path="/system/events" element={<LogsTable />} />
+
+      <Route path="/system/migration-report" element={<MigrationReport />} />
 
       <Route path="/system/logs/files/*" element={<Logs />} />
 
