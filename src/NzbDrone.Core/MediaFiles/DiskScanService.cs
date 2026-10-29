@@ -31,6 +31,9 @@ namespace NzbDrone.Core.MediaFiles
         string[] GetVideoFiles(string path, bool allDirectories = true);
         string[] GetNonVideoFiles(string path, bool allDirectories = true);
         List<string> FilterPaths(string basePath, IEnumerable<string> paths, bool filterExtras = true);
+
+        // Runs the action holding the movie's scan lock and then the folder's, the same locks Scan takes
+        void RunLocked(Movie movie, string folder, Action action);
     }
 
     public class DiskScanService :
@@ -284,24 +287,46 @@ namespace NzbDrone.Core.MediaFiles
             }
             finally
             {
-                try
-                {
-                    sem.Release();
-                }
-                catch (SemaphoreFullException)
-                {
-                    // Shouldn't happen, but guard against releasing too many times.
-                }
-
-                // Attempt to remove the semaphore from the dictionary when it looks unused.
-                // This is best-effort and racing callers may re-create the entry; that's acceptable.
-                if (ScanLocks.TryGetValue(movie.Id, out var existing) && ReferenceEquals(existing, sem) && sem.CurrentCount == 1)
-                {
-                    ScanLocks.TryRemove(movie.Id, out _);
-                }
-
-                _logger.Trace("Released scan lock for movie id {0} ({1})", movie.Id, movie.Title);
+                ReleaseScanLock(movie, sem);
             }
+        }
+
+        public void RunLocked(Movie movie, string folder, Action action)
+        {
+            var sem = ScanLocks.GetOrAdd(movie.Id, _ => new SemaphoreSlim(1, 1));
+
+            _logger.Trace("Acquiring scan lock for movie id {0} ({1})", movie.Id, movie.Title);
+            sem.Wait();
+            try
+            {
+                // R2: movie lock (held), then the folder lock
+                RunInFolderLock(folder, action);
+            }
+            finally
+            {
+                ReleaseScanLock(movie, sem);
+            }
+        }
+
+        private void ReleaseScanLock(Movie movie, SemaphoreSlim sem)
+        {
+            try
+            {
+                sem.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+                // Shouldn't happen, but guard against releasing too many times.
+            }
+
+            // Attempt to remove the semaphore from the dictionary when it looks unused.
+            // This is best-effort and racing callers may re-create the entry; that's acceptable.
+            if (ScanLocks.TryGetValue(movie.Id, out var existing) && ReferenceEquals(existing, sem) && sem.CurrentCount == 1)
+            {
+                ScanLocks.TryRemove(movie.Id, out _);
+            }
+
+            _logger.Trace("Released scan lock for movie id {0} ({1})", movie.Id, movie.Title);
         }
 
         /// <summary>

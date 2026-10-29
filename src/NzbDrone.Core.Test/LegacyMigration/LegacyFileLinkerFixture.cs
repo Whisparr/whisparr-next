@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -27,6 +29,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _movie = new Movie { Id = 7, Path = "/data/library/Studio".AsOsAgnostic() };
 
             Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists(_file)).Returns(true);
+
+            // The real service holds the locks around the action; here it only has to run it
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(s => s.RunLocked(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action>()))
+                  .Callback<Movie, string, Action>((_, _, action) => action());
 
             Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.Add(It.IsAny<MovieFile>()))
@@ -163,19 +170,97 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()), Times.Never());
         }
 
-        [Test]
-        public void linked_to_other_movie_is_left_alone()
+        [TestCase(MatchTier.Hash)]
+        [TestCase(MatchTier.Manual)]
+        [TestCase(MatchTier.Conflict)]
+        [TestCase(MatchTier.Confirmed)]
+        public void linked_to_other_movie_at_or_above_hash_is_left_alone(MatchTier tier)
         {
+            var existing = new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4", MatchTier = tier };
+
             Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.FindByFullPath(_file))
-                  .Returns(new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4", MatchTier = MatchTier.Name });
+                  .Returns(existing);
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.LinkedElsewhere);
 
+            existing.MovieId.Should().Be(8);
+            existing.MatchTier.Should().Be(tier);
             Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()), Times.Never());
-
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(It.IsAny<MovieFile>()), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
             Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(It.IsAny<Movie>()), Times.Never());
+        }
+
+        [TestCase(MatchTier.Unknown)]
+        [TestCase(MatchTier.Name)]
+        public void file_guessed_onto_another_scene_moves_to_the_v2_target(MatchTier tier)
+        {
+            var existing = new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "old/scene.mp4", MatchTier = tier };
+            var oldMovie = new Movie { Id = 8, Path = "/data/library/Other".AsOsAgnostic(), MovieFileId = 5 };
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.FindByFullPath(_file)).Returns(existing);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.Is<IEnumerable<int>>(ids => ids.Single() == 8))).Returns(new List<Movie> { oldMovie });
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
+
+            existing.MovieId.Should().Be(7);
+            existing.MatchTier.Should().Be(MatchTier.Confirmed);
+            existing.RelativePath.Should().Be("scene.mp4");
+            oldMovie.MovieFileId.Should().Be(0);
+            _movie.MovieFileId.Should().Be(5);
+            _movie.Path.Should().Be("/data/library/Studio".AsOsAgnostic());
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(existing), Times.Once());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(oldMovie), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void moving_a_file_leaves_the_old_scenes_other_file_alone()
+        {
+            var existing = new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "scene.mp4", MatchTier = MatchTier.Name };
+            var oldMovie = new Movie { Id = 8, Path = _movie.Path, MovieFileId = 6 };
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.FindByFullPath(_file)).Returns(existing);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<Movie> { oldMovie });
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
+
+            oldMovie.MovieFileId.Should().Be(6);
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(oldMovie), Times.Never());
+        }
+
+        [Test]
+        public void link_runs_under_the_scan_locks_of_the_scene_and_its_folder()
+        {
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
+
+            Mocker.GetMock<IDiskScanService>()
+                  .Verify(s => s.RunLocked(_movie, "/data/library/Studio".AsOsAgnostic(), It.IsAny<Action>()), Times.Once());
+        }
+
+        [Test]
+        public void folder_lock_falls_back_to_the_files_directory_when_the_movie_path_is_elsewhere()
+        {
+            _movie.Path = "/elsewhere/Old".AsOsAgnostic();
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
+
+            Mocker.GetMock<IDiskScanService>()
+                  .Verify(s => s.RunLocked(_movie, "/data/library/Studio".AsOsAgnostic(), It.IsAny<Action>()), Times.Once());
+        }
+
+        [Test]
+        public void missing_file_never_takes_the_locks()
+        {
+            Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists(_file)).Returns(false);
+
+            Subject.Link(_movie, _file, f => { });
+
+            Mocker.GetMock<IDiskScanService>().Verify(s => s.RunLocked(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action>()), Times.Never());
         }
 
         [Test]

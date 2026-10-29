@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles;
@@ -37,17 +38,24 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly IRootFolderService _rootFolderService;
         private readonly IImportFileRepository _importFileRepository;
         private readonly ILegacyMigrationService _migrationService;
+        private readonly IDiskScanService _diskScanService;
+        private readonly Logger _logger;
 
         private List<RootFolder> _rootFolders;
         private DateTime _rootFoldersLoadedAt;
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public LegacyFileLinker(IMediaFileService mediaFileService,
                                 IMovieService movieService,
                                 IDiskProvider diskProvider,
                                 IRootFolderService rootFolderService,
                                 IImportFileRepository importFileRepository,
-                                ILegacyMigrationService migrationService)
+                                ILegacyMigrationService migrationService,
+                                IDiskScanService diskScanService,
+                                Logger logger)
         {
+            _diskScanService = diskScanService;
+            _logger = logger;
             _mediaFileService = mediaFileService;
             _movieService = movieService;
             _diskProvider = diskProvider;
@@ -68,29 +76,25 @@ namespace NzbDrone.Core.LegacyMigration
                 return LinkOutcome.Missing;
             }
 
+            var movieFolder = movie.Path.IsNullOrWhiteSpace() || !movie.Path.IsParentPath(path)
+                ? Path.GetDirectoryName(path)
+                : movie.Path;
+            var outcome = LinkOutcome.Linked;
+
+            // A scan of this scene or a sibling in the same folder must not interleave with the check-then-add below
+            _diskScanService.RunLocked(movie, movieFolder, () => outcome = LinkLocked(movie, path, movieFolder, fill));
+
+            return outcome;
+        }
+
+        private LinkOutcome LinkLocked(Movie movie, string path, string movieFolder, Action<MovieFile> fill)
+        {
             var existing = _mediaFileService.FindByFullPath(path);
 
             if (existing != null)
             {
-                if (existing.MovieId != movie.Id)
-                {
-                    return LinkOutcome.LinkedElsewhere;
-                }
-
-                // The disk scan may have linked it by name already; the v2 TPDB link agrees, so it is confirmed.
-                // Hash, Manual and Conflict are left as they are.
-                if (existing.MatchTier is MatchTier.Unknown or MatchTier.Name)
-                {
-                    existing.MatchTier = MatchTier.Confirmed;
-                    _mediaFileService.SaveMatchTiers(new List<MovieFile> { existing });
-                }
-
-                return LinkOutcome.AlreadyLinked;
+                return ClaimExisting(movie, existing, movieFolder);
             }
-
-            var movieFolder = movie.Path.IsNullOrWhiteSpace() || !movie.Path.IsParentPath(path)
-                ? Path.GetDirectoryName(path)
-                : movie.Path;
 
             var movieFile = new MovieFile
             {
@@ -111,6 +115,56 @@ namespace NzbDrone.Core.LegacyMigration
             _movieService.UpdateMovie(movie);
 
             return LinkOutcome.Linked;
+        }
+
+        private LinkOutcome ClaimExisting(Movie movie, MovieFile existing, string movieFolder)
+        {
+            if (existing.MovieId == movie.Id)
+            {
+                // The disk scan may have linked it by name already; the v2 TPDB link agrees, so it is confirmed.
+                // Hash, Manual and Conflict are left as they are.
+                if (existing.MatchTier is MatchTier.Unknown or MatchTier.Name)
+                {
+                    existing.MatchTier = MatchTier.Confirmed;
+                    _mediaFileService.SaveMatchTiers(new List<MovieFile> { existing });
+                }
+
+                return LinkOutcome.AlreadyLinked;
+            }
+
+            // Only a guess by name (or none) put the file on the other scene; the v2 TPDB link outranks it
+            if (existing.MatchTier is not (MatchTier.Unknown or MatchTier.Name))
+            {
+                return LinkOutcome.LinkedElsewhere;
+            }
+
+            MoveToMovie(movie, existing, movieFolder);
+
+            return LinkOutcome.Linked;
+        }
+
+        private void MoveToMovie(Movie movie, MovieFile existing, string movieFolder)
+        {
+            var oldMovieId = existing.MovieId;
+
+            existing.MovieId = movie.Id;
+            existing.RelativePath = movieFolder.GetRelativePath(existing.Path);
+            existing.MatchTier = MatchTier.Confirmed;
+            _mediaFileService.Update(existing);
+
+            var oldMovie = _movieService.GetMovies(new[] { oldMovieId }).FirstOrDefault();
+
+            if (oldMovie != null && oldMovie.MovieFileId == existing.Id)
+            {
+                oldMovie.MovieFileId = 0;
+                _movieService.UpdateMovie(oldMovie);
+            }
+
+            movie.Path = movieFolder;
+            movie.MovieFileId = existing.Id;
+            _movieService.UpdateMovie(movie);
+
+            _logger.Info("Moved {0} from movie {1} to {2}: the v2 TPDB link outranks a match by name", existing.Path, oldMovieId, movie);
         }
 
         private List<RootFolder> GetRootFolders()

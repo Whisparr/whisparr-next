@@ -1040,5 +1040,33 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<ILostMovieFileService>().Verify(v => v.TryRelink(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
         }
+
+        [Test]
+        public void run_locked_runs_the_action_and_blocks_a_second_caller_on_the_same_folder()
+        {
+            var folder = @"C:\Test\Movies\LockedFolder".AsOsAgnostic();
+            var other = new Movie { Id = _movie.Id + 1, Path = folder };
+            var firstEntered = new System.Threading.ManualResetEventSlim();
+            var release = new System.Threading.ManualResetEventSlim();
+            var secondRan = false;
+
+            var first = System.Threading.Tasks.Task.Run(() => Subject.RunLocked(_movie, folder, () =>
+            {
+                firstEntered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }));
+
+            firstEntered.Wait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+
+            var second = System.Threading.Tasks.Task.Run(() => Subject.RunLocked(other, folder, () => secondRan = true));
+
+            // Different scenes, same folder: the folder lock holds the second one back
+            second.Wait(TimeSpan.FromMilliseconds(300)).Should().BeFalse();
+            secondRan.Should().BeFalse();
+
+            release.Set();
+            System.Threading.Tasks.Task.WaitAll(new[] { first, second }, TimeSpan.FromSeconds(10)).Should().BeTrue();
+            secondRan.Should().BeTrue();
+        }
     }
 }
