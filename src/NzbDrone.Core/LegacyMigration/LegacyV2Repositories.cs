@@ -50,4 +50,40 @@ namespace NzbDrone.Core.LegacyMigration
         {
         }
     }
+
+    public interface ILegacyStudioSeedRepository : IBasicRepository<LegacyStudioSeed>
+    {
+    }
+
+    public class LegacyStudioSeedRepository : BasicRepository<LegacyStudioSeed>, ILegacyStudioSeedRepository
+    {
+        public LegacyStudioSeedRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+    }
+
+    public interface ILegacyPerformerSeedRepository : IBasicRepository<LegacyPerformerSeed>
+    {
+    }
+
+    public class LegacyPerformerSeedRepository : BasicRepository<LegacyPerformerSeed>, ILegacyPerformerSeedRepository
+    {
+        public LegacyPerformerSeedRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+    }
+
+    public interface ILegacySceneSeedRepository : IBasicRepository<LegacySceneSeed>
+    {
+    }
+
+    public class LegacySceneSeedRepository : BasicRepository<LegacySceneSeed>, ILegacySceneSeedRepository
+    {
+        public LegacySceneSeedRepository(IMainDatabase database, IEventAggregator eventAggregator)
+            : base(database, eventAggregator)
+        {
+        }
+    }
 }

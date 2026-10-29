@@ -20,5 +20,8 @@ namespace NzbDrone.Core.LegacyMigration
         public DateTime? CompletedAt { get; set; }
         public string BackupPath { get; set; }
         public bool ReportDismissed { get; set; }
+
+        // Set when an Eros library is being rebuilt on a new scene source rather than copied
+        public bool Rebuild { get; set; }
     }
 }

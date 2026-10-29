@@ -205,6 +205,12 @@ namespace NzbDrone.Core.Datastore
 
             Mapper.Entity<LegacyMovieSeed>("LegacyMovieSeeds").RegisterModel();
 
+            Mapper.Entity<LegacyStudioSeed>("LegacyStudioSeeds").RegisterModel();
+
+            Mapper.Entity<LegacyPerformerSeed>("LegacyPerformerSeeds").RegisterModel();
+
+            Mapper.Entity<LegacySceneSeed>("LegacySceneSeeds").RegisterModel();
+
             Mapper.Entity<LegacyV2Series>("LegacyV2Series").RegisterModel();
 
             Mapper.Entity<LegacyV2Episode>("LegacyV2Episodes").RegisterModel();
