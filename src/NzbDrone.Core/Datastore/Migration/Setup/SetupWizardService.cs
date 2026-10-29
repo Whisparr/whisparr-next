@@ -365,12 +365,13 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         // told which step is about to run, so a failure is attributed to it.
         private V2SnapshotCounts PortV2(BuiltDatabases built, LegacyInstall install, Action<SetupStep> enter)
         {
+            // First, so a failure opening either database is attributed to this step and not to CreateDatabase.
+            enter(SetupStep.PortSettings);
+            SetStep(SetupStep.PortSettings, SetupStepState.Running);
+
             using var connection = OpenMain(built);
             using var transaction = connection.BeginTransaction();
             using var context = _v2Porter.Open(install, connection, transaction, built.Type);
-
-            enter(SetupStep.PortSettings);
-            SetStep(SetupStep.PortSettings, SetupStepState.Running);
 
             _v2Porter.PortSettings(context);
 

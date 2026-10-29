@@ -459,6 +459,23 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void v2_porter_open_failure_on_postgres_should_be_attributed_to_port_settings()
+        {
+            _install.Database.Type = DatabaseType.PostgreSQL;
+            _install.Database.PostgresMainDb = "whisparr-main";
+            _porter.Setup(p => p.Open(It.IsAny<LegacyInstall>(), It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<DatabaseType>()))
+                .Throws(new InvalidOperationException("cannot open the v2 database"));
+
+            var progress = RunV2();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            progress.ErrorKey.Should().Be("Unexpected");
+            progress.CanRetry.Should().BeFalse();
+            progress.Steps.Single(s => s.Step == SetupStep.PortSettings).State.Should().Be("failed");
+            progress.Steps.Single(s => s.Step == SetupStep.CreateDatabase).State.Should().Be("done");
+        }
+
+        [Test]
         public void porter_failure_should_discard_sidecar_items()
         {
             _porter.Setup(p => p.PortSettings(It.IsAny<V2PortContext>())).Throws(new InvalidOperationException("bad row"));
