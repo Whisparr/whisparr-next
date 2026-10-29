@@ -78,11 +78,23 @@ namespace NzbDrone.Api.Test.v5
         {
             Mocker.GetMock<ILegacyMigrationService>()
                 .Setup(s => s.GetCurrent())
-                .Returns(new LegacyMigrationState());
+                .Returns(new LegacyMigrationState { Completed = true });
 
             Subject.Dismiss().Should().BeOfType<OkResult>();
 
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.DismissReport(), Times.Once());
+        }
+
+        [Test]
+        public void dismiss_returns_409_until_the_migration_has_completed()
+        {
+            Mocker.GetMock<ILegacyMigrationService>()
+                .Setup(s => s.GetCurrent())
+                .Returns(new LegacyMigrationState { Completed = false });
+
+            Subject.Dismiss().Should().BeOfType<ConflictResult>();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.DismissReport(), Times.Never());
         }
 
         [Test]

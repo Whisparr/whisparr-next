@@ -167,10 +167,36 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", "legacy-1", 1), Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", "Legacy TMDB id legacy-1", 1), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             VerifyNeverAdded();
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
+        }
+
+        [Test]
+        public void unmatched_seed_names_the_other_source_when_tmdb_is_chosen()
+        {
+            _state.MovieSource = MovieMetadataType.TMDB;
+            _seed.TmdbId = 0;
+            GivenSearch("The Big Movie 2020");
+
+            Run();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", "Legacy TPDB id legacy-1", 1), Times.Once());
+        }
+
+        [Test]
+        public void give_up_detail_names_the_legacy_id_source()
+        {
+            AddHealthySeed();
+            Mocker.GetMock<ISearchForNewMovie>()
+                  .Setup(s => s.SearchForNewMovie("tmdb:123"))
+                  .Throws(new TimeoutException("slow"));
+            _seed.Attempts = 4;
+
+            Run();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Movies", "The Big Movie (2020)", "Legacy TPDB id legacy-1: slow", 1), Times.Once());
         }
 
         [Test]

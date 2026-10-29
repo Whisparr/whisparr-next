@@ -56,9 +56,17 @@ namespace Whisparr.Api.V5.System.MigrationReport
         [HttpPost("dismiss")]
         public IActionResult Dismiss()
         {
-            if (_migrationService.GetCurrent() == null)
+            var state = _migrationService.GetCurrent();
+
+            if (state == null)
             {
                 return NotFound();
+            }
+
+            // The report is still filling in until the import completes, so it can't be put away yet
+            if (!state.Completed)
+            {
+                return Conflict();
             }
 
             _migrationService.DismissReport();

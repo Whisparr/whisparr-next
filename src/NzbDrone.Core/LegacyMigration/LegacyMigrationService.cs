@@ -36,7 +36,7 @@ namespace NzbDrone.Core.LegacyMigration
             _stateRepository = stateRepository;
             _reportRepository = reportRepository;
             _eventAggregator = eventAggregator;
-            _incompleteCache = cacheManager.GetCache<bool>(GetType(), "incomplete");
+            _incompleteCache = cacheManager.GetCache<bool>(GetType(), IncompleteKey);
         }
 
         public LegacyMigrationState GetCurrent()

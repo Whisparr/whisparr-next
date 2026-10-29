@@ -127,7 +127,7 @@ namespace NzbDrone.Core.LegacyMigration
                     pass.Pending++;
                     pass.WaitingRetry++;
                 }
-                else if (RecordFailure(seed, error))
+                else if (RecordFailure(state, seed, error))
                 {
                     progress.Advance(Area);
                 }
@@ -148,7 +148,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (candidate == null)
             {
-                ReportUnmatched(seed);
+                ReportUnmatched(state, seed);
                 MarkResolved(seed);
 
                 return;
@@ -238,9 +238,17 @@ namespace NzbDrone.Core.LegacyMigration
             _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, detail);
         }
 
-        private void ReportUnmatched(LegacyMovieSeed seed)
+        private void ReportUnmatched(LegacyMigrationState state, LegacyMovieSeed seed)
         {
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", seed.LegacyForeignId);
+            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", LegacyIdDetail(state, seed));
+        }
+
+        // Seeds are the movies the chosen source has no twin for, so their id is from the other source
+        private static string LegacyIdDetail(LegacyMigrationState state, LegacyMovieSeed seed)
+        {
+            var source = state.MovieSource == MovieMetadataType.TMDB ? "TPDB" : "TMDB";
+
+            return $"Legacy {source} id {seed.LegacyForeignId}";
         }
 
         private void MarkResolved(LegacyMovieSeed seed)
@@ -250,7 +258,7 @@ namespace NzbDrone.Core.LegacyMigration
         }
 
         // Returns true when the seed was given up on
-        private bool RecordFailure(LegacyMovieSeed seed, Exception ex)
+        private bool RecordFailure(LegacyMigrationState state, LegacyMovieSeed seed, Exception ex)
         {
             seed.Attempts++;
             seed.LastAttemptAt = _pacer.UtcNow;
@@ -260,7 +268,7 @@ namespace NzbDrone.Core.LegacyMigration
             if (giveUp)
             {
                 seed.Resolved = true;
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", $"{seed.LegacyForeignId}: {ex.Message}");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, $"{seed.Title} ({seed.Year})", $"{LegacyIdDetail(state, seed)}: {ex.Message}");
             }
 
             _seedRepository.Update(seed);
