@@ -451,16 +451,23 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void v2_with_stashdb_refused_not_available_yet()
+        public void v2_with_stashdb_runs()
         {
             UseV2Install();
+            _counts.Series = 2;
+            _install.Studios = 1;
 
             var service = Service();
 
             service.Start(V2Choice(SceneMetadataType.StashDb));
 
-            AssertNotAvailable(service.Progress);
-            service.Progress.ErrorMessage.Should().Be("Migrating Whisparr v2 to StashDB scenes isn't available yet. Your existing data has not been changed.");
+            var progress = Await(service);
+
+            progress.ErrorKey.Should().BeNull();
+            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Once);
+            _finishedState.SourceKind.Should().Be(LegacyKind.V2);
+            _finishedState.SceneSource.Should().Be(SceneMetadataType.StashDb);
+            _finishedState.Phase.Should().Be("Phase2Pending");
         }
 
         [Test]
@@ -562,16 +569,6 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             Run();
 
             _finishedState.Rebuild.Should().BeFalse();
-        }
-
-        private void AssertNotAvailable(SetupProgress progress)
-        {
-            // A refusal before anything started leaves the form usable, with the error above it.
-            progress.Status.Should().Be(SetupStatus.Idle);
-            progress.ErrorKey.Should().Be("SetupNotAvailableYet");
-            progress.ErrorMessage.Should().NotBeNullOrEmpty();
-            progress.CanRetry.Should().BeFalse();
-            _backup.Verify(b => b.Backup(It.IsAny<LegacyInstall>(), It.IsAny<string>()), Times.Never);
         }
 
         [Test]
