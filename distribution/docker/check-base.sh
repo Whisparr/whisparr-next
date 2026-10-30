@@ -3,7 +3,8 @@
 #
 # Usage: check-base.sh <image:moving-tag> <release-tag-or-empty>
 # Prints one of: rebuild, current, no_release.
-# Exits non-zero only when the base image cannot be read from the registry.
+# Exits non-zero (printing nothing) when the base or published image cannot be
+# read for a reason other than the published image being absent or unreadable.
 set -u
 
 base="ghcr.io/hotio/base:alpinevpn"
@@ -23,15 +24,24 @@ if [ -z "$base_digest" ] || [ "$base_digest" = "null" ]; then
     exit 1
 fi
 
-# A missing published image, or one without the label, means rebuild.
-if ! image_json="$(docker buildx imagetools inspect "$image" --format '{{json .Image}}' 2>/dev/null)"; then
-    echo rebuild
-    exit 0
+# A missing, denied or unknown image means there is no readable image: rebuild.
+# Any other failure (timeout, 5xx) is a registry problem: exit non-zero, print nothing.
+errfile="$(mktemp)"
+trap 'rm -f "$errfile"' EXIT
+if ! image_json="$(docker buildx imagetools inspect "$image" --format '{{json .Image}}' 2>"$errfile")"; then
+    if grep -qiE 'not found|denied|unknown' "$errfile"; then
+        echo rebuild
+        exit 0
+    fi
+    cat "$errfile" >&2
+    exit 1
 fi
 
 published="$(printf '%s' "$image_json" | jq -r --arg l "$label" '."linux/amd64".config.Labels[$l] // empty' 2>/dev/null)" || published=""
+version="$(printf '%s' "$image_json" | jq -r '."linux/amd64".config.Labels["org.opencontainers.image.version"] // empty' 2>/dev/null)" || version=""
 
-if [ "$published" = "$base_digest" ]; then
+# A stale version rebuilds even when the base digest matches.
+if [ "$published" = "$base_digest" ] && [ "$version" = "${release#v}" ]; then
     echo current
 else
     echo rebuild

@@ -21,7 +21,10 @@ if [ "$ref" = "ghcr.io/hotio/base:alpinevpn" ]; then
     esac
     exit 0
 fi
-[ "${STUB_IMAGE_FAIL:-0}" = "1" ] && exit 1
+if [ "${STUB_IMAGE_FAIL:-0}" = "1" ]; then
+    echo "${STUB_IMAGE_ERR:-}" >&2
+    exit 1
+fi
 case "$fmt" in
     *.Image*) echo "${STUB_IMAGE_JSON}" ;;
     *) exit 2 ;;
@@ -51,14 +54,19 @@ run_case() {
     fi
 }
 
+# label_json <base digest> [image version]
 label_json() {
-    echo "{\"linux/amd64\":{\"config\":{\"Labels\":{\"org.opencontainers.image.base.digest\":\"$1\"}}},\"linux/arm64\":{\"config\":{\"Labels\":{}}}}"
+    echo "{\"linux/amd64\":{\"config\":{\"Labels\":{\"org.opencontainers.image.base.digest\":\"$1\",\"org.opencontainers.image.version\":\"${2:-1.0.0}\"}}},\"linux/arm64\":{\"config\":{\"Labels\":{}}}}"
 }
 
 run_case no_release no_release zero ""
-run_case no_image rebuild zero v1.0.0 STUB_IMAGE_FAIL=1
-run_case same_digest current zero v1.0.0 "STUB_IMAGE_JSON=$(label_json sha256:aaa)"
-run_case new_digest rebuild zero v1.0.0 "STUB_IMAGE_JSON=$(label_json sha256:bbb)"
+run_case no_image rebuild zero v1.0.0 STUB_IMAGE_FAIL=1 "STUB_IMAGE_ERR=ERROR: ghcr.io/example/app:latest: not found"
+run_case image_denied rebuild zero v1.0.0 STUB_IMAGE_FAIL=1 "STUB_IMAGE_ERR=ERROR: denied: permission_denied: read_package"
+run_case image_error "" nonzero v1.0.0 STUB_IMAGE_FAIL=1 "STUB_IMAGE_ERR=ERROR: unexpected status 500 Internal Server Error"
+run_case same_digest current zero v1.0.0 "STUB_IMAGE_JSON=$(label_json sha256:aaa 1.0.0)"
+run_case version_same current zero v1.2.0 "STUB_IMAGE_JSON=$(label_json sha256:aaa 1.2.0)"
+run_case version_behind rebuild zero v1.2.0 "STUB_IMAGE_JSON=$(label_json sha256:aaa 1.1.0)"
+run_case new_digest rebuild zero v1.0.0 "STUB_IMAGE_JSON=$(label_json sha256:bbb 1.0.0)"
 run_case missing_label rebuild zero v1.0.0 'STUB_IMAGE_JSON={"linux/amd64":{"config":{"Labels":{}}}}'
 run_case base_unreachable "" nonzero v1.0.0 STUB_BASE_FAIL=1 "STUB_IMAGE_JSON=$(label_json sha256:aaa)"
 

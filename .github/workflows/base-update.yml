@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     outputs:
       result: ${{ steps.check.outputs.result }}
       version: ${{ steps.release.outputs.version }}
@@ -33,6 +34,14 @@ jobs:
           echo "Newest prerelease tag: '${tag}'"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      # So a private package is readable; an unreadable one would look absent.
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compare base image
         id: check
