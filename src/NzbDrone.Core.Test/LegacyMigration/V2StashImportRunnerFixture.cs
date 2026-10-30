@@ -106,7 +106,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                   .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((_, _, build, _) => _buildStub = build)
-                  .Returns(0);
+                  .Returns(new SceneCatalogImportResult(0, 0));
 
             Mocker.GetMock<ILegacyHashMatcher>()
                   .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
@@ -352,6 +352,98 @@ namespace NzbDrone.Core.Test.LegacyMigration
             quiet.Done.Should().BeTrue();
             _progress.Verify(p => p.Advance("Files", 1), Times.Exactly(2));
             VerifyReport(LegacyReportCategory.LeftBehind, "Scenes", series.Title, "StashDB scenes with no v2 twin, left unmonitored", Times.Never());
+        }
+
+        private void GivenCatalogGaveUpOn(string title, int gaveUp)
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns(new SceneCatalogImportResult(0, gaveUp));
+        }
+
+        [Test]
+        public void an_incomplete_catalog_links_what_matches_and_holds_the_rest_until_it_completes()
+        {
+            var series = GivenSeries(1, "Big Studio");
+            GivenSeries(2);
+            var matched = GivenFile(5, series);
+            var unmatched = GivenFile(6, series);
+
+            GivenScene("s1", "Scene One", "2024-05-06");
+            GivenEpisode(1, series, "Scene One", "2024-05-06", fileId: 5);
+            GivenEpisode(2, series, "On A Missing Page", "2024-05-07", fileId: 6);
+            GivenCatalogGaveUpOn("Big Studio", 2);
+
+            var pass = Run();
+
+            VerifyLinked("s1", matched);
+            matched.Done.Should().BeTrue();
+
+            // Its scene may be on a page not fetched, so it is neither fingerprinted nor parked yet
+            unmatched.Done.Should().BeFalse();
+            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()), Times.Never());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(unmatched.Path, It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            series.Done.Should().BeFalse();
+            series.Attempts.Should().Be(1);
+            pass.Pending.Should().Be(2);
+            pass.WaitingRetry.Should().Be(1);
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.IsAny<Studio>()), Times.Once());
+            VerifyReport(LegacyReportCategory.LeftBehind, "Scenes", series.Title, "StashDB scenes with no v2 twin, left unmonitored", Times.Never(), count: 1);
+
+            _now = _now.AddMinutes(5);
+            GivenCatalogGaveUpOn("Big Studio", 0);
+
+            Run().Pending.Should().Be(0);
+
+            series.Done.Should().BeTrue();
+            unmatched.Done.Should().BeTrue();
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(unmatched.Path, 4, "Files", It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), matched.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+        }
+
+        [Test]
+        public void an_incomplete_catalog_during_an_outage_spends_no_attempt()
+        {
+            var series = GivenSeries(1, "Big Studio");
+
+            GivenCatalogGaveUpOn("Big Studio", 1);
+
+            var pass = Run();
+
+            pass.Outage.Should().BeTrue();
+            series.Attempts.Should().Be(0);
+            series.Done.Should().BeFalse();
+        }
+
+        [Test]
+        public void giving_up_on_an_incomplete_catalog_parks_only_the_files_not_yet_done_and_says_what_a_refresh_may_do()
+        {
+            var series = GivenSeries(1, "Big Studio");
+            GivenSeries(2);
+            var matched = GivenFile(5, series);
+            var unmatched = GivenFile(6, series);
+
+            GivenScene("s1", "Scene One", "2024-05-06");
+            GivenEpisode(1, series, "Scene One", "2024-05-06", fileId: 5);
+            GivenEpisode(2, series, "On A Missing Page", "2024-05-07", fileId: 6);
+            series.Attempts = LegacyRetryPolicy.MaxAttempts - 1;
+            GivenCatalogGaveUpOn("Big Studio", 2);
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            matched.Done.Should().BeTrue();
+            unmatched.Done.Should().BeTrue();
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(matched.Path, It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(unmatched.Path, 4, "Files", It.Is<string>(r => r.StartsWith("Import failed"))), Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(
+                s => s.Report(
+                    LegacyReportCategory.NeedsAttention,
+                    "Studios",
+                    "Big Studio",
+                    It.Is<string>(d => d.Contains("2 catalog page(s) for Big Studio could not be fetched") && d.Contains("later refresh") && d.Contains("monitoring settings")),
+                    It.IsAny<int>()),
+                Times.Once());
         }
 
         [Test]

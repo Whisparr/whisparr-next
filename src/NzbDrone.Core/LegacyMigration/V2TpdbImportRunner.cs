@@ -99,7 +99,7 @@ namespace NzbDrone.Core.LegacyMigration
                 };
             }
 
-            _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true);
+            var imported = _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true);
 
             var missing = episodeByUuid.Keys.Where(uuid => _movieService.FindByForeignId(uuid) == null).ToList();
 
@@ -111,6 +111,13 @@ namespace NzbDrone.Core.LegacyMigration
             foreach (var file in files)
             {
                 LinkFile(series, file, episodes, sceneUuids, progress);
+            }
+
+            // Linked files are done and stay so. Finishing now would leave scenes of the pages given up on to the first
+            // refresh, which adds them with the studio's monitoring settings
+            if (imported.GaveUp > 0)
+            {
+                throw new CatalogIncompleteException(series.Title, imported.GaveUp);
             }
 
             ApplyV2Settings(series, _studioService.FindByForeignId(siteUuid) ?? studio);

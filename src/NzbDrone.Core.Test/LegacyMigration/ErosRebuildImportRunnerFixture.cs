@@ -183,6 +183,10 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IDiskProvider>().Setup(d => d.GetFileSize(It.IsAny<string>())).Returns(1234);
             Mocker.GetMock<IDiskProvider>().Setup(d => d.FileGetLastWrite(It.IsAny<string>())).Returns(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
 
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns(new SceneCatalogImportResult(0, 0));
+
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
                   .Callback<Movie, string, Action<MovieFile>, MatchTier>((_, _, fill, _) => _fill = fill)
@@ -410,7 +414,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             VerifyMoviesAdded(Times.Never());
         }
 
-        private void GivenCatalogImporter(Func<string, int> added, Action<string> onImport = null)
+        private void GivenCatalogImporter(Func<string, int> added, Action<string> onImport = null, Func<string, int> gaveUp = null)
         {
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
@@ -420,7 +424,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                       _catalogFetches[owner] = fetch;
                       _catalogBuilds[owner] = build;
 
-                      return added(owner);
+                      return new SceneCatalogImportResult(added(owner), gaveUp?.Invoke(owner) ?? 0);
                   });
         }
 
@@ -497,6 +501,52 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             _studios["new-stash-s1"].Monitored.Should().BeTrue();
             _performers["new-stash-p1"].Monitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void a_catalog_with_given_up_pages_restores_nothing_and_stays_pending_until_it_completes()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            var incomplete = true;
+            var studioCalls = 0;
+            var performerCalls = 0;
+
+            // The studio is complete on its first walk; the performer gave up on a page until the second pass.
+            // The performer's first walk adds 2 and its second adds 1: the row says 3, everything the migration added for it.
+            GivenCatalogImporter(
+                owner =>
+                {
+                    if (owner.StartsWith("Studio"))
+                    {
+                        return ++studioCalls == 1 ? 3 : 0;
+                    }
+
+                    return ++performerCalls == 1 ? 2 : 1;
+                },
+                gaveUp: owner => owner.StartsWith("Performer") && incomplete ? 2 : 0);
+
+            var pass = Run();
+
+            pass.Pending.Should().BeGreaterThan(0);
+            pass.WaitingRetry.Should().BeGreaterThan(0);
+            pass.NextDue.Should().NotBeNull();
+            _studios["new-stash-s1"].Monitored.Should().BeFalse();
+            _performers["new-stash-p1"].Monitored.Should().BeFalse();
+            VerifyLeftBehind("Studio stash-s1", 3, Times.Once());
+            VerifyLeftBehind("Performer stash-p1", 2, Times.Never());
+
+            incomplete = false;
+
+            Run().Pending.Should().Be(0);
+
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
+            VerifyLeftBehind("Studio stash-s1", 3, Times.Once());
+            VerifyLeftBehind("Performer stash-p1", 3, Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.LeftBehind, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Exactly(2));
         }
 
         [Test]

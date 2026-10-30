@@ -104,7 +104,7 @@ namespace NzbDrone.Core.LegacyMigration
                 };
             }
 
-            _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(stashId, cursor), BuildStub, () => true);
+            var imported = _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(stashId, cursor), BuildStub, () => true);
 
             var catalog = new Dictionary<string, Movie>();
 
@@ -117,7 +117,16 @@ namespace NzbDrone.Core.LegacyMigration
             var claimed = new HashSet<string>();
             var owners = files.ToDictionary(f => f, f => episodes.Where(e => e.LegacyEpisodeFileId == f.LegacyId).OrderBy(e => e.LegacyId).FirstOrDefault());
 
-            LinkFiles(series, files, owners, stashId, catalog, keys, claimed, BuildStub, progress);
+            var catalogComplete = imported.GaveUp == 0;
+
+            LinkFiles(series, files, owners, stashId, catalog, keys, claimed, BuildStub, catalogComplete, progress);
+
+            // Linked files are done and stay so. Finishing now would leave scenes of the pages given up on to the first
+            // refresh, which adds them with the studio's monitoring settings
+            if (!catalogComplete)
+            {
+                throw new CatalogIncompleteException(series.Title, imported.GaveUp);
+            }
 
             // Whatever a pending file did not claim gets its twin by title and date alone. An episode whose file was
             // done on an earlier pass is not fileless: its file already took its scene, which may not be the one its
@@ -170,6 +179,7 @@ namespace NzbDrone.Core.LegacyMigration
                                List<SceneKey> keys,
                                HashSet<string> claimed,
                                Func<string, Movie> buildStub,
+                               bool catalogComplete,
                                ILegacyImportProgress progress)
         {
             var unmatched = new List<LegacyV2EpisodeFile>();
@@ -200,7 +210,9 @@ namespace NzbDrone.Core.LegacyMigration
                 }
             }
 
-            if (unmatched.Count == 0)
+            // With pages of the catalog missing, a file's scene may be on one: it waits for the next pass rather than be
+            // fingerprinted or parked as unidentified now
+            if (unmatched.Count == 0 || !catalogComplete)
             {
                 return;
             }

@@ -149,7 +149,7 @@ namespace NzbDrone.Core.Test.StudioTests
                     _buildStub = buildStub;
                     _keepGoing = keepGoing;
                 })
-                .Returns(1);
+                .Returns(new SceneCatalogImportResult(1, 0));
         }
 
         private List<Movie> GivenAddedMoviesAreCaptured()

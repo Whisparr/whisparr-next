@@ -12,9 +12,12 @@ namespace NzbDrone.Core.Movies
     {
         // ownerTitle is for logs only. buildStub(stashId) returns the unsaved Movie to add (ForeignId = stashId plus owner settings).
         // keepGoing is asked before every page; when it returns false the import ends cleanly (the owner was deleted or unmonitored).
-        // Returns the number of scenes added.
-        int ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing);
+        // Returns the number of scenes added, and how many pages (or scenes) the walker gave up on: those were not
+        // imported, so the catalog is incomplete until a later import finds them.
+        SceneCatalogImportResult ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing);
     }
+
+    public sealed record SceneCatalogImportResult(int Added, int GaveUp);
 
     public class SceneCatalogImporter : ISceneCatalogImporter
     {
@@ -46,7 +49,7 @@ namespace NzbDrone.Core.Movies
             _logger = logger;
         }
 
-        public int ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing)
+        public SceneCatalogImportResult ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing)
         {
             var library = new HashSet<string>(_movieService.AllSceneForeignIds());
             var excluded = new HashSet<string>(_exclusionService.GetAllExclusions().Select(e => e.ForeignId));
@@ -124,7 +127,7 @@ namespace NzbDrone.Core.Movies
                 _logger.Warn("Gave up on {0} scene(s) or page(s) for {1}, they will be retried on the next sync (cursor: entries are pages): {2}", result.GaveUp.Count, ownerTitle, string.Join(", ", result.GaveUp));
             }
 
-            return addedCount;
+            return new SceneCatalogImportResult(addedCount, result.GaveUp.Count);
         }
     }
 }

@@ -56,6 +56,9 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ISkyhookPacer _pacer;
         private readonly Logger _logger;
 
+        // Scenes each owner's catalog walks have added so far, for owners whose catalog is not whole yet
+        private readonly Dictionary<string, int> _catalogAdded = new();
+
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public ErosRebuildImportRunner(ErosSeedImportRunner movieRunner,
                                        ILegacyStudioSeedRepository studioSeeds,
@@ -194,6 +197,8 @@ namespace NzbDrone.Core.LegacyMigration
         // second report row, and one whose flags are already restored is not walked at all.
         private void ImportCatalogs(LegacyMigrationState state)
         {
+            var incomplete = new Dictionary<string, int>();
+
             foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
             {
                 var studio = _studioService.FindByForeignId(seed.NewForeignId);
@@ -205,13 +210,13 @@ namespace NzbDrone.Core.LegacyMigration
 
                 var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
                 var title = seed.Title.IsNotNullOrWhiteSpace() ? seed.Title : seed.LegacyForeignId;
-                var added = _catalogImporter.ImportScenes(
+                var imported = _catalogImporter.ImportScenes(
                     title,
                     cursor => _movieInfo.GetStudioScenePage(seed.NewForeignId, cursor),
                     id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Studio),
                     () => true);
 
-                ReportLeftBehind(state, title, added);
+                SettleCatalog(state, $"studio:{seed.NewForeignId}", title, imported, incomplete);
             }
 
             foreach (var seed in FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId))
@@ -225,14 +230,39 @@ namespace NzbDrone.Core.LegacyMigration
 
                 var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
                 var name = seed.Name.IsNotNullOrWhiteSpace() ? seed.Name : seed.LegacyForeignId;
-                var added = _catalogImporter.ImportScenes(
+                var imported = _catalogImporter.ImportScenes(
                     name,
                     cursor => _movieInfo.GetPerformerScenePage(seed.NewForeignId, cursor),
                     id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Performer),
                     () => true);
 
-                ReportLeftBehind(state, name, added);
+                SettleCatalog(state, $"performer:{seed.NewForeignId}", name, imported, incomplete);
             }
+
+            // After every owner has had its turn, so one gap does not hold the others' catalogs back a pass. Nothing is
+            // restored: a scene on a page given up on would come in monitored on the first refresh and be grabbed.
+            if (incomplete.Count > 0)
+            {
+                throw new CatalogIncompleteException(string.Join(", ", incomplete.Keys), incomplete.Values.Sum());
+            }
+        }
+
+        // The left-behind row says how many scenes the migration added for the owner, once, when its catalog is whole.
+        // A walk that gave up on pages remembers what it added so the walk that completes can count it too; the count
+        // lives in memory, so a restart between the two walks leaves it short.
+        private void SettleCatalog(LegacyMigrationState state, string key, string owner, SceneCatalogImportResult imported, Dictionary<string, int> incomplete)
+        {
+            _catalogAdded[key] = _catalogAdded.GetValueOrDefault(key) + imported.Added;
+
+            if (imported.GaveUp > 0)
+            {
+                incomplete[owner] = imported.GaveUp;
+
+                return;
+            }
+
+            ReportLeftBehind(state, owner, _catalogAdded[key]);
+            _catalogAdded.Remove(key);
         }
 
         private static Movie UnmonitoredStub(string id, string rootFolderPath, int qualityProfileId, HashSet<int> tags, AddMovieMethod method)
@@ -373,7 +403,7 @@ namespace NzbDrone.Core.LegacyMigration
 
         private static bool IsTransient(Exception ex)
         {
-            return ex is HttpException or WebException or TimeoutException or FingerprintTryLaterException;
+            return ex is HttpException or WebException or TimeoutException or FingerprintTryLaterException or CatalogIncompleteException;
         }
 
         // Returns true when the seed was given up on

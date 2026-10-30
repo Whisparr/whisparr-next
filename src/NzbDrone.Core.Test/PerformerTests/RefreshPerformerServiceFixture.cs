@@ -212,7 +212,7 @@ namespace NzbDrone.Core.Test.PerformerTests
                     _buildStub = buildStub;
                     _keepGoing = keepGoing;
                 })
-                .Returns(1);
+                .Returns(new SceneCatalogImportResult(1, 0));
         }
 
         private List<Movie> GivenAddedMoviesAreCaptured()

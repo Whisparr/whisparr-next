@@ -113,7 +113,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                   .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((_, _, build, _) => _buildStub = build)
-                  .Returns(0);
+                  .Returns(new SceneCatalogImportResult(0, 0));
 
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
@@ -206,6 +206,13 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
                   .Throws(new TimeoutException("slow"));
+        }
+
+        private void GivenCatalogGaveUpOn(string title, int gaveUp)
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns(new SceneCatalogImportResult(0, gaveUp));
         }
 
         private void GivenCatalogThrowsFor(string title, Exception exception)
@@ -992,6 +999,80 @@ namespace NzbDrone.Core.Test.LegacyMigration
             file.Done.Should().BeTrue();
             VerifyReport(LegacyReportCategory.NeedsAttention, "Studios", "Slow Studio", "TPDB is still resolving ids for Slow Studio", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", It.Is<string>(r => r.StartsWith("Import failed"))), Times.Once());
+        }
+
+        [Test]
+        public void an_incomplete_catalog_links_the_files_but_holds_the_series_open_until_it_completes()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", title: "Big Studio", monitored: true);
+            GivenSeries(2, 12, "healthy-site");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 101, "scene-1", fileId: 5);
+            GivenCatalogGaveUpOn("Big Studio", 2);
+
+            var pass = Run();
+
+            file.Done.Should().BeTrue();
+            series.Done.Should().BeFalse();
+            _episodes.Should().OnlyContain(e => !e.Done);
+            series.Attempts.Should().Be(1);
+            pass.Pending.Should().Be(1);
+            pass.WaitingRetry.Should().Be(1);
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), file.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.Is<Studio>(st => st.ForeignId == "site-uuid")), Times.Never());
+
+            _now = _now.AddMinutes(5);
+            GivenCatalogGaveUpOn("Big Studio", 0);
+
+            Run().Pending.Should().Be(0);
+
+            series.Done.Should().BeTrue();
+            _studios["site-uuid"].Monitored.Should().BeTrue();
+            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.Is<Studio>(st => st.ForeignId == "site-uuid")), Times.Once());
+
+            // Done on the first pass, so the second does not link it again
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), file.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+        }
+
+        [Test]
+        public void an_incomplete_catalog_during_an_outage_spends_no_attempt()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", title: "Big Studio");
+            GivenCatalogGaveUpOn("Big Studio", 1);
+
+            var pass = Run();
+
+            pass.Outage.Should().BeTrue();
+            pass.WaitingRetry.Should().Be(1);
+            series.Attempts.Should().Be(0);
+            series.Done.Should().BeFalse();
+        }
+
+        [Test]
+        public void giving_up_on_an_incomplete_catalog_keeps_linked_files_and_says_what_a_refresh_may_do()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", title: "Big Studio", monitored: true);
+            GivenSeries(2, 12, "healthy-site");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 101, "scene-1", fileId: 5);
+            series.Attempts = LegacyRetryPolicy.MaxAttempts - 1;
+            GivenCatalogGaveUpOn("Big Studio", 2);
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            file.Done.Should().BeTrue();
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), file.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(
+                s => s.Report(
+                    LegacyReportCategory.NeedsAttention,
+                    "Studios",
+                    "Big Studio",
+                    It.Is<string>(d => d.Contains("2 catalog page(s) for Big Studio could not be fetched") && d.Contains("later refresh") && d.Contains("monitoring settings")),
+                    It.IsAny<int>()),
+                Times.Once());
+            _studios["site-uuid"].Monitored.Should().BeTrue();
         }
 
         [Test]

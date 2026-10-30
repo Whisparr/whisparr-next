@@ -69,9 +69,14 @@ namespace NzbDrone.Core.Test.MovieTests
                   });
         }
 
-        private int Import()
+        private SceneCatalogImportResult ImportResult()
         {
             return Subject.ImportScenes("Studio", _ => null, id => new Movie { ForeignId = id }, () => _keepGoing());
+        }
+
+        private int Import()
+        {
+            return ImportResult().Added;
         }
 
         private static List<string> Ids(List<Movie> movies) => movies.Select(m => m.ForeignId).ToList();
@@ -147,7 +152,7 @@ namespace NzbDrone.Core.Test.MovieTests
                 "Studio",
                 _ => null,
                 id => new Movie { ForeignId = id, MovieMetadata = new MovieMetadata { ForeignId = id, ItemType = ItemType.Scene, ReleaseDate = null, ReleaseDateUtc = null, Year = 0 } },
-                () => true);
+                () => true).Added;
 
             result.Should().Be(1);
             added.Should().ContainSingle();
@@ -251,6 +256,35 @@ namespace NzbDrone.Core.Test.MovieTests
             Import().Should().Be(0);
 
             ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_report_how_many_pages_the_walker_gave_up_on()
+        {
+            Mocker.GetMock<IScenePageWalker>()
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
+                  .Returns<Func<string, ScenePage>, Action<ScenePage>, Func<bool>>((_, handle, _) =>
+                  {
+                      handle(Page(ScenePageStatus.Complete, 3, Item("a"), Item("b")));
+
+                      return new ScenePageWalkResult { Pages = 2, GaveUp = new List<string> { "x", "y", "z" } };
+                  });
+
+            var result = ImportResult();
+
+            result.Added.Should().Be(2);
+            result.GaveUp.Should().Be(3);
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_report_nothing_given_up_when_the_walk_completes()
+        {
+            GivenPages(Page(ScenePageStatus.Complete, 1, Item("a")));
+
+            var result = ImportResult();
+
+            result.Should().Be(new SceneCatalogImportResult(1, 0));
         }
 
         [Test]

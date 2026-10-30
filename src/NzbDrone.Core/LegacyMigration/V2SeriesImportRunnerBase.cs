@@ -393,7 +393,11 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (giveUp)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, ex.Message);
+                var detail = ex is CatalogIncompleteException
+                    ? $"{ex.Message}; a later refresh may add the missing scenes using the studio's monitoring settings, so unmonitor the studio first if you do not want them grabbed"
+                    : ex.Message;
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, detail);
             }
             else
             {
@@ -405,7 +409,7 @@ namespace NzbDrone.Core.LegacyMigration
 
         protected static bool IsTransient(Exception ex)
         {
-            return ex is HttpException or WebException or TimeoutException or ResolveThrottledException or FingerprintTryLaterException
+            return ex is HttpException or WebException or TimeoutException or ResolveThrottledException or FingerprintTryLaterException or CatalogIncompleteException
                 || ex is SQLiteException { ResultCode: SQLiteErrorCode.Busy or SQLiteErrorCode.Locked }
                 || ex is NpgsqlException { IsTransient: true };
         }
