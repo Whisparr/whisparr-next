@@ -119,6 +119,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public void Complete()
         {
             DeleteConfig5Backup(Load());
+            SetupConfig5Seeding.ClearMarker(_appFolderInfo.GetConfigPath());
             File.Delete(SidecarPath);
         }
 
@@ -155,6 +156,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             {
                 _logger.Warn("{0} was left behind by a setup that finished, so nothing is discarded", SidecarPath);
                 TryDelete(() => DeleteConfig5Backup(sidecar));
+                TryDelete(() => SetupConfig5Seeding.ClearMarker(_appFolderInfo.GetConfigPath()));
                 TryDelete(() => File.Delete(SidecarPath));
 
                 return false;

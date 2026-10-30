@@ -239,29 +239,31 @@ namespace NzbDrone.Host
 
             var detection = new LegacyInstallDetector(appFolder, Microsoft.Extensions.Options.Options.Create(PostgresOptions.GetOptions())).Detect();
 
+            var config5Path = appFolder.GetConfigPath();
+
             if (!detection.SetupModeRequired)
             {
+                // Setup is over, so a marker left behind must not let a later config5.xml be mistaken for setup's own.
+                SetupConfig5Seeding.ClearMarker(config5Path);
+
                 return SetupModeState.Inactive;
             }
-
-            var seeded = false;
-            var config5Path = appFolder.GetConfigPath();
 
             // Eros wins when both exist. There may be no install at all, when the legacy database is unreadable.
             var install = detection.Installs.FirstOrDefault(i => i.Kind == LegacyKind.Eros) ?? detection.Installs.FirstOrDefault();
 
-            if (!File.Exists(config5Path) && install != null)
+            // The legacy config.xml decides the sign-in settings on every setup-mode start, so a config5.xml an earlier
+            // setup-mode start seeded is seeded again. One the user made is never touched.
+            if (install != null && !File.Exists(detection.LegacyConfigPath))
             {
-                if (File.Exists(detection.LegacyConfigPath))
-                {
-                    new Config5Seeder().Seed(detection.LegacyConfigPath, config5Path, install);
-                    seeded = true;
-                    Logger.Info("Seeded {0} from {1}", config5Path, detection.LegacyConfigPath);
-                }
-                else
-                {
-                    Logger.Warn("{0} was not found, so {1} was not seeded from it", detection.LegacyConfigPath, config5Path);
-                }
+                Logger.Warn("{0} was not found, so {1} was not seeded from it", detection.LegacyConfigPath, config5Path);
+            }
+
+            var seeded = SetupConfig5Seeding.Seed(new Config5Seeder(), detection.LegacyConfigPath, config5Path, install);
+
+            if (seeded)
+            {
+                Logger.Info("Seeded {0} from {1}", config5Path, detection.LegacyConfigPath);
             }
 
             if (detection.PendingEnvSwitch)
