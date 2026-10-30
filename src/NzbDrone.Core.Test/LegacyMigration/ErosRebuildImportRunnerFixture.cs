@@ -47,6 +47,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private List<Studio> _studioUpdates;
         private List<Performer> _performerUpdates;
         private List<string> _order;
+        private Dictionary<string, Func<string, ScenePage>> _catalogFetches;
+        private Dictionary<string, Func<string, Movie>> _catalogBuilds;
         private ScenePageWalkResult _walkResult;
         private Mock<ILegacyImportProgress> _progress;
         private Action<MovieFile> _fill;
@@ -80,6 +82,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _studioUpdates = new List<Studio>();
             _performerUpdates = new List<Performer>();
             _order = new List<string>();
+            _catalogFetches = new Dictionary<string, Func<string, ScenePage>>();
+            _catalogBuilds = new Dictionary<string, Func<string, Movie>>();
             _walkResult = new ScenePageWalkResult();
             _progress = new Mock<ILegacyImportProgress>();
             _fill = null;
@@ -400,10 +404,151 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _studioUpdates[1].MoviesMonitored.Should().BeTrue();
             _studioUpdates[1].WhisparrMonitorNewItems.Should().BeFalse();
 
+            // The add walks no catalog; the one catalog import is the final stage's, before the monitoring
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Verify(i => i.ImportScenes("Studio stash-s1", It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
+            VerifyMoviesAdded(Times.Never());
+        }
+
+        private void GivenCatalogImporter(Func<string, int> added, Action<string> onImport = null)
+        {
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((owner, fetch, build, _) =>
+                  {
+                      onImport?.Invoke(owner);
+                      _catalogFetches[owner] = fetch;
+                      _catalogBuilds[owner] = build;
+
+                      return added(owner);
+                  });
+        }
+
+        private void VerifyLeftBehind(string owner, int count, Times times)
+        {
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.LeftBehind, "Scenes", owner, "TPDB scenes with no Eros twin, left unmonitored", count), times);
+        }
+
+        [Test]
+        public void catalogs_are_added_unmonitored_and_reported_before_monitoring_is_restored()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            var monitoredAtImport = new Dictionary<string, bool>();
+
+            GivenCatalogImporter(
+                owner => owner.StartsWith("Studio") ? 3 : 2,
+                owner => monitoredAtImport[owner] = owner.StartsWith("Studio") ? _studios["new-stash-s1"].Monitored : _performers["new-stash-p1"].Monitored);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            monitoredAtImport.Should().HaveCount(2).And.OnlyContain(kv => !kv.Value);
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
+
+            var studioStub = _catalogBuilds["Studio stash-s1"]("scene-1");
+
+            studioStub.ForeignId.Should().Be("scene-1");
+            studioStub.Monitored.Should().BeFalse();
+            studioStub.AddOptions.SearchForMovie.Should().BeFalse();
+            studioStub.RootFolderPath.Should().Be(Root);
+            studioStub.QualityProfileId.Should().Be(4);
+            studioStub.Tags.Should().BeEquivalentTo(new[] { 2, 3 });
+
+            var performerStub = _catalogBuilds["Performer stash-p1"]("scene-2");
+
+            performerStub.Monitored.Should().BeFalse();
+            performerStub.AddOptions.SearchForMovie.Should().BeFalse();
+            performerStub.Tags.Should().BeEquivalentTo(new[] { 5 });
+
+            _catalogFetches["Studio stash-s1"]("cursor");
+            _catalogFetches["Performer stash-p1"]("cursor");
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage("new-stash-s1", "cursor"), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetPerformerScenePage("new-stash-p1", "cursor"), Times.Once());
+
+            VerifyLeftBehind("Studio stash-s1", 3, Times.Once());
+            VerifyLeftBehind("Performer stash-p1", 2, Times.Once());
+        }
+
+        [Test]
+        public void a_transient_failure_importing_a_catalog_restores_nothing_and_stays_pending()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            var fail = true;
+
+            GivenCatalogImporter(owner => owner.StartsWith("Performer") && fail ? throw new TimeoutException("slow") : 3);
+
+            var pass = Run();
+
+            pass.Pending.Should().BeGreaterThan(0);
+            pass.WaitingRetry.Should().BeGreaterThan(0);
+            pass.NextDue.Should().NotBeNull();
+            _studios["new-stash-s1"].Monitored.Should().BeFalse();
+            _performers["new-stash-p1"].Monitored.Should().BeFalse();
+
+            fail = false;
+
+            Run().Pending.Should().Be(0);
+
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void running_again_after_a_failure_does_not_report_a_catalog_twice()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            var studioCalls = 0;
+            var fail = true;
+
+            // The studio's catalog is in after the first call, so a second call finds nothing left to add
+            GivenCatalogImporter(owner =>
+            {
+                if (owner.StartsWith("Performer"))
+                {
+                    return fail ? throw new TimeoutException("slow") : 1;
+                }
+
+                return ++studioCalls == 1 ? 3 : 0;
+            });
+
+            Run().Pending.Should().BeGreaterThan(0);
+
+            fail = false;
+
+            Run().Pending.Should().Be(0);
+
+            VerifyLeftBehind("Studio stash-s1", 3, Times.Once());
+            VerifyLeftBehind("Performer stash-p1", 1, Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.Report(LegacyReportCategory.LeftBehind, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Exactly(2));
+
+            // Restored now, so a third run does not walk the catalogs at all
+            Run().Pending.Should().Be(0);
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Verify(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Exactly(4));
+        }
+
+        [Test]
+        public void an_unmonitored_or_merged_owner_has_no_catalog_imported()
+        {
+            _studios["new-stash-s1"] = new Studio { ForeignId = "new-stash-s1", Title = "Existing", Monitored = false };
+            GivenStudioSeed("stash-s1");
+            GivenStudioSeed("stash-s2").Monitored = false;
+            GivenCatalogImporter(_ => 5);
+
+            Run().Pending.Should().Be(0);
+
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Verify(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Never());
-            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
-            VerifyMoviesAdded(Times.Never());
         }
 
         [Test]

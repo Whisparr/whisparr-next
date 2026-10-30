@@ -46,6 +46,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly IPerformerService _performerService;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IScenePageWalker _pageWalker;
+        private readonly ISceneCatalogImporter _catalogImporter;
         private readonly IAddMovieService _addMovieService;
         private readonly IMovieService _movieService;
         private readonly IImportlFileService _importFileService;
@@ -69,6 +70,7 @@ namespace NzbDrone.Core.LegacyMigration
                                        IPerformerService performerService,
                                        IProvideMovieInfo movieInfo,
                                        IScenePageWalker pageWalker,
+                                       ISceneCatalogImporter catalogImporter,
                                        IAddMovieService addMovieService,
                                        IMovieService movieService,
                                        IImportlFileService importFileService,
@@ -91,6 +93,7 @@ namespace NzbDrone.Core.LegacyMigration
             _performerService = performerService;
             _movieInfo = movieInfo;
             _pageWalker = pageWalker;
+            _catalogImporter = catalogImporter;
             _addMovieService = addMovieService;
             _movieService = movieService;
             _importFileService = importFileService;
@@ -142,6 +145,10 @@ namespace NzbDrone.Core.LegacyMigration
         {
             try
             {
+                // Before any flag goes on: a monitored studio or performer refreshes its whole catalog, and every scene of
+                // it not in the library yet would come in monitored and be grabbed
+                ImportCatalogs(state);
+
                 foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
                 {
                     var studio = _studioService.FindByForeignId(seed.NewForeignId);
@@ -180,6 +187,73 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             return pass;
+        }
+
+        // The catalogs of the studios and performers about to be monitored, added unmonitored. Scenes already in the
+        // library are left as they are. An owner whose catalog is in has nothing left to add, so a run again writes no
+        // second report row, and one whose flags are already restored is not walked at all.
+        private void ImportCatalogs(LegacyMigrationState state)
+        {
+            foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
+            {
+                var studio = _studioService.FindByForeignId(seed.NewForeignId);
+
+                if (studio == null || !seed.Monitored || studio.Monitored || !CreatedByMigration(state, studio.Added))
+                {
+                    continue;
+                }
+
+                var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
+                var title = seed.Title.IsNotNullOrWhiteSpace() ? seed.Title : seed.LegacyForeignId;
+                var added = _catalogImporter.ImportScenes(
+                    title,
+                    cursor => _movieInfo.GetStudioScenePage(seed.NewForeignId, cursor),
+                    id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Studio),
+                    () => true);
+
+                ReportLeftBehind(state, title, added);
+            }
+
+            foreach (var seed in FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId))
+            {
+                var performer = _performerService.FindByForeignId(seed.NewForeignId);
+
+                if (performer == null || !seed.Monitored || performer.Monitored || !CreatedByMigration(state, performer.Added))
+                {
+                    continue;
+                }
+
+                var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
+                var name = seed.Name.IsNotNullOrWhiteSpace() ? seed.Name : seed.LegacyForeignId;
+                var added = _catalogImporter.ImportScenes(
+                    name,
+                    cursor => _movieInfo.GetPerformerScenePage(seed.NewForeignId, cursor),
+                    id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Performer),
+                    () => true);
+
+                ReportLeftBehind(state, name, added);
+            }
+        }
+
+        private static Movie UnmonitoredStub(string id, string rootFolderPath, int qualityProfileId, HashSet<int> tags, AddMovieMethod method)
+        {
+            return new Movie
+            {
+                ForeignId = id,
+                Monitored = false,
+                QualityProfileId = qualityProfileId,
+                RootFolderPath = rootFolderPath,
+                Tags = new HashSet<int>(tags),
+                AddOptions = new AddMovieOptions { SearchForMovie = false, AddMethod = method }
+            };
+        }
+
+        private void ReportLeftBehind(LegacyMigrationState state, string owner, int added)
+        {
+            if (added > 0)
+            {
+                _migrationService.Report(LegacyReportCategory.LeftBehind, SceneArea, owner, $"{SourceName(state.SceneSource)} scenes with no Eros twin, left unmonitored", added);
+            }
         }
 
         // Seeds that merged into the same entity share its id; the first is the one that created it
