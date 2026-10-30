@@ -62,7 +62,7 @@
   Run: `distribution/docker/test-image.sh ghcr.io/hotio/base:alpinevpn`
   Expected: non-zero exit, with `test_boots` reported FAIL (no app in that image).
 
-- [ ] **Step 3: Copy hotio's layer.** From the clone at `<scratchpad>/hotio/whisparr-v3-develop` (or `hotio/whisparr`, branch `v3-develop`), copy `root/` unchanged, including the empty dependency files.
+- [ ] **Step 3: Copy hotio's layer.** From `hotio/whisparr`, branch `v3-develop`, copy `root/` unchanged, including the empty dependency files.
 
   Write one `Dockerfile` modelled on `linux-amd64.Dockerfile`, with these differences only:
   - `FROM ghcr.io/hotio/base@${BASE_DIGEST}`.
@@ -183,10 +183,11 @@
 
 Nothing above needs Actions on. Pushing and going public are plz12345's calls, in this order:
 
-1. Review the audit; push `develop`.
-2. Make the repo public; enable Actions.
-3. Check org settings (public packages allowed; Actions may create packages) and that `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` reach the repo. If they don't, create a new key at org level.
-4. Watch the first `develop` run: release `v5.0.0-develop.N`, then all three image tags.
-5. Set the `whisparr` package to public (one-way).
-6. Run `base-update.yml` by hand: expect `current`.
-7. Acceptance: stop the Eros container, zip AppData, switch to `ghcr.io/whisparr/whisparr:v5-develop`, start. Expect a clean pull and boot, no failures in the logs, and the migration halt screen.
+1. Once Actions are on, open a same-repo PR into `develop` first: it runs every test job and the image build and test on both architectures with no push, release, tag or package.
+2. Review the audit; push `develop`.
+3. Make the repo public; enable Actions.
+4. Check org settings (public packages allowed; Actions may create packages) and that `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` reach the repo. If they don't, create a new key at org level.
+5. Watch the first `develop` run: release `v5.0.0-develop.N`, then all three image tags.
+6. Set the `whisparr` package to public (one-way).
+7. Run `base-update.yml` by hand: expect `current`.
+8. Acceptance: stop the Eros container, zip AppData, switch to `ghcr.io/whisparr/whisparr:v5-develop`, start. Expect a clean pull and boot, no failures in the logs, and the migration halt screen.
