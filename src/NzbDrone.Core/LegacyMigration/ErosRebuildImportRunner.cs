@@ -59,6 +59,13 @@ namespace NzbDrone.Core.LegacyMigration
         // Scenes each owner's catalog walks have added so far, for owners whose catalog is not whole yet
         private readonly Dictionary<string, int> _catalogAdded = new();
 
+        // Consecutive restore passes that ended with a catalog incomplete, and whether the cap was reached. In memory:
+        // no state column fits, and a restart only gives the catalogs a fresh run of passes. Cleared when the restore
+        // succeeds, which is when the migration completes, and when a different migration starts.
+        private int _incompletePasses;
+        private bool _catalogsGivenUp;
+        private DateTime? _catalogStateStartedAt;
+
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public ErosRebuildImportRunner(ErosSeedImportRunner movieRunner,
                                        ILegacyStudioSeedRepository studioSeeds,
@@ -117,6 +124,13 @@ namespace NzbDrone.Core.LegacyMigration
             var studios = _studioSeeds.All().ToList();
             var performers = _performerSeeds.All().ToList();
             var scenes = _sceneSeeds.All().ToList();
+
+            // Nothing from an earlier migration in this process carries over
+            if (_catalogStateStartedAt != state.StartedAt)
+            {
+                ResetCatalogState();
+                _catalogStateStartedAt = state.StartedAt;
+            }
 
             // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
             progress.Total(studios.Count + performers.Count + scenes.Count + _movieSeeds.All().Count());
@@ -179,6 +193,8 @@ namespace NzbDrone.Core.LegacyMigration
                         _performerService.Update(performer);
                     }
                 }
+
+                ResetCatalogState();
             }
             catch (Exception ex) when (IsTransient(ex))
             {
@@ -197,7 +213,13 @@ namespace NzbDrone.Core.LegacyMigration
         // second report row, and one whose flags are already restored is not walked at all.
         private void ImportCatalogs(LegacyMigrationState state)
         {
-            var incomplete = new Dictionary<string, int>();
+            var incomplete = new List<IncompleteCatalog>();
+
+            // Given up on at the cap: the rows are written and the catalogs are not walked again
+            if (_catalogsGivenUp)
+            {
+                return;
+            }
 
             foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
             {
@@ -216,7 +238,7 @@ namespace NzbDrone.Core.LegacyMigration
                     id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Studio),
                     () => true);
 
-                SettleCatalog(state, $"studio:{seed.NewForeignId}", title, imported, incomplete);
+                SettleCatalog(state, $"studio:{seed.NewForeignId}", title, "studio", imported, incomplete);
             }
 
             foreach (var seed in FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId))
@@ -236,27 +258,59 @@ namespace NzbDrone.Core.LegacyMigration
                     id => UnmonitoredStub(id, seed.RootFolderPath, seed.QualityProfileId, tags, AddMovieMethod.Performer),
                     () => true);
 
-                SettleCatalog(state, $"performer:{seed.NewForeignId}", name, imported, incomplete);
+                SettleCatalog(state, $"performer:{seed.NewForeignId}", name, "performer", imported, incomplete);
             }
 
-            // After every owner has had its turn, so one gap does not hold the others' catalogs back a pass. Nothing is
-            // restored: a scene on a page given up on would come in monitored on the first refresh and be grabbed.
             if (incomplete.Count > 0)
             {
-                throw new CatalogIncompleteException(string.Join(", ", incomplete.Keys), incomplete.Values.Sum());
+                HoldOrGiveUp(state, incomplete);
             }
         }
+
+        private void HoldOrGiveUp(LegacyMigrationState state, List<IncompleteCatalog> incomplete)
+        {
+            // After every owner has had its turn, so one gap does not hold the others' catalogs back a pass. Nothing is
+            // restored: a scene on a page given up on would come in monitored on the first refresh and be grabbed.
+            // Only up to the cap, though: a page that can never be fetched must not keep automation paused forever.
+            // The walker has already retried inside the pass and a transient failure throws instead, so there is no
+            // outage rule here: every pass that ends incomplete counts.
+            if (++_incompletePasses < LegacyRetryPolicy.MaxAttempts)
+            {
+                throw new CatalogIncompleteException(string.Join(", ", incomplete.Select(c => c.Owner)), incomplete.Sum(c => c.GaveUp));
+            }
+
+            foreach (var catalog in incomplete)
+            {
+                _migrationService.Report(
+                    LegacyReportCategory.NeedsAttention,
+                    SceneArea,
+                    catalog.Owner,
+                    $"The catalog was incomplete ({catalog.GaveUp} page(s) not fetched); a later refresh may add the missing scenes using this {catalog.Kind}'s monitoring settings, so unmonitor it first if you do not want them grabbed");
+                ReportLeftBehind(state, catalog.Owner, _catalogAdded.GetValueOrDefault(catalog.Key));
+            }
+
+            _catalogsGivenUp = true;
+        }
+
+        private void ResetCatalogState()
+        {
+            _catalogAdded.Clear();
+            _incompletePasses = 0;
+            _catalogsGivenUp = false;
+        }
+
+        private sealed record IncompleteCatalog(string Key, string Owner, string Kind, int GaveUp);
 
         // The left-behind row says how many scenes the migration added for the owner, once, when its catalog is whole.
         // A walk that gave up on pages remembers what it added so the walk that completes can count it too; the count
         // lives in memory, so a restart between the two walks leaves it short.
-        private void SettleCatalog(LegacyMigrationState state, string key, string owner, SceneCatalogImportResult imported, Dictionary<string, int> incomplete)
+        private void SettleCatalog(LegacyMigrationState state, string key, string owner, string kind, SceneCatalogImportResult imported, List<IncompleteCatalog> incomplete)
         {
             _catalogAdded[key] = _catalogAdded.GetValueOrDefault(key) + imported.Added;
 
             if (imported.GaveUp > 0)
             {
-                incomplete[owner] = imported.GaveUp;
+                incomplete.Add(new IncompleteCatalog(key, owner, kind, imported.GaveUp));
 
                 return;
             }

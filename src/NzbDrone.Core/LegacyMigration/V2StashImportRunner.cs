@@ -119,7 +119,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             var catalogComplete = imported.GaveUp == 0;
 
-            LinkFiles(series, files, owners, stashId, catalog, keys, claimed, BuildStub, catalogComplete, progress);
+            LinkFiles(series, files, owners, new CatalogLink(stashId, catalog, keys, claimed, BuildStub, catalogComplete), progress);
 
             // Linked files are done and stay so. Finishing now would leave scenes of the pages given up on to the first
             // refresh, which adds them with the studio's monitoring settings
@@ -171,17 +171,16 @@ namespace NzbDrone.Core.LegacyMigration
             MarkSeriesDone(series, episodes, progress);
         }
 
+        // What matching a series' files needs from the catalog; Claimed fills in as files take their scenes
+        private sealed record CatalogLink(string StashId, Dictionary<string, Movie> Catalog, List<SceneKey> Keys, HashSet<string> Claimed, Func<string, Movie> BuildStub, bool Complete);
+
         private void LinkFiles(LegacyV2Series series,
                                List<LegacyV2EpisodeFile> files,
                                Dictionary<LegacyV2EpisodeFile, LegacyV2Episode> owners,
-                               string stashId,
-                               Dictionary<string, Movie> catalog,
-                               List<SceneKey> keys,
-                               HashSet<string> claimed,
-                               Func<string, Movie> buildStub,
-                               bool catalogComplete,
+                               CatalogLink link,
                                ILegacyImportProgress progress)
         {
+            var (stashId, catalog, keys, claimed, _, catalogComplete) = link;
             var unmatched = new List<LegacyV2EpisodeFile>();
 
             foreach (var file in files)
@@ -212,10 +211,19 @@ namespace NzbDrone.Core.LegacyMigration
 
             // With pages of the catalog missing, a file's scene may be on one: it waits for the next pass rather than be
             // fingerprinted or parked as unidentified now
-            if (unmatched.Count == 0 || !catalogComplete)
+            if (unmatched.Count > 0 && catalogComplete)
             {
-                return;
+                LinkUnmatched(series, unmatched, owners, link, progress);
             }
+        }
+
+        private void LinkUnmatched(LegacyV2Series series,
+                                   List<LegacyV2EpisodeFile> unmatched,
+                                   Dictionary<LegacyV2EpisodeFile, LegacyV2Episode> owners,
+                                   CatalogLink link,
+                                   ILegacyImportProgress progress)
+        {
+            var (_, catalog, _, claimed, buildStub, _) = link;
 
             // One lookup for all the files left, so the whole series retries if the source asks for it
             var hashes = _hashMatcher.Match(unmatched.Select(f => new HashQuery(f.LegacyId.ToString(CultureInfo.InvariantCulture), f.Path, null)).ToList());

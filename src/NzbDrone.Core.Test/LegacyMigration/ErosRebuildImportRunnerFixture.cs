@@ -550,6 +550,85 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void a_catalog_that_stays_incomplete_is_given_up_on_at_the_cap_and_the_migration_completes()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            var studioCalls = 0;
+
+            // The studio completes on the first walk with 3 added; the performer adds 1 a pass and never completes
+            GivenCatalogImporter(
+                owner =>
+                {
+                    if (owner.StartsWith("Performer"))
+                    {
+                        return 1;
+                    }
+
+                    return ++studioCalls == 1 ? 3 : 0;
+                },
+                gaveUp: owner => owner.StartsWith("Performer") ? 2 : 0);
+
+            for (var pass = 1; pass < LegacyRetryPolicy.MaxAttempts; pass++)
+            {
+                Run().Pending.Should().BeGreaterThan(0);
+                _performers["new-stash-p1"].Monitored.Should().BeFalse();
+            }
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(
+                s => s.Report(LegacyReportCategory.NeedsAttention, "Scenes", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()),
+                Times.Never());
+
+            var last = Run();
+
+            last.Pending.Should().Be(0);
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
+            VerifyLeftBehind("Studio stash-s1", 3, Times.Once());
+            VerifyLeftBehind("Performer stash-p1", LegacyRetryPolicy.MaxAttempts, Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(
+                s => s.Report(
+                    LegacyReportCategory.NeedsAttention,
+                    "Scenes",
+                    "Performer stash-p1",
+                    It.Is<string>(d => d.Contains("incomplete") && d.Contains("later refresh") && d.Contains("performer's monitoring settings")),
+                    It.IsAny<int>()),
+                Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>().Verify(
+                s => s.Report(LegacyReportCategory.NeedsAttention, "Scenes", "Studio stash-s1", It.IsAny<string>(), It.IsAny<int>()),
+                Times.Never());
+
+            // Settled, so a later pass walks nothing and writes nothing more
+            Run().Pending.Should().Be(0);
+            VerifyLeftBehind("Performer stash-p1", LegacyRetryPolicy.MaxAttempts, Times.Once());
+        }
+
+        [Test]
+        public void a_transient_failure_does_not_advance_the_incomplete_count()
+        {
+            GivenStudioSeed("stash-s1");
+
+            var fail = true;
+            var gaveUp = 0;
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns(() => fail ? throw new TimeoutException("slow") : new SceneCatalogImportResult(0, gaveUp));
+
+            for (var pass = 0; pass < LegacyRetryPolicy.MaxAttempts + 1; pass++)
+            {
+                Run().Pending.Should().BeGreaterThan(0);
+            }
+
+            fail = false;
+            gaveUp = 1;
+
+            Run().Pending.Should().BeGreaterThan(0);
+            _studios["new-stash-s1"].Monitored.Should().BeFalse();
+        }
+
+        [Test]
         public void running_again_after_a_failure_does_not_report_a_catalog_twice()
         {
             GivenStudioSeed("stash-s1");
