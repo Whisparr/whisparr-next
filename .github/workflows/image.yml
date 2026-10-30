@@ -113,7 +113,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build for test
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: distribution/docker
           platforms: linux/${{ matrix.arch }}
@@ -139,7 +139,7 @@ jobs:
       - name: Push by digest
         id: push
         if: ${{ inputs.push }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: distribution/docker
           platforms: linux/${{ matrix.arch }}
