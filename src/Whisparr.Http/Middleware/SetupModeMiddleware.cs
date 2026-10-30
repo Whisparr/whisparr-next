@@ -71,7 +71,7 @@ namespace Whisparr.Http.Middleware
 
         // The same test the "disabled for local addresses" sign-in bypass uses, which also distrusts any
         // request still carrying an unconsumed X-Forwarded-For.
-        private static bool IsLocal(HttpContext context)
+        internal static bool IsLocal(HttpContext context)
         {
             return IPAddress.TryParse(context.GetRemoteIP(), out var address) &&
                    !context.Request.Headers.ContainsKey(ForwardedHeadersDefaults.XForwardedForHeaderName) &&

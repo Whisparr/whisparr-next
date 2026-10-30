@@ -7,8 +7,10 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Configuration.Events;
+using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.Messaging.Events;
 using Whisparr.Http.Extensions;
+using Whisparr.Http.Middleware;
 
 namespace NzbDrone.Http.Authentication
 {
@@ -17,14 +19,29 @@ namespace NzbDrone.Http.Authentication
         private readonly IConfigFileProvider _configService;
         private static AuthenticationRequiredType _authenticationRequired;
 
-        public UiAuthorizationHandler(IConfigFileProvider configService)
+        private readonly ISetupModeState _setupModeState;
+
+        public UiAuthorizationHandler(IConfigFileProvider configService, ISetupModeState setupModeState)
         {
             _configService = configService;
+            _setupModeState = setupModeState;
             _authenticationRequired = configService.AuthenticationRequired;
         }
 
         protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, BypassableDenyAnonymousAuthorizationRequirement requirement)
         {
+            // A legacy install with no one to sign in as would lock its own local user out of the setup page.
+            // SetupModeMiddleware already turns non-local requests away in that case.
+            if (_setupModeState.IsActive &&
+                !_setupModeState.Detection.HasUsableCredentials &&
+                context.Resource is HttpContext setupContext &&
+                SetupModeMiddleware.IsLocal(setupContext))
+            {
+                context.Succeed(requirement);
+
+                return Task.CompletedTask;
+            }
+
             if (_authenticationRequired == AuthenticationRequiredType.DisabledForLocalAddresses)
             {
                 if (context.Resource is HttpContext httpContext &&

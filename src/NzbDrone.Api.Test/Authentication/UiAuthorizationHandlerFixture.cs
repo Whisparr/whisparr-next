@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using NUnit.Framework;
 using NzbDrone.Core.Authentication;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Http.Authentication;
 using NzbDrone.Test.Common;
 
@@ -130,6 +131,59 @@ namespace NzbDrone.Api.Test.Authentication
             Mocker.GetMock<IConfigFileProvider>()
                   .SetupGet(c => c.AuthenticationRequired)
                   .Returns(AuthenticationRequiredType.Enabled);
+
+            IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().BeFalse();
+        }
+
+        private void GivenSetupMode(bool active, bool usableCredentials)
+        {
+            var detection = new DetectionResult { SetupModeRequired = active };
+            detection.Installs.Add(new LegacyInstall { Kind = LegacyKind.Eros, HasUsableCredentials = usableCredentials });
+
+            Mocker.SetConstant<ISetupModeState>(new SetupModeState(detection, false));
+        }
+
+        [TestCase(AuthenticationRequiredType.Enabled)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalAddresses)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalhost)]
+        public void should_authorize_a_local_request_in_setup_mode_without_usable_credentials(AuthenticationRequiredType required)
+        {
+            Mocker.GetMock<IConfigFileProvider>().SetupGet(c => c.AuthenticationRequired).Returns(required);
+            GivenSetupMode(true, false);
+
+            IsAuthorized(GetHttpContext("192.168.1.50", null)).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_not_authorize_a_non_local_request_in_setup_mode_without_usable_credentials()
+        {
+            GivenSetupMode(true, false);
+
+            IsAuthorized(GetHttpContext("203.0.113.66", null)).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_not_authorize_a_local_request_behind_an_untrusted_proxy_in_setup_mode_without_usable_credentials()
+        {
+            GivenSetupMode(true, false);
+
+            IsAuthorized(GetHttpContext("127.0.0.1", "203.0.113.9")).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_still_require_sign_in_in_setup_mode_with_usable_credentials()
+        {
+            Mocker.GetMock<IConfigFileProvider>().SetupGet(c => c.AuthenticationRequired).Returns(AuthenticationRequiredType.Enabled);
+            GivenSetupMode(true, true);
+
+            IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().BeFalse();
+        }
+
+        [TestCase(AuthenticationRequiredType.Enabled)]
+        public void should_not_change_normal_mode_when_credentials_are_missing(AuthenticationRequiredType required)
+        {
+            Mocker.GetMock<IConfigFileProvider>().SetupGet(c => c.AuthenticationRequired).Returns(required);
+            GivenSetupMode(false, false);
 
             IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().BeFalse();
         }
