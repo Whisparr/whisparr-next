@@ -302,6 +302,11 @@ jobs:
         unit_test_postgres,
         integration_test,
       ]
+    # A called workflow can't hold more than its caller grants: the release job
+    # needs contents: write and the image job needs packages: write.
+    permissions:
+      contents: write
+      packages: write
     secrets: inherit
     uses: ./.github/workflows/deploy.yml
     with:

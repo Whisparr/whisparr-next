@@ -61,6 +61,21 @@ jobs:
           major_version: ${{ inputs.major_version }}
           version: ${{ inputs.version }}
 
+  image:
+    needs: [package, release]
+    if: ${{ !cancelled() && needs.package.result == 'success' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      channel: v5-develop
+      version: ${{ inputs.version }}
+      branch: ${{ inputs.branch }}
+      source: artifact
+      push: ${{ github.ref_name == 'develop' }}
+      commit_tag: true
+
   release:
     if: ${{ github.ref_name == 'develop' }}
     needs: package

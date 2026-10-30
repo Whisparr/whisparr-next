@@ -1,0 +1,217 @@
+name: Image
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: "Moving tag for this channel, e.g. v5-develop"
+        type: string
+        required: true
+      version:
+        description: "Whisparr version"
+        type: string
+        required: true
+      branch:
+        description: "Git branch used for this build"
+        type: string
+        required: true
+      source:
+        description: "Where the package comes from: artifact or release"
+        type: string
+        required: true
+      push:
+        description: "Publish the image; false builds and tests only"
+        type: boolean
+        required: true
+      commit_tag:
+        description: "Also publish a <channel>-<short sha> tag"
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/whisparr/whisparr
+  BASE_IMAGE: ghcr.io/hotio/base:alpinevpn
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    steps:
+      - name: Resolve base image digest
+        id: digest
+        run: |
+          digest=$(docker buildx imagetools inspect "$BASE_IMAGE" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unexpected base digest: '$digest'" >&2
+            exit 1
+          fi
+          echo "Base digest: $digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: base
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            runtime: linux-musl-x64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            runtime: linux-musl-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Download package artifact
+        if: ${{ inputs.source == 'artifact' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: release-${{ matrix.runtime }}
+          path: _package
+
+      - name: Download package from release
+        if: ${{ inputs.source == 'release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          RUNTIME: ${{ matrix.runtime }}
+        run: gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "*.$RUNTIME.tar.gz" --dir _package
+
+      - name: Stage package
+        run: |
+          shopt -s nullglob
+          files=(_package/*.tar.gz)
+          if [[ ${#files[@]} -ne 1 ]]; then
+            echo "Expected exactly one .tar.gz in _package, found ${#files[@]}" >&2
+            ls -la _package >&2
+            exit 1
+          fi
+          mv "${files[0]}" distribution/docker/app.tar.gz
+
+      - name: Install sqlite3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends sqlite3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build for test
+        uses: docker/build-push-action@v6
+        with:
+          context: distribution/docker
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: whisparr-test:${{ matrix.arch }}
+          build-args: |
+            BASE_DIGEST=${{ needs.base.outputs.digest }}
+            VERSION=${{ inputs.version }}
+            BRANCH=${{ inputs.branch }}
+            REVISION=${{ github.sha }}
+
+      - name: Test image
+        run: distribution/docker/test-image.sh whisparr-test:${{ matrix.arch }}
+
+      - name: Log in to ghcr.io
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push by digest
+        id: push
+        if: ${{ inputs.push }}
+        uses: docker/build-push-action@v6
+        with:
+          context: distribution/docker
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,push=true
+          build-args: |
+            BASE_DIGEST=${{ needs.base.outputs.digest }}
+            VERSION=${{ inputs.version }}
+            BRANCH=${{ inputs.branch }}
+            REVISION=${{ github.sha }}
+
+      - name: Record digest
+        if: ${{ inputs.push }}
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p _digests
+          touch "_digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        if: ${{ inputs.push }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: _digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    if: ${{ inputs.push }}
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: image-${{ inputs.channel }}
+      cancel-in-progress: false
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: _digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Each tag is a separate create so the order is fixed: the per-commit and
+      # per-version tags land first and the moving channel tag last.
+      - name: Create manifests
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          COMMIT_TAG: ${{ inputs.commit_tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          sources=()
+          for f in _digests/*; do
+            sources+=("$IMAGE@sha256:$(basename "$f")")
+          done
+          if [[ ${#sources[@]} -ne 2 ]]; then
+            echo "Expected 2 digests, found ${#sources[@]}" >&2
+            exit 1
+          fi
+
+          tags=()
+          if [[ "$COMMIT_TAG" == "true" ]]; then
+            tags+=("$CHANNEL-${SHA:0:7}")
+          fi
+          tags+=("$CHANNEL-$VERSION" "$CHANNEL")
+
+          for tag in "${tags[@]}"; do
+            docker buildx imagetools create -t "$IMAGE:$tag" "${sources[@]}"
+          done
+
+      - name: Inspect channel tag
+        run: docker buildx imagetools inspect "$IMAGE:${{ inputs.channel }}"
