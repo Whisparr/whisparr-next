@@ -250,6 +250,33 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void scene_file_without_a_loaded_path_is_compared_by_its_full_path()
+        {
+            _movie.MovieFileId = 40;
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetMovie(40))
+                  .Returns(new MovieFile { Id = 40, MovieId = 7, Path = null, RelativePath = "other.mp4" });
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.SceneHasOtherFile);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_file_without_a_loaded_path_that_is_the_same_file_is_already_linked()
+        {
+            _movie.MovieFileId = 40;
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetMovie(40))
+                  .Returns(new MovieFile { Id = 40, MovieId = 7, Path = null, RelativePath = "scene.mp4" });
+
+            Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.AlreadyLinked);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(It.IsAny<Movie>()), Times.Never());
+        }
+
+        [Test]
         public void scene_whose_recorded_file_row_is_gone_takes_the_new_file()
         {
             _movie.MovieFileId = 40;

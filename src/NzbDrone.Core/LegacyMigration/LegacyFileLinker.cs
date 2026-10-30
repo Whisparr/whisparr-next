@@ -97,9 +97,11 @@ namespace NzbDrone.Core.LegacyMigration
                 return ClaimExisting(movie, existing, movieFolder);
             }
 
-            if (HasOtherFile(movie, path))
+            var current = GetCurrentFile(movie);
+
+            if (current != null)
             {
-                return LinkOutcome.SceneHasOtherFile;
+                return FullPath(movie, current).PathEquals(path) ? LinkOutcome.AlreadyLinked : LinkOutcome.SceneHasOtherFile;
             }
 
             var movieFile = new MovieFile
@@ -157,14 +159,20 @@ namespace NzbDrone.Core.LegacyMigration
         // A scene keeps the file it has; a second one is the user's to place
         private bool HasOtherFile(Movie movie, string path)
         {
-            if (movie.MovieFileId <= 0)
-            {
-                return false;
-            }
+            var current = GetCurrentFile(movie);
 
-            var current = _mediaFileService.GetMovie(movie.MovieFileId);
+            return current != null && !FullPath(movie, current).PathEquals(path);
+        }
 
-            return current != null && !current.Path.PathEquals(path);
+        private MovieFile GetCurrentFile(Movie movie)
+        {
+            return movie.MovieFileId > 0 ? _mediaFileService.GetMovie(movie.MovieFileId) : null;
+        }
+
+        // Only RelativePath is stored, so a row loaded from the database has no Path
+        private static string FullPath(Movie movie, MovieFile file)
+        {
+            return file.Path.IsNotNullOrWhiteSpace() ? file.Path : Path.Combine(movie.Path, file.RelativePath);
         }
 
         private void MoveToMovie(Movie movie, MovieFile existing, string movieFolder)
