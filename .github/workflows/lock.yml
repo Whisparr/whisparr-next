@@ -8,6 +8,7 @@ on:
 permissions: {}
 jobs:
   lock:
+    if: github.repository == 'Whisparr/Whisparr-Eros'
     permissions:
       issues: write # to lock issues (dessant/lock-threads)
       pull-requests: write # to lock PRs (dessant/lock-threads)

@@ -12,6 +12,7 @@ permissions: {}
 
 jobs:
   watch:
+    if: github.repository == 'Whisparr/Whisparr-Eros'
     permissions:
       contents: read # the app token does the writing, not github.token
 

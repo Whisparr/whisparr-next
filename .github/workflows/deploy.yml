@@ -62,7 +62,7 @@ jobs:
           version: ${{ inputs.version }}
 
   release:
-    if: ${{ github.ref_name == 'eros-develop' || github.ref_name == 'eros' }}
+    if: ${{ github.ref_name == 'develop' }}
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -94,19 +94,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${{ inputs.branch }}" == "eros" ]]; then
-            tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q '.tag_name')
+          # A repo with no releases yet makes /releases/latest 404; that is not
+          # an error, it just means there is nothing to diff against.
+          if [[ "${{ inputs.branch }}" != "develop" ]]; then
+            tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q '.tag_name' || true)
           else
             tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              -q 'map(select(.prerelease and (.draft | not))) | .[0].tag_name // empty')
+              -q 'map(select(.prerelease and (.draft | not))) | .[0].tag_name // empty' || true)
           fi
 
-          if [[ -z "$tag" ]]; then
-            echo "::error::No previous release found for branch ${{ inputs.branch }}"
-            exit 1
-          fi
-
-          echo "Previous release: $tag"
+          echo "Previous release: ${tag:-none}"
           echo "tag_name=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Enable GPG signing
@@ -131,7 +128,11 @@ jobs:
           PREV_TAG="${{ steps.previous-release.outputs.tag_name }}"
           CUR_TAG="v${{ inputs.version }}"
           echo "## What's Changed" > changelog.md
-          git log "$PREV_TAG..$CUR_TAG" --pretty=format:"- %s (%h) - @%an" >> changelog.md
+          if [[ -z "$PREV_TAG" ]]; then
+            echo "First v5 release." >> changelog.md
+          else
+            git log "$PREV_TAG..$CUR_TAG" --pretty=format:"- %s (%h) - @%an" >> changelog.md
+          fi
           cat changelog.md
 
       - name: Create release
@@ -142,6 +143,6 @@ jobs:
           generateReleaseNotes: false
           bodyFile: changelog.md
           name: ${{ inputs.version }}
-          prerelease: ${{ inputs.branch != 'eros' }}
+          prerelease: ${{ inputs.branch == 'develop' }}
           skipIfReleaseExists: true
           tag: v${{ inputs.version }}
