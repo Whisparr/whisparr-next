@@ -119,10 +119,19 @@ namespace NzbDrone.Core.LegacyMigration
 
             LinkFiles(series, files, owners, stashId, catalog, keys, claimed, BuildStub, progress);
 
-            // Whatever a pending file did not claim gets its twin by title and date alone
+            // Whatever a pending file did not claim gets its twin by title and date alone. An episode whose file was
+            // done on an earlier pass is not fileless: its file already took its scene, which may not be the one its
+            // title names, so it is left out, and the scenes that have a file count as claimed.
             var ownerEpisodes = owners.Values.Where(e => e != null).ToHashSet();
+            var pendingFileIds = files.Select(f => f.LegacyId).ToHashSet();
+            var doneFileEpisodes = episodes.Where(e => e.LegacyEpisodeFileId != 0 && !pendingFileIds.Contains(e.LegacyEpisodeFileId)).ToHashSet();
 
-            foreach (var episode in episodes.Where(e => !ownerEpisodes.Contains(e)))
+            if (doneFileEpisodes.Count > 0)
+            {
+                claimed.UnionWith(catalog.Where(c => c.Value.HasFile).Select(c => c.Key));
+            }
+
+            foreach (var episode in episodes.Where(e => !ownerEpisodes.Contains(e) && !doneFileEpisodes.Contains(e)))
             {
                 var id = LegacySceneMatcher.FindExact(keys, episode.Title, ParsedAirDate(episode));
 

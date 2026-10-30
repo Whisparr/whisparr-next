@@ -114,7 +114,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
-                  .Callback<Movie, string, Action<MovieFile>, MatchTier>((_, _, fill, _) => _fill = fill)
+                  .Callback<Movie, string, Action<MovieFile>, MatchTier>((movie, _, fill, _) =>
+                  {
+                      movie.MovieFileId = 900 + movie.Id;
+                      _fill = fill;
+                  })
                   .Returns(LinkOutcome.Linked);
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Park(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -656,6 +660,53 @@ namespace NzbDrone.Core.Test.LegacyMigration
             VerifyReport(LegacyReportCategory.LeftBehind, "Scenes", series.Title, "StashDB scenes with no v2 twin, left unmonitored", Times.Once(), count: 1);
             Mocker.GetMock<ILegacyMigrationService>()
                   .Verify(s => s.Report(It.IsAny<LegacyReportCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()), Times.Once());
+        }
+
+        [Test]
+        public void resume_does_not_rematch_the_episode_of_a_file_already_done_as_a_twin()
+        {
+            var series = GivenSeries(1);
+            var hashed = GivenFile(1, series);
+            var failing = GivenFile(2, series);
+
+            var sceneX = GivenScene("sx", "Scene X", "2024-05-06");
+
+            GivenScene("sw", "Scene W", "2024-05-09");
+            GivenScene("sz", "Scene Z", "2024-05-08");
+
+            // The first file's episode names a scene the catalog does not hold yet, so its file goes by hash
+            GivenEpisode(1, series, "Scene Y", "2024-05-07", fileId: 1);
+            GivenEpisode(2, series, "No Match", "2024-05-09", fileId: 2);
+            _hashes[hashed.Path] = new HashMatch("sx", "h1", false);
+            _hashes[failing.Path] = new HashMatch("sw", "h2", false);
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), failing.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Throws(new TimeoutException("slow"));
+
+            Run();
+
+            hashed.Done.Should().BeTrue();
+            failing.Done.Should().BeFalse();
+            series.Done.Should().BeFalse();
+
+            // The catalog has caught up with the episode by the second pass
+            var sceneY = GivenScene("sy", "Scene Y", "2024-05-07");
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), failing.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Returns(LinkOutcome.Linked);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            series.Done.Should().BeTrue();
+            sceneY.Monitored.Should().BeFalse();
+            sceneX.Monitored.Should().BeTrue();
+            Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(sceneY), Times.Never());
+            VerifyLinked("sx", hashed, MatchTier.Hash);
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "sw"), failing.Path, It.IsAny<Action<MovieFile>>(), MatchTier.Hash), Times.Exactly(2));
+            VerifyReport(LegacyReportCategory.LeftBehind, "Scenes", series.Title, "StashDB scenes with no v2 twin, left unmonitored", Times.Once(), count: 2);
         }
 
         [Test]
