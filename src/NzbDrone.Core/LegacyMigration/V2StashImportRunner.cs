@@ -5,6 +5,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook;
 using NzbDrone.Core.Movies;
@@ -167,10 +168,11 @@ namespace NzbDrone.Core.LegacyMigration
             foreach (var file in files)
             {
                 Movie movie;
+                MatchTier tier;
 
                 try
                 {
-                    movie = MatchByMetadata(file, owners[file], stashId, catalog, keys);
+                    (movie, tier) = MatchByMetadata(file, owners[file], stashId, catalog, keys);
                 }
                 catch (Exception ex) when (!IsTransient(ex))
                 {
@@ -185,7 +187,7 @@ namespace NzbDrone.Core.LegacyMigration
                 }
                 else
                 {
-                    LinkFile(series, file, owners[file], movie, claimed, progress);
+                    LinkFile(series, file, owners[file], movie, tier, claimed, progress);
                 }
             }
 
@@ -218,7 +220,7 @@ namespace NzbDrone.Core.LegacyMigration
             {
                 if (hashed.TryGetValue(file, out var sceneId) && scenes.TryGetValue(sceneId, out var movie))
                 {
-                    LinkFile(series, file, owners[file], movie, claimed, progress);
+                    LinkFile(series, file, owners[file], movie, MatchTier.Hash, claimed, progress);
                 }
                 else
                 {
@@ -227,7 +229,8 @@ namespace NzbDrone.Core.LegacyMigration
             }
         }
 
-        private Movie MatchByMetadata(LegacyV2EpisodeFile file, LegacyV2Episode owner, string stashId, Dictionary<string, Movie> catalog, List<SceneKey> keys)
+        // A title and date match is Confirmed; the file name alone only earns Name
+        private (Movie Movie, MatchTier Tier) MatchByMetadata(LegacyV2EpisodeFile file, LegacyV2Episode owner, string stashId, Dictionary<string, Movie> catalog, List<SceneKey> keys)
         {
             if (owner != null)
             {
@@ -235,7 +238,7 @@ namespace NzbDrone.Core.LegacyMigration
 
                 if (id != null)
                 {
-                    return catalog[id];
+                    return (catalog[id], MatchTier.Confirmed);
                 }
             }
 
@@ -244,10 +247,10 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (found == null || found.MovieMetadata.Value.StudioForeignId != stashId)
             {
-                return null;
+                return (null, MatchTier.Unknown);
             }
 
-            return catalog.GetValueOrDefault(found.ForeignId) ?? found;
+            return (catalog.GetValueOrDefault(found.ForeignId) ?? found, MatchTier.Name);
         }
 
         // A scene the hash names may sit outside the studio's catalog; it is added so the file has somewhere to go
@@ -281,15 +284,21 @@ namespace NzbDrone.Core.LegacyMigration
             return scenes;
         }
 
-        private void LinkFile(LegacyV2Series series, LegacyV2EpisodeFile file, LegacyV2Episode owner, Movie movie, HashSet<string> claimed, ILegacyImportProgress progress)
+        private void LinkFile(LegacyV2Series series, LegacyV2EpisodeFile file, LegacyV2Episode owner, Movie movie, MatchTier tier, HashSet<string> claimed, ILegacyImportProgress progress)
         {
             try
             {
                 claimed.Add(movie.ForeignId);
 
-                var outcome = _fileLinker.Link(movie, file.Path, f => Fill(f, file));
+                var outcome = _fileLinker.Link(movie, file.Path, f => Fill(f, file), tier);
 
                 ReportOutcome(file, outcome);
+
+                // Other outcomes already put the file in the report
+                if (tier == MatchTier.Name && outcome is LinkOutcome.Linked or LinkOutcome.AlreadyLinked)
+                {
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, FileArea, file.Path, "Matched by file name only; check it");
+                }
 
                 if (outcome == LinkOutcome.SceneHasOtherFile)
                 {

@@ -131,7 +131,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                       return added;
                   });
             Mocker.GetMock<ILegacyFileLinker>()
-                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()))
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
                   .Returns(LinkOutcome.Linked);
 
             var runner = new V2TpdbImportRunner(
@@ -168,7 +168,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             // A second pass over finished staging does nothing
             runner.RunPass(state, progress.Object, false).Pending.Should().Be(0);
             Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Once());
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
             migrationService.GetReport().Should().HaveCount(report.Count);
         }
 

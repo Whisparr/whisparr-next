@@ -152,6 +152,80 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.Is<List<MovieFile>>(l => l.Count == 1 && l[0].Id == 5 && l[0].MatchTier == MatchTier.Confirmed)), Times.Once());
         }
 
+        [TestCase(MatchTier.Name)]
+        [TestCase(MatchTier.Hash)]
+        public void new_link_is_written_at_the_given_tier(MatchTier tier)
+        {
+            MovieFile added = null;
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.Add(It.IsAny<MovieFile>()))
+                  .Callback<MovieFile>(f => added = f)
+                  .Returns<MovieFile>(f => f);
+
+            Subject.Link(_movie, _file, f => { }, tier).Should().Be(LinkOutcome.Linked);
+
+            added.MatchTier.Should().Be(tier);
+        }
+
+        [TestCase(MatchTier.Unknown, MatchTier.Name, MatchTier.Name)]
+        [TestCase(MatchTier.Unknown, MatchTier.Hash, MatchTier.Hash)]
+        [TestCase(MatchTier.Name, MatchTier.Hash, MatchTier.Hash)]
+        [TestCase(MatchTier.Confirmed, MatchTier.Hash, MatchTier.Hash)]
+        public void already_linked_is_raised_to_the_given_tier(MatchTier existingTier, MatchTier tier, MatchTier expected)
+        {
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FindByFullPath(_file))
+                  .Returns(new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4", MatchTier = existingTier });
+
+            Subject.Link(_movie, _file, f => { }, tier).Should().Be(LinkOutcome.AlreadyLinked);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.Is<List<MovieFile>>(l => l.Count == 1 && l[0].MatchTier == expected)), Times.Once());
+        }
+
+        [TestCase(MatchTier.Name, MatchTier.Name)]
+        [TestCase(MatchTier.Confirmed, MatchTier.Name)]
+        [TestCase(MatchTier.Hash, MatchTier.Name)]
+        [TestCase(MatchTier.Hash, MatchTier.Confirmed)]
+        [TestCase(MatchTier.Manual, MatchTier.Hash)]
+        [TestCase(MatchTier.Conflict, MatchTier.Hash)]
+        public void already_linked_is_never_lowered(MatchTier existingTier, MatchTier tier)
+        {
+            var existing = new MovieFile { Id = 5, MovieId = 7, Path = _file, RelativePath = "scene.mp4", MatchTier = existingTier };
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.FindByFullPath(_file)).Returns(existing);
+
+            Subject.Link(_movie, _file, f => { }, tier).Should().Be(LinkOutcome.AlreadyLinked);
+
+            existing.MatchTier.Should().Be(existingTier);
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.IsAny<List<MovieFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_file_without_a_loaded_path_is_raised_to_the_given_tier()
+        {
+            _movie.MovieFileId = 40;
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetMovie(40))
+                  .Returns(new MovieFile { Id = 40, MovieId = 7, Path = null, RelativePath = "scene.mp4", MatchTier = MatchTier.Name });
+
+            Subject.Link(_movie, _file, f => { }, MatchTier.Hash).Should().Be(LinkOutcome.AlreadyLinked);
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.SaveMatchTiers(It.Is<List<MovieFile>>(l => l.Count == 1 && l[0].Id == 40 && l[0].MatchTier == MatchTier.Hash)), Times.Once());
+        }
+
+        [Test]
+        public void moved_file_takes_the_given_tier()
+        {
+            var existing = new MovieFile { Id = 5, MovieId = 8, Path = _file, RelativePath = "old/scene.mp4", MatchTier = MatchTier.Name };
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.FindByFullPath(_file)).Returns(existing);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<Movie>());
+
+            Subject.Link(_movie, _file, f => { }, MatchTier.Hash).Should().Be(LinkOutcome.Linked);
+
+            existing.MatchTier.Should().Be(MatchTier.Hash);
+        }
+
         [TestCase(MatchTier.Hash)]
         [TestCase(MatchTier.Manual)]
         [TestCase(MatchTier.Conflict)]

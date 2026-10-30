@@ -598,6 +598,7 @@ namespace NzbDrone.Core.LegacyMigration
             context.Files.TryGetValue(seed.Id, out var importFile);
 
             var sceneId = HashMatch(seed, importFile, context);
+            var tier = sceneId != null ? MatchTier.Hash : MatchTier.Confirmed;
 
             var studioId = seed.LegacyStudioForeignId.IsNotNullOrWhiteSpace() ? context.StudioIds.GetValueOrDefault(seed.LegacyStudioForeignId) : null;
 
@@ -640,7 +641,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (seed.ImportFileId.HasValue)
             {
-                LinkImportFile(seed, movie, importFile);
+                LinkImportFile(seed, movie, importFile, tier);
             }
 
             MarkResolved(seed);
@@ -697,7 +698,7 @@ namespace NzbDrone.Core.LegacyMigration
             return keys;
         }
 
-        private void LinkImportFile(LegacySceneSeed seed, Movie movie, ImportFile importFile)
+        private void LinkImportFile(LegacySceneSeed seed, Movie movie, ImportFile importFile, MatchTier tier)
         {
             if (importFile == null)
             {
@@ -706,7 +707,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            var outcome = _fileLinker.Link(movie, importFile.Path, file => FillFromSeed(file, seed, _diskProvider.GetFileSize(importFile.Path)));
+            var outcome = _fileLinker.Link(movie, importFile.Path, file => FillFromSeed(file, seed, _diskProvider.GetFileSize(importFile.Path)), tier);
 
             if (outcome == LinkOutcome.Linked || outcome == LinkOutcome.AlreadyLinked)
             {

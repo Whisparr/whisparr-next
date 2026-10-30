@@ -63,7 +63,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                       return movies;
                   });
             Mocker.GetMock<ILegacyFileLinker>()
-                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
                   .Returns(LinkOutcome.Linked);
         }
 
@@ -131,7 +131,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             pass.Pending.Should().Be(0);
             Mocker.GetMock<IAddMovieService>()
                   .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l.Count == 1 && l[0].Monitored && l[0].QualityProfileId == 4 && l[0].RootFolderPath == _seed.RootFolderPath && l[0].Tags.SetEquals(new[] { 2, 3 }) && !l[0].AddOptions.SearchForMovie), false, true), Times.Once());
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 77), _path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 77), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(5), Times.Once());
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
             _progress.Verify(p => p.Advance("Movies", 1), Times.Once());
@@ -143,8 +143,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
             Action<MovieFile> fill = null;
             Mocker.GetMock<ILegacyFileLinker>()
-                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
-                  .Callback<Movie, string, Action<MovieFile>>((m, p, f) => fill = f)
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Callback<Movie, string, Action<MovieFile>, MatchTier>((m, p, f, t) => fill = f)
                   .Returns(LinkOutcome.Linked);
 
             Run();
@@ -162,7 +162,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(5), Times.Once());
             VerifyNeedsAttention(Times.Never());
         }
@@ -229,7 +229,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             VerifyNeverAdded();
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 50), _path, It.IsAny<Action<MovieFile>>()), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.Id == 50), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
         }
 
         [Test]
@@ -237,7 +237,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
             Mocker.GetMock<ILegacyFileLinker>()
-                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
                   .Returns(LinkOutcome.Missing);
 
             var pass = Run();
@@ -252,7 +252,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
             Mocker.GetMock<ILegacyFileLinker>()
-                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>()))
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
                   .Returns(LinkOutcome.SceneHasOtherFile);
 
             var pass = Run();
@@ -418,7 +418,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             VerifyNeedsAttention(Times.Once());
-            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()), Times.Never());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
         }
 

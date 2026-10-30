@@ -24,7 +24,8 @@ namespace NzbDrone.Core.LegacyMigration
 
     public interface ILegacyFileLinker
     {
-        LinkOutcome Link(Movie movie, string path, Action<MovieFile> fill);
+        // tier is how sure the caller is of the match: written on a new link, and what an existing link is raised to (never lowered)
+        LinkOutcome Link(Movie movie, string path, Action<MovieFile> fill, MatchTier tier = MatchTier.Confirmed);
         bool Park(string path, int qualityProfileId, string area, string reason);
     }
 
@@ -65,7 +66,7 @@ namespace NzbDrone.Core.LegacyMigration
             _migrationService = migrationService;
         }
 
-        public LinkOutcome Link(Movie movie, string path, Action<MovieFile> fill)
+        public LinkOutcome Link(Movie movie, string path, Action<MovieFile> fill, MatchTier tier = MatchTier.Confirmed)
         {
             if (_diskProvider.FolderExists(path))
             {
@@ -83,25 +84,32 @@ namespace NzbDrone.Core.LegacyMigration
             var outcome = LinkOutcome.Linked;
 
             // A scan of this scene or a sibling in the same folder must not interleave with the check-then-add below
-            _diskScanService.RunLocked(movie, movieFolder, () => outcome = LinkLocked(movie, path, movieFolder, fill));
+            _diskScanService.RunLocked(movie, movieFolder, () => outcome = LinkLocked(movie, path, movieFolder, fill, tier));
 
             return outcome;
         }
 
-        private LinkOutcome LinkLocked(Movie movie, string path, string movieFolder, Action<MovieFile> fill)
+        private LinkOutcome LinkLocked(Movie movie, string path, string movieFolder, Action<MovieFile> fill, MatchTier tier)
         {
             var existing = _mediaFileService.FindByFullPath(path);
 
             if (existing != null)
             {
-                return ClaimExisting(movie, existing, movieFolder);
+                return ClaimExisting(movie, existing, movieFolder, tier);
             }
 
             var current = GetCurrentFile(movie);
 
             if (current != null)
             {
-                return FullPath(movie, current).PathEquals(path) ? LinkOutcome.AlreadyLinked : LinkOutcome.SceneHasOtherFile;
+                if (!FullPath(movie, current).PathEquals(path))
+                {
+                    return LinkOutcome.SceneHasOtherFile;
+                }
+
+                RaiseTier(current, tier);
+
+                return LinkOutcome.AlreadyLinked;
             }
 
             var movieFile = new MovieFile
@@ -109,7 +117,7 @@ namespace NzbDrone.Core.LegacyMigration
                 Path = path,
                 RelativePath = movieFolder.GetRelativePath(path),
                 MovieId = movie.Id,
-                MatchTier = MatchTier.Confirmed,
+                MatchTier = tier,
                 MediaInfo = null
             };
 
@@ -125,17 +133,22 @@ namespace NzbDrone.Core.LegacyMigration
             return LinkOutcome.Linked;
         }
 
-        private LinkOutcome ClaimExisting(Movie movie, MovieFile existing, string movieFolder)
+        // The disk scan may have linked it by name already; the caller's match raises it to the caller's tier.
+        // Manual and Conflict are left as they are, and nothing is ever lowered.
+        private void RaiseTier(MovieFile existing, MatchTier tier)
+        {
+            if (existing.MatchTier is MatchTier.Unknown or MatchTier.Name or MatchTier.Confirmed && existing.MatchTier < tier)
+            {
+                existing.MatchTier = tier;
+                _mediaFileService.SaveMatchTiers(new List<MovieFile> { existing });
+            }
+        }
+
+        private LinkOutcome ClaimExisting(Movie movie, MovieFile existing, string movieFolder, MatchTier tier)
         {
             if (existing.MovieId == movie.Id)
             {
-                // The disk scan may have linked it by name already; the v2 TPDB link agrees, so it is confirmed.
-                // Hash, Manual and Conflict are left as they are.
-                if (existing.MatchTier is MatchTier.Unknown or MatchTier.Name)
-                {
-                    existing.MatchTier = MatchTier.Confirmed;
-                    _mediaFileService.SaveMatchTiers(new List<MovieFile> { existing });
-                }
+                RaiseTier(existing, tier);
 
                 return LinkOutcome.AlreadyLinked;
             }
@@ -151,7 +164,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return LinkOutcome.SceneHasOtherFile;
             }
 
-            MoveToMovie(movie, existing, movieFolder);
+            MoveToMovie(movie, existing, movieFolder, tier);
 
             return LinkOutcome.Linked;
         }
@@ -175,13 +188,13 @@ namespace NzbDrone.Core.LegacyMigration
             return file.Path.IsNotNullOrWhiteSpace() ? file.Path : Path.Combine(movie.Path, file.RelativePath);
         }
 
-        private void MoveToMovie(Movie movie, MovieFile existing, string movieFolder)
+        private void MoveToMovie(Movie movie, MovieFile existing, string movieFolder, MatchTier tier)
         {
             var oldMovieId = existing.MovieId;
 
             existing.MovieId = movie.Id;
             existing.RelativePath = movieFolder.GetRelativePath(existing.Path);
-            existing.MatchTier = MatchTier.Confirmed;
+            existing.MatchTier = tier;
             _mediaFileService.Update(existing);
 
             var oldMovie = _movieService.GetMovies(new[] { oldMovieId }).FirstOrDefault();
