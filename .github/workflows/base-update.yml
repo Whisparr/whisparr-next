@@ -1,0 +1,61 @@
+name: Base Update
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'Whisparr/whisparr-next'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.check.outputs.result }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # Same query as deploy.yml. No release yet is not an error; the check
+      # then reports no_release and nothing is rebuilt.
+      - name: Get newest prerelease
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            -q 'map(select(.prerelease and (.draft | not))) | .[0].tag_name // empty' || true)
+          echo "Newest prerelease tag: '${tag}'"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare base image
+        id: check
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          result=$(distribution/docker/check-base.sh ghcr.io/whisparr/whisparr:v5-develop "$TAG")
+          echo "Result: $result"
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+
+  rebuild:
+    needs: check
+    if: needs.check.outputs.result == 'rebuild'
+    permissions:
+      contents: read
+      packages: write
+    # When the v5 channel exists, add a second job (or matrix entry) here that
+    # passes channel: v5 with the newest stable release and branch: main.
+    uses: ./.github/workflows/image.yml
+    with:
+      channel: v5-develop
+      version: ${{ needs.check.outputs.version }}
+      branch: develop
+      source: release
+      push: true
+      commit_tag: false
