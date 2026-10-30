@@ -65,5 +65,23 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             LegacySceneMatcher.FindExact(catalog, " ", Day).Should().BeNull();
         }
+
+        [TestCase("!!!")]
+        [TestCase("?!")]
+        [TestCase("... ---")]
+        public void a_title_that_cleans_to_nothing_never_matches(string title)
+        {
+            var catalog = new[] { new SceneKey("a", title, Day), new SceneKey("b", "Scene One", Day) };
+
+            LegacySceneMatcher.FindExact(catalog, title, Day).Should().BeNull();
+        }
+
+        [Test]
+        public void catalog_entries_that_clean_to_nothing_are_never_matched()
+        {
+            var catalog = new[] { new SceneKey("a", "...", Day), new SceneKey("b", "Scene One", Day) };
+
+            LegacySceneMatcher.FindExact(catalog, "Scene One", Day).Should().Be("b");
+        }
     }
 }

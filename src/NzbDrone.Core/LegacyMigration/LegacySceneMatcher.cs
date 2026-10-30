@@ -18,7 +18,14 @@ namespace NzbDrone.Core.LegacyMigration
                 return null;
             }
 
+            // Punctuation, emoji and the words the cleaner drops can leave nothing, and nothing equals nothing
             var cleanTitle = title.CleanMovieTitle();
+
+            if (cleanTitle.IsNullOrWhiteSpace())
+            {
+                return null;
+            }
+
             var day = releaseDate.Value.Date;
 
             var ids = catalog
