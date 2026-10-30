@@ -546,7 +546,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             foreach (var seed in due.Where(s => s.ImportFileId.HasValue))
             {
-                var file = _importFileService.Get(seed.ImportFileId.Value);
+                var file = ErosSeedImportRunner.FindImportFile(_importFileService, seed.ImportFileId.Value);
 
                 if (file == null)
                 {

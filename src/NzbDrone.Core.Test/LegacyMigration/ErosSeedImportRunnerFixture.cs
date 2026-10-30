@@ -5,6 +5,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
@@ -418,6 +419,21 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
+            Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
+        }
+
+        [Test]
+        public void import_file_row_that_is_gone_is_treated_as_no_file()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(5)).Throws(new ModelNotFoundException(typeof(ImportFile), 5));
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             Mocker.GetMock<ILegacyMovieSeedRepository>().Verify(r => r.Update(It.Is<LegacyMovieSeed>(s => s.Resolved)), Times.Once());
         }

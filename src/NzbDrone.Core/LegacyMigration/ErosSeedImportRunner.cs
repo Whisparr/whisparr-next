@@ -9,6 +9,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
@@ -160,7 +161,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            var importFile = seed.ImportFileId.HasValue ? _importFileService.Get(seed.ImportFileId.Value) : null;
+            var importFile = seed.ImportFileId.HasValue ? FindImportFile(_importFileService, seed.ImportFileId.Value) : null;
             var movie = _movieService.FindByForeignId(candidate.ForeignId);
 
             if (movie == null)
@@ -193,6 +194,19 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             MarkResolved(seed);
+        }
+
+        // Null when the row is gone: the service throws for a missing id, and a file the user moved or imported meanwhile is no reason to stop
+        internal static ImportFile FindImportFile(IImportlFileService importFileService, int id)
+        {
+            try
+            {
+                return importFileService.Get(id);
+            }
+            catch (ModelNotFoundException)
+            {
+                return null;
+            }
         }
 
         private Movie Find(LegacyMigrationState state, LegacyMovieSeed seed)

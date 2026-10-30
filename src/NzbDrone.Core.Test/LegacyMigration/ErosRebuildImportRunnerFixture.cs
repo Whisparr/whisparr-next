@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
@@ -171,7 +172,10 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
                   .Returns<IReadOnlyCollection<HashQuery>>(queries => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
 
-            Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(It.IsAny<int>())).Returns<int>(id => _importFiles.GetValueOrDefault(id));
+            // The real service throws for a row that is gone
+            Mocker.GetMock<IImportlFileService>()
+                  .Setup(s => s.Get(It.IsAny<int>()))
+                  .Returns<int>(id => _importFiles.TryGetValue(id, out var file) ? file : throw new ModelNotFoundException(typeof(ImportFile), id));
             Mocker.GetMock<IDiskProvider>().Setup(d => d.GetFileSize(It.IsAny<string>())).Returns(1234);
             Mocker.GetMock<IDiskProvider>().Setup(d => d.FileGetLastWrite(It.IsAny<string>())).Returns(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
 
@@ -863,6 +867,59 @@ namespace NzbDrone.Core.Test.LegacyMigration
             VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void a_gone_file_in_the_hash_batch_does_not_fail_the_pass_or_its_neighbours()
+        {
+            var gone = GivenSceneSeed(fileId: 5);
+            var kept = GivenSceneSeed(fileId: 6);
+            _hashes[FilePath(kept)] = new HashMatch("tpdb-scene-9", "h2", false);
+            _importFiles.Remove(5);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            gone.Resolved.Should().BeTrue();
+            kept.Resolved.Should().BeTrue();
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), FilePath(kept), It.IsAny<Action<MovieFile>>(), MatchTier.Hash), Times.Once());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(6), Times.Once());
+        }
+
+        [Test]
+        public void a_gone_file_for_a_scene_already_in_the_library_is_reported_at_link_time()
+        {
+            GivenStudioSeed("stash-s1");
+            var seed = GivenSceneSeed("stash-s1", fileId: 5);
+            GivenCatalog("new-stash-s1", CatalogItem("scene-match", "Big Scene", seed.ReleaseDate));
+            _movies["scene-match"] = new Movie { Id = 50, ForeignId = "scene-match" };
+            _importFiles.Remove(5);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            VerifyMoviesAdded(Times.Never());
+            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void a_kill_between_removing_the_file_and_resolving_the_seed_resumes_cleanly()
+        {
+            GivenStudioSeed("stash-s1");
+            var seed = GivenSceneSeed("stash-s1", fileId: 5);
+            GivenCatalog("new-stash-s1", CatalogItem("scene-match", "Big Scene", seed.ReleaseDate));
+
+            // The first pass linked the file and removed its row, then died before the seed was marked resolved
+            _movies["scene-match"] = new Movie { Id = 50, ForeignId = "scene-match" };
+            _importFiles.Remove(5);
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(0);
+            seed.Resolved.Should().BeTrue();
+            VerifyMoviesAdded(Times.Never());
         }
 
         [Test]
