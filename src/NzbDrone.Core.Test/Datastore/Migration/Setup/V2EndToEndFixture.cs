@@ -100,6 +100,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 new V5DatabaseBuilder(new MigrationController(LogManager.GetCurrentClassLogger()), copier),
                 new V2Porter(new V2CopyPorter(), new V2ConfigPorter(), new V2QualityPorter(), new V2ProviderPorter(), new V2LibrarySnapshot()),
                 new MixedMovieResolver(),
+                new SceneSourceSeeder(),
                 _preflight.Object,
                 new V5DatabaseFinisher(),
                 _lifecycle.Object,

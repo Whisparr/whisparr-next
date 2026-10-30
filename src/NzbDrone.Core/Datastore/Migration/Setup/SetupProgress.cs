@@ -12,6 +12,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         PortSettings,
         SnapshotLibrary,
         MixedMovies,
+        SceneSeeds,
         LockSources,
         Finish
     }

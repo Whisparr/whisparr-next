@@ -33,6 +33,8 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private Mock<IV2Porter> _porter;
         private V2SnapshotCounts _counts;
         private Mock<IMixedMovieResolver> _resolver;
+        private Mock<ISceneSourceSeeder> _sceneSeeder;
+        private SceneSeedResult _seeded;
         private Mock<ISkyhookPreflight> _preflight;
         private Mock<IV5DatabaseFinisher> _finisher;
         private Mock<ILifecycleService> _lifecycle;
@@ -110,6 +112,12 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 .Callback(() => _calls.Add("resolve"))
                 .Returns(() => _mixed);
 
+            _seeded = new SceneSeedResult();
+            _sceneSeeder = new Mock<ISceneSourceSeeder>();
+            _sceneSeeder.Setup(s => s.Seed(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>()))
+                .Callback(() => _calls.Add("seedscenes"))
+                .Returns(() => _seeded);
+
             _preflight = new Mock<ISkyhookPreflight>();
             _preflight.Setup(p => p.Check()).Callback(() => _calls.Add("preflight"));
 
@@ -152,6 +160,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 _builder.Object,
                 _porter.Object,
                 _resolver.Object,
+                _sceneSeeder.Object,
                 _preflight.Object,
                 _finisher.Object,
                 _lifecycle.Object,
@@ -196,7 +205,9 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.BackupPath.Should().Be("~/backup.zip");
             progress.EnvVarsToChange.Should().BeEmpty();
             progress.Steps.Select(s => s.Step).Should().Equal(Enum.GetValues<SetupStep>());
-            progress.Steps.Where(s => s.Step is not (SetupStep.SkyhookPreflight or SetupStep.PortSettings or SetupStep.SnapshotLibrary)).Should().OnlyContain(s => s.State == "done");
+            progress.Steps.Where(s => s.Step is not (SetupStep.SkyhookPreflight or SetupStep.PortSettings or SetupStep.SnapshotLibrary or SetupStep.SceneSeeds)).Should().OnlyContain(s => s.State == "done");
+            progress.Steps.Single(s => s.Step == SetupStep.SceneSeeds).State.Should().Be("skipped");
+            _sceneSeeder.Verify(s => s.Seed(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>()), Times.Never);
             _runState.Verify(r => r.Begin(true), Times.Once);
         }
 
@@ -514,13 +525,43 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void eros_scene_change_should_still_be_refused()
+        public void eros_source_change_runs_seeder_and_sets_rebuild()
+        {
+            _seeded.Scenes = 3;
+
+            var service = Service();
+
+            service.Start(new SetupChoice { Kind = LegacyKind.Eros, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
+
+            var progress = Await(service);
+
+            _calls.Should().ContainInOrder("preflight", "backup", "resolve", "seedscenes", "finish");
+            progress.Steps.Single(s => s.Step == SetupStep.SceneSeeds).State.Should().Be("done");
+            _finishedState.Rebuild.Should().BeTrue();
+            _finishedState.Phase.Should().Be("Phase2Pending");
+            _finishedState.Completed.Should().BeFalse();
+        }
+
+        [Test]
+        public void eros_source_change_with_nothing_to_seed_completes()
         {
             var service = Service();
 
             service.Start(new SetupChoice { Kind = LegacyKind.Eros, SceneSource = SceneMetadataType.Tpdb, MovieSource = MovieMetadataType.TPDB });
 
-            AssertNotAvailable(service.Progress);
+            Await(service);
+
+            _calls.Should().Contain("seedscenes");
+            _finishedState.Rebuild.Should().BeTrue();
+            _finishedState.Phase.Should().Be("Done");
+        }
+
+        [Test]
+        public void eros_same_source_does_not_rebuild()
+        {
+            Run();
+
+            _finishedState.Rebuild.Should().BeFalse();
         }
 
         private void AssertNotAvailable(SetupProgress progress)

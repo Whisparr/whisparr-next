@@ -63,7 +63,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 return result;
             }
 
-            var roots = v5Connection.Query<RootRow>("SELECT \"Id\", \"Path\" FROM \"RootFolders\"", transaction: transaction).ToList();
+            var roots = LegacyFileDetacher.LoadRoots(v5Connection, transaction);
 
             // Only a real TMDB id links two rows; a title match could merge two different movies silently.
             var keptByTmdb = new Dictionary<int, MovieRow>();
@@ -76,7 +76,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             foreach (var other in others)
             {
                 var twin = other.TmdbId.GetValueOrDefault() > 0 && keptByTmdb.TryGetValue(other.TmdbId.Value, out var found) ? found : null;
-                var root = other.Path == null ? null : FindRoot(roots, other.Path);
+                var root = other.Path == null ? null : LegacyFileDetacher.FindRoot(roots, other.Path);
                 var move = PlanMove(v5Connection, transaction, other, twin);
 
                 // A detached file needs a root folder to hang off, and a seed needs one for its path. Without it the
@@ -121,7 +121,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return (relativePath != null, relativePath);
         }
 
-        private static void ResolveOther(IDbConnection connection, IDbTransaction transaction, MixedMovieResult result, MovieRow other, MovieRow twin, RootRow root, (bool OntoTwin, string RelativePath) move)
+        private static void ResolveOther(IDbConnection connection, IDbTransaction transaction, MixedMovieResult result, MovieRow other, MovieRow twin, LegacyRoot root, (bool OntoTwin, string RelativePath) move)
         {
             if (move.OntoTwin)
             {
@@ -135,12 +135,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 return;
             }
 
-            var importFileId = other.MovieFileId > 0 ? Detach(connection, transaction, root, other) : null;
+            var importFileId = other.MovieFileId > 0 ? LegacyFileDetacher.Detach(connection, transaction, root, other.MovieId, other.Path, other.MovieFileId) : null;
 
             if (importFileId != null)
             {
                 result.Detached++;
             }
+
+            other.MovieFileId = 0;
 
             if (twin == null)
             {
@@ -167,10 +169,10 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 return null;
             }
 
-            var absolute = Join(other.Path, relative);
-            var twinPath = TrimEnd(twin.Path);
+            var absolute = LegacyFileDetacher.Join(other.Path, relative);
+            var twinPath = LegacyFileDetacher.TrimEnd(twin.Path);
 
-            if (absolute.Length <= twinPath.Length || !IsUnder(twinPath, absolute))
+            if (absolute.Length <= twinPath.Length || !LegacyFileDetacher.IsUnder(twinPath, absolute))
             {
                 return null;
             }
@@ -187,48 +189,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             from.MovieFileId = 0;
         }
 
-        // Turns the movie's file into an ImportFiles row and drops the MovieFiles row. Nothing on disk is touched.
-        private static int? Detach(IDbConnection connection, IDbTransaction transaction, RootRow root, MovieRow movie)
-        {
-            var file = connection.QuerySingleOrDefault<FileRow>(
-                "SELECT \"Id\", \"RelativePath\", \"OsHash\", \"PHash\", \"PHashAttemptedAt\", \"HashedFileModifiedAt\" FROM \"MovieFiles\" WHERE \"Id\" = @id",
-                new { id = movie.MovieFileId },
-                transaction);
-
-            if (file == null)
-            {
-                return null;
-            }
-
-            var relativeToMovie = file.RelativePath ?? string.Empty;
-            var absolute = Join(movie.Path, relativeToMovie);
-            var relativePath = absolute[TrimEnd(root.Path).Length..].TrimStart('/', '\\');
-
-            var importFileId = connection.ExecuteScalar<int>(
-                "INSERT INTO \"ImportFiles\" (\"RootFolderId\", \"Path\", \"RelativePath\", \"Name\", \"OsHash\", \"PHash\", \"PHashAttemptedAt\", \"HashedFileModifiedAt\") " +
-                "VALUES (@rootFolderId, @path, @relativePath, @name, @osHash, @pHash, @pHashAttemptedAt, @hashedFileModifiedAt) RETURNING \"Id\"",
-                new
-                {
-                    rootFolderId = root.Id,
-                    path = absolute,
-                    relativePath,
-                    name = FileNameWithoutExtension(relativeToMovie),
-                    osHash = file.OsHash,
-                    pHash = file.PHash,
-                    pHashAttemptedAt = file.PHashAttemptedAt,
-                    hashedFileModifiedAt = file.HashedFileModifiedAt
-                },
-                transaction);
-
-            connection.Execute("DELETE FROM \"MovieFiles\" WHERE \"Id\" = @id", new { id = file.Id }, transaction);
-            connection.Execute("UPDATE \"Movies\" SET \"MovieFileId\" = 0 WHERE \"Id\" = @id", new { id = movie.MovieId }, transaction);
-
-            movie.MovieFileId = 0;
-
-            return importFileId;
-        }
-
-        private static void InsertSeed(IDbConnection connection, IDbTransaction transaction, RootRow root, MovieRow movie, int? importFileId)
+        private static void InsertSeed(IDbConnection connection, IDbTransaction transaction, LegacyRoot root, MovieRow movie, int? importFileId)
         {
             connection.Execute(
                 "INSERT INTO \"LegacyMovieSeeds\" (\"LegacyForeignId\", \"Title\", \"Year\", \"TmdbId\", \"ImdbId\", \"Monitored\", \"QualityProfileId\", \"RootFolderPath\", \"Tags\", \"ImportFileId\", \"Resolved\") " +
@@ -260,46 +221,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             connection.Execute("DELETE FROM \"MovieMetadata\" WHERE \"Id\" = @metadataId", args, transaction);
         }
 
-        // The root whose path is the longest prefix of the given path, on a path-segment boundary.
-        private static RootRow FindRoot(List<RootRow> roots, string path)
-        {
-            return roots
-                .Where(r => IsUnder(TrimEnd(r.Path), path))
-                .OrderByDescending(r => r.Path.Length)
-                .FirstOrDefault();
-        }
-
-        private static bool IsUnder(string root, string path)
-        {
-            return path.StartsWith(root, StringComparison.Ordinal) &&
-                   (path.Length == root.Length || path[root.Length] is '/' or '\\');
-        }
-
-        private static string TrimEnd(string path)
-        {
-            return path.TrimEnd('/', '\\');
-        }
-
-        private static string Join(string folder, string relative)
-        {
-            if (string.IsNullOrEmpty(relative))
-            {
-                return folder;
-            }
-
-            var separator = folder.Contains('\\') && !folder.Contains('/') ? '\\' : '/';
-
-            return TrimEnd(folder) + separator + relative.TrimStart('/', '\\');
-        }
-
-        private static string FileNameWithoutExtension(string path)
-        {
-            var name = path[(path.LastIndexOfAny(new[] { '/', '\\' }) + 1)..];
-            var dot = name.LastIndexOf('.');
-
-            return dot > 0 ? name[..dot] : name;
-        }
-
         private class MovieRow
         {
             public int MovieId { get; set; }
@@ -315,22 +236,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             public int QualityProfileId { get; set; }
             public string Tags { get; set; }
             public int MovieFileId { get; set; }
-        }
-
-        private class RootRow
-        {
-            public int Id { get; set; }
-            public string Path { get; set; }
-        }
-
-        private class FileRow
-        {
-            public int Id { get; set; }
-            public string RelativePath { get; set; }
-            public string OsHash { get; set; }
-            public string PHash { get; set; }
-            public DateTime? PHashAttemptedAt { get; set; }
-            public DateTime? HashedFileModifiedAt { get; set; }
         }
     }
 }

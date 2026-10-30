@@ -31,8 +31,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 tx);
 
             v5.Execute(
-                "INSERT INTO \"LegacyMigrationState\" (\"SourceKind\", \"SceneSource\", \"MovieSource\", \"Phase\", \"Progress\", \"Completed\", \"StartedAt\", \"CompletedAt\", \"BackupPath\") " +
-                "VALUES (@SourceKind, @SceneSource, @MovieSource, @Phase, @Progress, @Completed, @StartedAt, @CompletedAt, @BackupPath)",
+                "INSERT INTO \"LegacyMigrationState\" (\"SourceKind\", \"SceneSource\", \"MovieSource\", \"Phase\", \"Progress\", \"Completed\", \"StartedAt\", \"CompletedAt\", \"BackupPath\", \"Rebuild\") " +
+                "VALUES (@SourceKind, @SceneSource, @MovieSource, @Phase, @Progress, @Completed, @StartedAt, @CompletedAt, @BackupPath, @Rebuild)",
                 new
                 {
                     SourceKind = (int)state.SourceKind,
@@ -43,7 +43,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     state.Completed,
                     StartedAt = ToUtc(state.StartedAt),
                     CompletedAt = ToUtc(state.CompletedAt),
-                    state.BackupPath
+                    state.BackupPath,
+                    state.Rebuild
                 },
                 tx);
         }

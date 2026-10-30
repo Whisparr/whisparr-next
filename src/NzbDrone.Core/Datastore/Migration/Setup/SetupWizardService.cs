@@ -46,6 +46,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private readonly IV5DatabaseBuilder _databaseBuilder;
         private readonly IV2Porter _v2Porter;
         private readonly IMixedMovieResolver _mixedMovieResolver;
+        private readonly ISceneSourceSeeder _sceneSourceSeeder;
         private readonly ISkyhookPreflight _skyhookPreflight;
         private readonly IV5DatabaseFinisher _databaseFinisher;
         private readonly ILifecycleService _lifecycleService;
@@ -66,6 +67,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             IV5DatabaseBuilder databaseBuilder,
             IV2Porter v2Porter,
             IMixedMovieResolver mixedMovieResolver,
+            ISceneSourceSeeder sceneSourceSeeder,
             ISkyhookPreflight skyhookPreflight,
             IV5DatabaseFinisher databaseFinisher,
             ILifecycleService lifecycleService,
@@ -79,6 +81,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _databaseBuilder = databaseBuilder;
             _v2Porter = v2Porter;
             _mixedMovieResolver = mixedMovieResolver;
+            _sceneSourceSeeder = sceneSourceSeeder;
             _skyhookPreflight = skyhookPreflight;
             _databaseFinisher = databaseFinisher;
             _lifecycleService = lifecycleService;
@@ -182,11 +185,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             if (choice.Kind == LegacyKind.V2 && choice.SceneSource != SceneMetadataType.Tpdb)
             {
                 return (SetupErrorKey.SetupNotAvailableYet, "Migrating Whisparr v2 to StashDB scenes isn't available yet. Your existing data has not been changed.");
-            }
-
-            if (choice.Kind == LegacyKind.Eros && install != null && choice.SceneSource != install.PreviousSceneSource)
-            {
-                return (SetupErrorKey.SetupNotAvailableYet, "Changing the scene source of this install isn't available yet. Your existing data has not been changed.");
             }
 
             if (install == null)
@@ -298,12 +296,14 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 SetStep(SetupStep.Migrate, SetupStepState.Done);
 
                 bool needsPhase2;
+                var rebuild = false;
 
                 if (isV2)
                 {
                     var counts = PortV2(built, install, step => current = step);
 
                     SetStep(SetupStep.MixedMovies, SetupStepState.Skipped);
+                    SetStep(SetupStep.SceneSeeds, SetupStepState.Skipped);
 
                     needsPhase2 = counts.Series > 0;
                 }
@@ -320,13 +320,19 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                     SetStep(current, SetupStepState.Done);
 
                     needsPhase2 = mixed.NeedsPhase2;
+
+                    // A new scene source means none of the studio, performer or scene ids carry over
+                    rebuild = choice.SceneSource != install.PreviousSceneSource;
+
+                    current = SetupStep.SceneSeeds;
+                    needsPhase2 |= SeedScenes(built, rebuild);
                 }
 
                 current = SetupStep.LockSources;
                 SetStep(current, SetupStepState.Running);
                 SetStep(SetupStep.Finish, SetupStepState.Running);
 
-                FinishDatabase(built, choice, install, needsPhase2, backupPath, startedAt);
+                FinishDatabase(built, choice, install, needsPhase2, rebuild, backupPath, startedAt);
 
                 SetStep(current, SetupStepState.Done);
                 current = SetupStep.Finish;
@@ -384,6 +390,30 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return result;
         }
 
+        // Whether the seeds need phase 2. Skipped unless the scene source changed.
+        private bool SeedScenes(BuiltDatabases built, bool rebuild)
+        {
+            if (!rebuild)
+            {
+                SetStep(SetupStep.SceneSeeds, SetupStepState.Skipped);
+
+                return false;
+            }
+
+            SetStep(SetupStep.SceneSeeds, SetupStepState.Running);
+
+            using var connection = OpenMain(built);
+            using var transaction = connection.BeginTransaction();
+
+            var result = _sceneSourceSeeder.Seed(connection, transaction);
+
+            transaction.Commit();
+
+            SetStep(SetupStep.SceneSeeds, SetupStepState.Done);
+
+            return result.NeedsPhase2;
+        }
+
         // One transaction: the settings, the library snapshot and the report land together or not at all. enter is
         // told which step is about to run, so a failure is attributed to it.
         private V2SnapshotCounts PortV2(BuiltDatabases built, LegacyInstall install, Action<SetupStep> enter)
@@ -415,7 +445,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         }
 
         // One transaction: the locked sources, the renaming switch and the state row land together or not at all.
-        private void FinishDatabase(BuiltDatabases built, SetupChoice choice, LegacyInstall install, bool detached, string backupPath, DateTime startedAt)
+        private void FinishDatabase(BuiltDatabases built, SetupChoice choice, LegacyInstall install, bool detached, bool rebuild, string backupPath, DateTime startedAt)
         {
             var state = new LegacyMigrationState
             {
@@ -427,7 +457,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 Completed = !detached,
                 StartedAt = startedAt,
                 CompletedAt = detached ? null : DateTime.UtcNow,
-                BackupPath = backupPath
+                BackupPath = backupPath,
+                Rebuild = rebuild
             };
 
             using var connection = OpenMain(built);

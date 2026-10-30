@@ -2220,6 +2220,7 @@
   "SetupStepMigrate": "Migrate the data",
   "SetupStepMixedMovies": "Sort out mixed movies",
   "SetupStepPortSettings": "Port your settings",
+  "SetupStepSceneSeeds": "Prepare your scenes for the new scene source",
   "SetupStepSeedConfig": "Create the v5 settings",
   "SetupStepSkyhookPreflight": "Check the metadata service",
   "SetupStepSnapshotLibrary": "Save your library for import",
