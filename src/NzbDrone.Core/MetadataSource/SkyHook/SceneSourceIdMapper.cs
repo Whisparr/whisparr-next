@@ -70,9 +70,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 return new IdMapResult(null, IdMapMethod.None);
             }
 
-            var results = Search<StudioResource>(to, "site/search", title) ?? new List<StudioResource>();
-
-            return ByTitle(title, to, results.Select(s => (s.Title, s.ForeignIds)));
+            return SearchByTitle<StudioResource>(to, "site/search", title, s => (s.Title, s.ForeignIds));
         }
 
         public IdMapResult MapPerformer(SceneMetadataType from, string fromId, string name)
@@ -95,9 +93,26 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 return new IdMapResult(null, IdMapMethod.None);
             }
 
-            var results = Search<PerformerResource>(to, "performer/search", name) ?? new List<PerformerResource>();
+            return SearchByTitle<PerformerResource>(to, "performer/search", name, p => (p.Name, p.ForeignIds));
+        }
 
-            return ByTitle(name, to, results.Select(p => (p.Name, p.ForeignIds)));
+        // The sources spell some names differently ("Nubiles ET" vs "NubilesET"), and the server's search
+        // is no help there, so a miss on a name with spaces gets one more search with the spaces taken out.
+        private IdMapResult SearchByTitle<T>(SceneMetadataType target, string route, string title, Func<T, (string Title, ExternalIdResource Ids)> select)
+        {
+            var ids = ExactTitleIds(title, target, (Search<T>(target, route, title) ?? new List<T>()).Select(select));
+
+            // An ambiguous first search stays ambiguous; only a miss is retried
+            if (ids.Count == 0 && title.Any(char.IsWhiteSpace))
+            {
+                var compact = new string(title.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+                ids = ExactTitleIds(title, target, (Search<T>(target, route, compact) ?? new List<T>()).Select(select));
+            }
+
+            return ids.Count == 1
+                ? new IdMapResult(ids[0], IdMapMethod.Title)
+                : new IdMapResult(null, IdMapMethod.None);
         }
 
         private static SceneMetadataType Other(SceneMetadataType source)
@@ -110,23 +125,20 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return source == SceneMetadataType.Tpdb ? ids?.TpdbId : ids?.StashId;
         }
 
-        private static IdMapResult ByTitle(string title, SceneMetadataType target, IEnumerable<(string Title, ExternalIdResource Ids)> candidates)
+        private static List<string> ExactTitleIds(string title, SceneMetadataType target, IEnumerable<(string Title, ExternalIdResource Ids)> candidates)
         {
             var clean = title.CleanMovieTitle();
-            var ids = new List<string>();
 
-            if (clean.IsNotNullOrWhiteSpace())
+            if (clean.IsNullOrWhiteSpace())
             {
-                ids = candidates.Where(c => c.Title.CleanMovieTitle() == clean)
-                                .Select(c => ForeignId(c.Ids, target))
-                                .Where(id => id.IsNotNullOrWhiteSpace())
-                                .Distinct(StringComparer.OrdinalIgnoreCase)
-                                .ToList();
+                return new List<string>();
             }
 
-            return ids.Count == 1
-                ? new IdMapResult(ids[0], IdMapMethod.Title)
-                : new IdMapResult(null, IdMapMethod.None);
+            return candidates.Where(c => c.Title.CleanMovieTitle() == clean)
+                             .Select(c => ForeignId(c.Ids, target))
+                             .Where(id => id.IsNotNullOrWhiteSpace())
+                             .Distinct(StringComparer.OrdinalIgnoreCase)
+                             .ToList();
         }
 
         // Null when the source has no such record.

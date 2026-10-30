@@ -83,6 +83,75 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void studio_title_is_retried_without_spaces_when_the_first_search_misses()
+        {
+            GivenCompactSearchResults(Studio("NubilesET", TpdbId));
+
+            var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
+
+            result.Should().Be(new IdMapResult(TpdbId, IdMapMethod.Title));
+            _requests.Should().HaveCount(2);
+            _requests[1].Url.FullUri.Should().Contain("q=NubilesET");
+        }
+
+        [Test]
+        public void studio_compact_search_with_two_exact_titles_is_none()
+        {
+            GivenCompactSearchResults(Studio("NubilesET", "a"), Studio("NUBILESET", "b"));
+
+            var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
+
+            result.Should().Be(new IdMapResult(null, IdMapMethod.None));
+            _requests.Should().HaveCount(2);
+        }
+
+        [Test]
+        public void studio_ambiguous_first_search_is_not_retried()
+        {
+            GivenSearchResults(Studio("Nubiles ET", "a"), Studio("NUBILES ET", "b"));
+
+            var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
+
+            result.Should().Be(new IdMapResult(null, IdMapMethod.None));
+            _requests.Should().ContainSingle();
+        }
+
+        [Test]
+        public void studio_title_without_spaces_is_searched_once()
+        {
+            GivenSearchResults();
+
+            var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "NubilesET");
+
+            result.Method.Should().Be(IdMapMethod.None);
+            _requests.Should().ContainSingle();
+        }
+
+        [Test]
+        public void studio_compact_search_is_skipped_when_the_first_search_matches()
+        {
+            GivenSearchResults(Studio("Nubiles ET", TpdbId));
+
+            var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
+
+            result.Should().Be(new IdMapResult(TpdbId, IdMapMethod.Title));
+            _requests.Should().ContainSingle();
+        }
+
+        [Test]
+        public void performer_name_is_retried_without_spaces_when_the_first_search_misses()
+        {
+            _respond = r => (HttpStatusCode.OK, r.Url.FullUri.Contains("q=JaneDoe")
+                ? new List<PerformerResource> { new PerformerResource { Name = "JaneDoe", ForeignIds = new ExternalIdResource { StashId = StashId } } }
+                : new List<PerformerResource>());
+
+            var result = Subject.MapPerformer(SceneMetadataType.Tpdb, null, "Jane Doe");
+
+            result.Should().Be(new IdMapResult(StashId, IdMapMethod.Title));
+            _requests.Should().HaveCount(2);
+        }
+
+        [Test]
         public void mapping_without_target_id_falls_back_to_title()
         {
             _respond = r => r.Url.FullUri.Contains("/search")
@@ -257,6 +326,12 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             _respond = r => r.Url.FullUri.Contains("/search")
                 ? (HttpStatusCode.OK, results.ToList())
                 : (HttpStatusCode.NotFound, null);
+        }
+
+        // Only the search with the spaces taken out finds anything, like the server's "NubilesET"
+        private void GivenCompactSearchResults(params StudioResource[] results)
+        {
+            _respond = r => (HttpStatusCode.OK, r.Url.FullUri.Contains("q=NubilesET") ? results.ToList() : new List<StudioResource>());
         }
 
         private HttpResponse<T> Respond<T>(HttpRequest request)
