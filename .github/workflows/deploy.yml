@@ -133,9 +133,10 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
-          # Peeled (^{}) line first: an annotated tag points at a tag object, and
-          # the commit it resolves to is what has to match this run.
-          remote=$(git ls-remote origin "refs/tags/$tag^{}" "refs/tags/$tag" | awk '{print $1}' | head -n1)
+          # An annotated tag is listed twice: the tag object, then the commit it
+          # resolves to on the ^{} line. The commit is what has to match this run;
+          # a lightweight tag has only the plain line.
+          remote=$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | awk '/\^\{\}$/{p=$1; next} {t=$1} END{print (p ? p : t)}')
           if [[ -z "$remote" ]]; then
             git tag -s "$tag" -m "Release $tag"
             git push origin "$tag"

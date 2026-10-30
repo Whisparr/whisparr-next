@@ -130,10 +130,6 @@ wait_ping() { wait_ready "$1" "$2" /ping; }
 # A legacy install boots into setup mode, where /ping is not served; /setup is.
 wait_setup() { wait_ready "$1" "$2" /setup; }
 
-api_key_from() {
-    docker exec "$1" cat "$2" | sed -n 's:.*<ApiKey>\(.*\)</ApiKey>.*:\1:p' | head -n1
-}
-
 # write_legacy_fixture <volume>: a v2 install owned by 1000:1000.
 write_legacy_fixture() {
     local volume="$1" src="${WORK_DIR}/legacy-src"

@@ -183,11 +183,12 @@
 
 Nothing above needs Actions on. Pushing and going public are plz12345's calls, in this order:
 
-1. Once Actions are on, open a same-repo PR into `develop` first: it runs every test job and the image build and test on both architectures with no push, release, tag or package.
-2. Review the audit; push `develop`.
-3. Make the repo public; enable Actions.
-4. Check org settings (public packages allowed; Actions may create packages) and that `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` reach the repo. If they don't, create a new key at org level.
-5. Watch the first `develop` run: release `v5.0.0-develop.N`, then all three image tags.
-6. Set the `whisparr` package to public (one-way).
-7. Run `base-update.yml` by hand: expect `current`.
-8. Acceptance: stop the Eros container, zip AppData, switch to `ghcr.io/whisparr/whisparr:v5-develop`, start. Expect a clean pull and boot, no failures in the logs, and the migration halt screen.
+1. Review the audit; push a branch (not `develop`), since the PR in step 4 needs the commits on a same-repo branch.
+2. Make the repo public; enable Actions.
+3. Check org settings (public packages allowed; Actions may create packages) and that `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` reach the repo. If they don't, create a new key at org level.
+4. Open a same-repo PR into `develop` from that branch: it runs every test job and the image build and test on both architectures with no push, release, tag or package.
+5. Merge the PR (or push `develop`).
+6. Watch the first `develop` run: release `v5.0.0-develop.N`, then all three image tags.
+7. Set the `whisparr` package to public (one-way).
+8. Run `base-update.yml` by hand: expect `current`.
+9. Acceptance: stop the Eros container, zip AppData, switch to `ghcr.io/whisparr/whisparr:v5-develop`, start. Expect a clean pull and boot, no failures in the logs, and the migration halt screen.
