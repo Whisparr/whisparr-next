@@ -59,15 +59,21 @@ namespace NzbDrone.Core.LegacyMigration
 
         public bool Handles(LegacyMigrationState state)
         {
-            return state.SourceKind == LegacyKind.Eros;
+            return state.SourceKind == LegacyKind.Eros && !state.Rebuild;
         }
 
         public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
         {
-            var seeds = _seedRepository.All().ToList();
-
             // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
-            progress.Total(seeds.Count);
+            progress.Total(_seedRepository.All().Count());
+
+            return RunMovieSeeds(state, progress, recordOutages);
+        }
+
+        // The movie pass on its own, for the rebuild runner that sets the total across all its stages
+        public LegacyImportPass RunMovieSeeds(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
+        {
+            var seeds = _seedRepository.All().ToList();
 
             var alreadyResolved = seeds.Count(s => s.Resolved);
 

@@ -23,6 +23,29 @@ namespace NzbDrone.Core.LegacyMigration
         // Every item worked on failed transiently and none was waiting on server-side work: the source looks to be
         // down, not the items. Unless the pass was told to record outages, no attempt was spent on them.
         public bool Outage { get; set; }
+
+        // The passes of runners that work in stages, as one: counts add up, the earliest retry wins, and the source
+        // only counts as down when every stage that tried anything found it down
+        public static LegacyImportPass Combine(LegacyImportPass a, LegacyImportPass b)
+        {
+            return new LegacyImportPass
+            {
+                Pending = a.Pending + b.Pending,
+                WaitingRetry = a.WaitingRetry + b.WaitingRetry,
+                Waiting = a.Waiting + b.Waiting,
+                Attempted = a.Attempted + b.Attempted,
+                NextDue = LegacyRetryPolicy.Earlier(a.NextDue, b.NextDue),
+                Outage = (a.Attempted == 0 || a.Outage) && (b.Attempted == 0 || b.Outage) && (a.Attempted + b.Attempted) > 0
+            };
+        }
+    }
+
+    // What a runner needs of a seed to schedule it: whether it is done, and how it has been failing
+    public interface ILegacySeed
+    {
+        bool Resolved { get; set; }
+        int Attempts { get; set; }
+        DateTime? LastAttemptAt { get; set; }
     }
 
     public interface ILegacyImportProgress

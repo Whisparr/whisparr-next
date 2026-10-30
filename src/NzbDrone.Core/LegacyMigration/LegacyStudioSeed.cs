@@ -4,7 +4,7 @@ using NzbDrone.Core.Datastore;
 namespace NzbDrone.Core.LegacyMigration
 {
     // A studio from the Eros library, kept with its settings until it is matched on the new scene source and added there.
-    public class LegacyStudioSeed : ModelBase
+    public class LegacyStudioSeed : ModelBase, ILegacySeed
     {
         public string LegacyForeignId { get; set; }
         public string LegacyTpdbId { get; set; }

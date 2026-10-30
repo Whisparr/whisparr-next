@@ -76,6 +76,8 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             page.Items.Select(i => i.SceneId).Should().Equal("a", "b");
             page.Items[0].PerformerIds.Should().Equal("p1", "p2");
             page.Items[1].PerformerIds.Should().Equal("p3");
+            page.Items[0].Title.Should().Be("Scene a");
+            page.Items[0].ReleaseDate.Should().Be(new DateTime(2024, 5, 17, 0, 0, 0, DateTimeKind.Utc));
         }
 
         [Test]
@@ -455,6 +457,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
                 ForeignIds = new ExternalIdResource { StashId = stashId },
                 Title = $"Scene {stashId}",
                 ReleaseDate = "2024-05-17",
+                ReleaseDateUtc = new DateTime(2024, 5, 17, 0, 0, 0, DateTimeKind.Utc),
                 Images = new List<ImageResource>(),
                 Genres = new List<string>(),
                 Studio = new StudioResource

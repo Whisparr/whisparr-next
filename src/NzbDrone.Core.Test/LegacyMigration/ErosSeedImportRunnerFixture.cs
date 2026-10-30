@@ -114,6 +114,14 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void does_not_handle_rebuild()
+        {
+            _state.Rebuild = true;
+
+            Subject.Handles(_state).Should().BeFalse();
+        }
+
+        [Test]
         public void tmdb_seed_added_and_file_linked_and_import_file_removed()
         {
             GivenSearch("tmdb:123", Candidate("Other", 1999, 999), Candidate("The Big Movie", 2020));

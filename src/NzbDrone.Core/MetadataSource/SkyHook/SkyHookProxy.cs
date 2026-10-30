@@ -564,6 +564,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 items.Add(new ScenePageItem
                 {
                     SceneId = sceneId,
+                    Title = scene.Title,
+                    ReleaseDate = scene.ReleaseDateUtc,
                     PerformerIds = (scene.Credits ?? new List<CastResource>())
                         .Select(c => SceneSourceIds.Key(sceneSource, c?.Performer?.ForeignIds))
                         .Where(i => i != null)

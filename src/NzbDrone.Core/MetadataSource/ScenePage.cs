@@ -16,6 +16,10 @@ namespace NzbDrone.Core.MetadataSource
     {
         public string SceneId { get; set; }
         public List<string> PerformerIds { get; set; }
+
+        // What the legacy migration matches an old scene by; null when the source gave none
+        public string Title { get; set; }
+        public DateTime? ReleaseDate { get; set; }
     }
 
     public class ScenePage

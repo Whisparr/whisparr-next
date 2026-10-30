@@ -1,0 +1,707 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Net;
+using NLog;
+using NzbDrone.Common.Disk;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Common.Http;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore.Converters;
+using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.MediaInfo;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.MetadataSource.SkyHook;
+using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Performers;
+using NzbDrone.Core.Movies.Studios;
+using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.RootFolders;
+
+namespace NzbDrone.Core.LegacyMigration
+{
+    // Rebuilds an Eros library on a new scene source from the seeds phase 1 wrote: studios, then performers, then
+    // scenes (with their files), then the movies, which the movie runner handles as it always did
+    public class ErosRebuildImportRunner : ILegacyImportRunner
+    {
+        private const string StudioArea = "Studios";
+        private const string PerformerArea = "Performers";
+        private const string SceneArea = "Scenes";
+
+        // The same converter the repositories use to read this column
+        private static readonly EmbeddedDocumentConverter<MediaInfoModel> MediaInfoConverter = new();
+
+        private readonly ErosSeedImportRunner _movieRunner;
+        private readonly ILegacyStudioSeedRepository _studioSeeds;
+        private readonly ILegacyPerformerSeedRepository _performerSeeds;
+        private readonly ILegacySceneSeedRepository _sceneSeeds;
+        private readonly ILegacyMovieSeedRepository _movieSeeds;
+        private readonly ISceneSourceIdMapper _idMapper;
+        private readonly ILegacyHashMatcher _hashMatcher;
+        private readonly IAddStudioService _addStudioService;
+        private readonly IStudioService _studioService;
+        private readonly IAddPerformerService _addPerformerService;
+        private readonly IPerformerService _performerService;
+        private readonly IProvideMovieInfo _movieInfo;
+        private readonly IScenePageWalker _pageWalker;
+        private readonly IAddMovieService _addMovieService;
+        private readonly IMovieService _movieService;
+        private readonly IImportlFileService _importFileService;
+        private readonly ILegacyFileLinker _fileLinker;
+        private readonly ILegacyMigrationService _migrationService;
+        private readonly IDiskProvider _diskProvider;
+        private readonly ISkyhookPacer _pacer;
+        private readonly Logger _logger;
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
+        public ErosRebuildImportRunner(ErosSeedImportRunner movieRunner,
+                                       ILegacyStudioSeedRepository studioSeeds,
+                                       ILegacyPerformerSeedRepository performerSeeds,
+                                       ILegacySceneSeedRepository sceneSeeds,
+                                       ILegacyMovieSeedRepository movieSeeds,
+                                       ISceneSourceIdMapper idMapper,
+                                       ILegacyHashMatcher hashMatcher,
+                                       IAddStudioService addStudioService,
+                                       IStudioService studioService,
+                                       IAddPerformerService addPerformerService,
+                                       IPerformerService performerService,
+                                       IProvideMovieInfo movieInfo,
+                                       IScenePageWalker pageWalker,
+                                       IAddMovieService addMovieService,
+                                       IMovieService movieService,
+                                       IImportlFileService importFileService,
+                                       ILegacyFileLinker fileLinker,
+                                       ILegacyMigrationService migrationService,
+                                       IDiskProvider diskProvider,
+                                       ISkyhookPacer pacer,
+                                       Logger logger)
+        {
+            _movieRunner = movieRunner;
+            _studioSeeds = studioSeeds;
+            _performerSeeds = performerSeeds;
+            _sceneSeeds = sceneSeeds;
+            _movieSeeds = movieSeeds;
+            _idMapper = idMapper;
+            _hashMatcher = hashMatcher;
+            _addStudioService = addStudioService;
+            _studioService = studioService;
+            _addPerformerService = addPerformerService;
+            _performerService = performerService;
+            _movieInfo = movieInfo;
+            _pageWalker = pageWalker;
+            _addMovieService = addMovieService;
+            _movieService = movieService;
+            _importFileService = importFileService;
+            _fileLinker = fileLinker;
+            _migrationService = migrationService;
+            _diskProvider = diskProvider;
+            _pacer = pacer;
+            _logger = logger;
+        }
+
+        public bool Handles(LegacyMigrationState state)
+        {
+            return state.SourceKind == LegacyKind.Eros && state.Rebuild;
+        }
+
+        public LegacyImportPass RunPass(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
+        {
+            var studios = _studioSeeds.All().ToList();
+            var performers = _performerSeeds.All().ToList();
+            var scenes = _sceneSeeds.All().ToList();
+
+            // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
+            progress.Total(studios.Count + performers.Count + scenes.Count + _movieSeeds.All().Count());
+
+            AdvanceResolved(progress, StudioArea, studios);
+            AdvanceResolved(progress, PerformerArea, performers);
+            AdvanceResolved(progress, SceneArea, scenes);
+
+            var now = _pacer.UtcNow;
+            var pass = RunStage(StudioStage(state), studios, progress, recordOutages, now);
+
+            pass = LegacyImportPass.Combine(pass, RunStage(PerformerStage(state), performers, progress, recordOutages, now));
+
+            // A scene needs its studio's new id, so none starts until every studio is settled
+            var scenePass = studios.Any(s => !s.Resolved)
+                ? new LegacyImportPass { Pending = scenes.Count(s => !s.Resolved) }
+                : RunScenes(state, scenes, progress, recordOutages, now);
+
+            pass = LegacyImportPass.Combine(pass, scenePass);
+
+            return LegacyImportPass.Combine(pass, _movieRunner.RunMovieSeeds(state, progress, recordOutages));
+        }
+
+        private static void AdvanceResolved<T>(ILegacyImportProgress progress, string area, List<T> seeds)
+            where T : ILegacySeed
+        {
+            var resolved = seeds.Count(s => s.Resolved);
+
+            if (resolved > 0)
+            {
+                progress.Advance(area, resolved);
+            }
+        }
+
+        private LegacyImportPass RunStage<T>(Stage<T> stage, List<T> seeds, ILegacyImportProgress progress, bool recordOutages, DateTime now)
+            where T : ILegacySeed
+        {
+            var pass = new LegacyImportPass();
+            var due = new List<T>();
+
+            foreach (var seed in seeds.Where(s => !s.Resolved))
+            {
+                // A seed backing off from an earlier failure waits for its own turn
+                if (LegacyRetryPolicy.IsDue(seed.Attempts, seed.LastAttemptAt, now))
+                {
+                    due.Add(seed);
+                }
+                else
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                    pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(seed.Attempts, seed.LastAttemptAt));
+                }
+            }
+
+            stage.Prepare?.Invoke(due);
+
+            var failures = new List<(T Seed, Exception Error)>();
+            var succeeded = 0;
+
+            foreach (var seed in due)
+            {
+                pass.Attempted++;
+
+                try
+                {
+                    stage.Resolve(seed);
+                    progress.Advance(stage.Area);
+                    succeeded++;
+                }
+                catch (Exception ex) when (IsTransient(ex))
+                {
+                    _logger.Warn(ex, "Could not rebuild {0}, will retry", stage.Subject(seed));
+
+                    failures.Add((seed, ex));
+                }
+                catch (Exception ex)
+                {
+                    // Retrying won't help; report it and move on so one bad seed can't hold the migration open
+                    _logger.Warn(ex, "Could not rebuild {0}", stage.Subject(seed));
+
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, stage.Area, stage.Subject(seed), ex.Message);
+
+                    if (!seed.Resolved)
+                    {
+                        seed.Resolved = true;
+                        stage.Update(seed);
+                        progress.Advance(stage.Area);
+                    }
+                }
+            }
+
+            // Everything worked on failed transiently, so the source is down rather than the seeds: don't spend their attempts
+            pass.Outage = failures.Count > 0 && succeeded == 0;
+
+            SettleFailures(stage, failures, pass, progress, recordOutages);
+
+            return pass;
+        }
+
+        private void SettleFailures<T>(Stage<T> stage, List<(T Seed, Exception Error)> failures, LegacyImportPass pass, ILegacyImportProgress progress, bool recordOutages)
+            where T : ILegacySeed
+        {
+            foreach (var (seed, error) in failures)
+            {
+                if (pass.Outage && !recordOutages)
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                }
+                else if (RecordFailure(stage, seed, error))
+                {
+                    progress.Advance(stage.Area);
+                }
+                else
+                {
+                    pass.Pending++;
+                    pass.WaitingRetry++;
+                    pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(seed.Attempts, seed.LastAttemptAt));
+                }
+            }
+        }
+
+        private static bool IsTransient(Exception ex)
+        {
+            return ex is HttpException or WebException or TimeoutException or FingerprintTryLaterException;
+        }
+
+        // Returns true when the seed was given up on
+        private bool RecordFailure<T>(Stage<T> stage, T seed, Exception ex)
+            where T : ILegacySeed
+        {
+            seed.Attempts++;
+            seed.LastAttemptAt = _pacer.UtcNow;
+
+            var giveUp = LegacyRetryPolicy.ShouldGiveUp(seed.Attempts);
+
+            if (giveUp)
+            {
+                seed.Resolved = true;
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, stage.Area, stage.Subject(seed), $"{stage.LegacyDetail(seed)}: {ex.Message}");
+            }
+
+            stage.Update(seed);
+
+            return giveUp;
+        }
+
+        private static string SourceName(SceneMetadataType source)
+        {
+            return source == SceneMetadataType.Tpdb ? "TPDB" : "StashDB";
+        }
+
+        private static SceneMetadataType PreviousSource(LegacyMigrationState state)
+        {
+            return state.SceneSource == SceneMetadataType.Tpdb ? SceneMetadataType.StashDb : SceneMetadataType.Tpdb;
+        }
+
+        // Seeds are from the other source, so their ids are too
+        private static string LegacyIdDetail(LegacyMigrationState state, string legacyForeignId)
+        {
+            return $"Legacy {SourceName(PreviousSource(state))} id {legacyForeignId}";
+        }
+
+        // Stage: studios and performers
+
+        private Stage<LegacyStudioSeed> StudioStage(LegacyMigrationState state)
+        {
+            return new Stage<LegacyStudioSeed>
+            {
+                Area = StudioArea,
+                Subject = s => s.Title.IsNotNullOrWhiteSpace() ? s.Title : s.LegacyForeignId,
+                LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
+                Update = s => _studioSeeds.Update(s),
+                Resolve = s => ResolveStudio(state, s)
+            };
+        }
+
+        private Stage<LegacyPerformerSeed> PerformerStage(LegacyMigrationState state)
+        {
+            return new Stage<LegacyPerformerSeed>
+            {
+                Area = PerformerArea,
+                Subject = s => s.Name.IsNotNullOrWhiteSpace() ? s.Name : s.LegacyForeignId,
+                LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
+                Update = s => _performerSeeds.Update(s),
+                Resolve = s => ResolvePerformer(state, s)
+            };
+        }
+
+        // Null when the new source has no such studio or performer. A seed that already carries its new id was started
+        // on an earlier pass, so the id is not looked up again.
+        private static string TargetId(LegacyMigrationState state, string newForeignId, string legacyTpdbId, Func<IdMapResult> map)
+        {
+            if (newForeignId.IsNotNullOrWhiteSpace())
+            {
+                return newForeignId;
+            }
+
+            if (state.SceneSource == SceneMetadataType.Tpdb && legacyTpdbId.IsNotNullOrWhiteSpace())
+            {
+                return legacyTpdbId;
+            }
+
+            return map().Id;
+        }
+
+        private void ResolveStudio(LegacyMigrationState state, LegacyStudioSeed seed)
+        {
+            var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
+            var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapStudio(PreviousSource(state), seed.LegacyForeignId, seed.Title));
+
+            if (targetId == null)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, $"Studio not found on {SourceName(state.SceneSource)}");
+                MarkResolved(seed);
+
+                return;
+            }
+
+            // Kept before the add, so a pass that dies half way finds its own studio again instead of reporting a merge
+            seed.NewForeignId = targetId;
+            _studioSeeds.Update(seed);
+
+            var existing = _studioService.FindByForeignId(targetId);
+
+            if (existing != null && !resumed)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, $"Merged with {existing.Title}");
+                MarkResolved(seed);
+
+                return;
+            }
+
+            // Created unmonitored, so the refresh it queues only fetches metadata; the settings go on afterwards
+            var studio = existing ?? _addStudioService.AddStudio(new Studio
+            {
+                ForeignId = targetId,
+                Title = seed.Title,
+                Monitored = false,
+                MoviesMonitored = false,
+                SearchOnAdd = false,
+                RootFolderPath = seed.RootFolderPath,
+                QualityProfileId = seed.QualityProfileId,
+                Tags = tags
+            });
+
+            studio = _studioService.FindByForeignId(targetId) ?? studio;
+
+            studio.Monitored = seed.Monitored;
+            studio.MoviesMonitored = seed.MoviesMonitored;
+            studio.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
+            studio.AfterDate = seed.AfterDate;
+            studio.RootFolderPath = seed.RootFolderPath;
+            studio.QualityProfileId = seed.QualityProfileId;
+            studio.Tags = tags;
+            studio.SearchOnAdd = false;
+            _studioService.Update(studio);
+
+            MarkResolved(seed);
+        }
+
+        private void ResolvePerformer(LegacyMigrationState state, LegacyPerformerSeed seed)
+        {
+            var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
+            var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapPerformer(PreviousSource(state), seed.LegacyForeignId, seed.Name));
+
+            if (targetId == null)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, $"Performer not found on {SourceName(state.SceneSource)}");
+                MarkResolved(seed);
+
+                return;
+            }
+
+            seed.NewForeignId = targetId;
+            _performerSeeds.Update(seed);
+
+            var existing = _performerService.FindByForeignId(targetId);
+
+            // A hidden performer only came in through a scene's credits: adding takes it on and shows it
+            var isMerge = existing is { Visibility: not PerformerVisibility.Hidden };
+
+            if (isMerge && !resumed)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, $"Merged with {existing.Name}");
+                MarkResolved(seed);
+
+                return;
+            }
+
+            var performer = isMerge ? existing : _addPerformerService.AddPerformer(new Performer
+            {
+                ForeignId = targetId,
+                Name = seed.Name,
+                Monitored = false,
+                MoviesMonitored = false,
+                SearchOnAdd = false,
+                RootFolderPath = seed.RootFolderPath,
+                QualityProfileId = seed.QualityProfileId,
+                Tags = tags
+            });
+
+            performer = _performerService.FindByForeignId(targetId) ?? performer;
+
+            performer.Monitored = seed.Monitored;
+            performer.MoviesMonitored = seed.MoviesMonitored;
+            performer.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
+            performer.AfterDate = seed.AfterDate;
+            performer.RootFolderPath = seed.RootFolderPath;
+            performer.QualityProfileId = seed.QualityProfileId;
+            performer.Tags = tags;
+            performer.SearchOnAdd = false;
+            _performerService.Update(performer);
+
+            MarkResolved(seed);
+        }
+
+        private void MarkResolved(LegacyStudioSeed seed)
+        {
+            seed.Resolved = true;
+            _studioSeeds.Update(seed);
+        }
+
+        private void MarkResolved(LegacyPerformerSeed seed)
+        {
+            seed.Resolved = true;
+            _performerSeeds.Update(seed);
+        }
+
+        private void MarkResolved(LegacySceneSeed seed)
+        {
+            seed.Resolved = true;
+            _sceneSeeds.Update(seed);
+        }
+
+        // Stage: scenes
+
+        private LegacyImportPass RunScenes(LegacyMigrationState state, List<LegacySceneSeed> scenes, ILegacyImportProgress progress, bool recordOutages, DateTime now)
+        {
+            var studioIds = _studioSeeds.All()
+                .Where(s => s.LegacyForeignId.IsNotNullOrWhiteSpace())
+                .GroupBy(s => s.LegacyForeignId)
+                .ToDictionary(g => g.Key, g => g.First().NewForeignId);
+            var context = new SceneContext(studioIds);
+
+            var stage = new Stage<LegacySceneSeed>
+            {
+                Area = SceneArea,
+                Subject = SceneSubject,
+                LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
+                Update = s => _sceneSeeds.Update(s),
+                Prepare = due => HashFiles(due, context),
+                Resolve = s => ResolveScene(state, s, context)
+            };
+
+            return RunStage(stage, scenes, progress, recordOutages, now);
+        }
+
+        private static string SceneSubject(LegacySceneSeed seed)
+        {
+            return seed.ReleaseDate.HasValue
+                ? $"{seed.Title} ({seed.ReleaseDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)})"
+                : seed.Title;
+        }
+
+        // One lookup for every scene with a file. A failed lookup is each of those scenes' own transient failure.
+        private void HashFiles(List<LegacySceneSeed> due, SceneContext context)
+        {
+            var queries = new List<HashQuery>();
+
+            foreach (var seed in due.Where(s => s.ImportFileId.HasValue))
+            {
+                var file = _importFileService.Get(seed.ImportFileId.Value);
+
+                if (file == null)
+                {
+                    continue;
+                }
+
+                context.Files[seed.Id] = file;
+                queries.Add(new HashQuery(seed.Id.ToString(CultureInfo.InvariantCulture), file.Path, file.OsHash));
+            }
+
+            if (queries.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                context.Hashes = _hashMatcher.Match(queries);
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                _logger.Warn(ex, "The fingerprint lookup failed, will retry");
+
+                context.HashError = ex;
+
+                return;
+            }
+
+            var hashed = new List<ImportFile>();
+
+            foreach (var (seedId, file) in context.Files)
+            {
+                if (context.Hashes.TryGetValue(seedId.ToString(CultureInfo.InvariantCulture), out var match) && match.OsHash.IsNotNullOrWhiteSpace() && match.OsHash != file.OsHash)
+                {
+                    file.OsHash = match.OsHash;
+                    file.HashedFileModifiedAt = _diskProvider.FileGetLastWrite(file.Path);
+                    hashed.Add(file);
+                }
+            }
+
+            if (hashed.Count > 0)
+            {
+                _importFileService.SaveOsHashes(hashed);
+            }
+        }
+
+        private void ResolveScene(LegacyMigrationState state, LegacySceneSeed seed, SceneContext context)
+        {
+            context.Files.TryGetValue(seed.Id, out var importFile);
+
+            var sceneId = HashMatch(seed, importFile, context);
+
+            var studioId = seed.LegacyStudioForeignId.IsNotNullOrWhiteSpace() ? context.StudioIds.GetValueOrDefault(seed.LegacyStudioForeignId) : null;
+
+            if (sceneId == null && studioId.IsNotNullOrWhiteSpace())
+            {
+                sceneId = LegacySceneMatcher.FindExact(Catalog(studioId, context), seed.Title, seed.ReleaseDate);
+            }
+
+            if (sceneId == null)
+            {
+                // The file stays parked in the import list
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed), LegacyIdDetail(state, seed.LegacyForeignId));
+                MarkResolved(seed);
+
+                return;
+            }
+
+            var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
+            var movie = _movieService.FindByForeignId(sceneId);
+
+            if (movie == null)
+            {
+                var stub = new Movie
+                {
+                    ForeignId = sceneId,
+                    Monitored = seed.Monitored,
+                    QualityProfileId = seed.QualityProfileId,
+                    RootFolderPath = seed.RootFolderPath,
+                    Tags = tags,
+                    Path = seed.Path,
+                    AddOptions = new AddMovieOptions { SearchForMovie = false }
+                };
+
+                // Inline, so no refresh queued by the add is still running with a stale movie when the file is linked.
+                // Errors are not ignored: a failed add is the seed's failure, not an empty result.
+                movie = _addMovieService.AddMovies(new List<Movie> { stub }, false, refreshInline: true).FirstOrDefault()
+                    ?? _movieService.FindByForeignId(sceneId)
+                    ?? throw new InvalidOperationException($"{SceneSubject(seed)} was not added");
+            }
+
+            if (seed.ImportFileId.HasValue)
+            {
+                LinkImportFile(seed, movie, importFile);
+            }
+
+            MarkResolved(seed);
+        }
+
+        // Null when the scene has no file, the file could not be hashed, or the hash names no single scene
+        private static string HashMatch(LegacySceneSeed seed, ImportFile importFile, SceneContext context)
+        {
+            if (importFile == null)
+            {
+                return null;
+            }
+
+            if (context.HashError != null)
+            {
+                throw context.HashError;
+            }
+
+            if (context.Hashes == null || !context.Hashes.TryGetValue(seed.Id.ToString(CultureInfo.InvariantCulture), out var match))
+            {
+                return null;
+            }
+
+            if (match.TryLater)
+            {
+                throw new FingerprintTryLaterException($"The fingerprint lookup asked to try {SceneSubject(seed)} again later");
+            }
+
+            return match.SceneId;
+        }
+
+        // The studio's catalog, walked once per pass
+        private List<SceneKey> Catalog(string studioId, SceneContext context)
+        {
+            if (context.Catalogs.TryGetValue(studioId, out var cached))
+            {
+                return cached;
+            }
+
+            var keys = new List<SceneKey>();
+            var result = _pageWalker.Walk(
+                cursor => _movieInfo.GetStudioScenePage(studioId, cursor),
+                page => keys.AddRange((page.Items ?? new List<ScenePageItem>()).Select(i => new SceneKey(i.SceneId, i.Title, i.ReleaseDate))),
+                () => true);
+
+            // A catalog missing pages would turn into false "not found" verdicts, so it is tried again later
+            if (result.GaveUp.Count > 0)
+            {
+                throw new TimeoutException($"The scene catalog of studio {studioId} was not complete");
+            }
+
+            context.Catalogs[studioId] = keys;
+
+            return keys;
+        }
+
+        private void LinkImportFile(LegacySceneSeed seed, Movie movie, ImportFile importFile)
+        {
+            if (importFile == null)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed), "Parked file no longer exists");
+
+                return;
+            }
+
+            var outcome = _fileLinker.Link(movie, importFile.Path, file => FillFromSeed(file, seed, _diskProvider.GetFileSize(importFile.Path)));
+
+            if (outcome == LinkOutcome.Linked || outcome == LinkOutcome.AlreadyLinked)
+            {
+                _importFileService.Remove(importFile.Id);
+
+                return;
+            }
+
+            // The file stays parked in the import list either way
+            var detail = outcome == LinkOutcome.SceneHasOtherFile
+                ? $"Scene already has a file; legacy also had {importFile.Path}"
+                : $"File could not be linked: {outcome}";
+
+            _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, importFile.Path, detail);
+        }
+
+        // The file as Eros had it, through the same converters the repositories read the columns with
+        internal static void FillFromSeed(MovieFile movieFile, LegacySceneSeed seed, long sizeOnDisk)
+        {
+            movieFile.Size = seed.FileSize > 0 ? seed.FileSize : sizeOnDisk;
+            movieFile.Quality = V2SeriesImportRunnerBase.ParseQuality(seed.FileQuality);
+            movieFile.Languages = V2SeriesImportRunnerBase.ParseLanguages(seed.FileLanguages);
+            movieFile.MediaInfo = seed.FileMediaInfo.IsNullOrWhiteSpace() ? null : MediaInfoConverter.Parse(seed.FileMediaInfo);
+            movieFile.ReleaseGroup = seed.FileReleaseGroup;
+            movieFile.SceneName = seed.FileSceneName;
+            movieFile.OriginalFilePath = seed.FileOriginalFilePath;
+            movieFile.IndexerFlags = (IndexerFlags)seed.FileIndexerFlags;
+            movieFile.Edition = seed.FileEdition;
+            movieFile.DateAdded = seed.FileDateAdded ?? DateTime.UtcNow;
+        }
+
+        // What one pass over the scenes shares: the files and their hash verdicts, and the catalogs walked so far
+        private sealed class SceneContext
+        {
+            public SceneContext(Dictionary<string, string> studioIds)
+            {
+                StudioIds = studioIds;
+            }
+
+            public Dictionary<string, string> StudioIds { get; }
+            public Dictionary<int, ImportFile> Files { get; } = new();
+            public Dictionary<string, HashMatch> Hashes { get; set; }
+            public Exception HashError { get; set; }
+            public Dictionary<string, List<SceneKey>> Catalogs { get; } = new();
+        }
+
+        // How one kind of seed is worked: Resolve either finishes the seed or throws
+        private sealed class Stage<T>
+        {
+            public string Area { get; init; }
+            public Func<T, string> Subject { get; init; }
+            public Func<T, string> LegacyDetail { get; init; }
+            public Action<T> Update { get; init; }
+            public Action<T> Resolve { get; init; }
+            public Action<List<T>> Prepare { get; init; }
+        }
+    }
+}

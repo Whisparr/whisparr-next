@@ -5,7 +5,7 @@ namespace NzbDrone.Core.LegacyMigration
 {
     // A scene from the Eros library, with what the user had set and the file it had, until the scene is matched on the
     // new scene source and added there. The File* columns are null or 0 when the scene had no file.
-    public class LegacySceneSeed : ModelBase
+    public class LegacySceneSeed : ModelBase, ILegacySeed
     {
         public string LegacyForeignId { get; set; }
         public string Title { get; set; }
