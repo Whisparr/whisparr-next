@@ -100,10 +100,9 @@ jobs:
           pattern: release-*
           merge-multiple: true
 
-      # cardinalby/git-get-release-action only scans a bounded window of recent
-      # releases, so on eros it stopped finding the newest stable one once ~100
-      # -develop prereleases piled up ahead of it. /releases/latest is defined as
-      # the newest non-draft, non-prerelease release and has no window at all.
+      # A develop build diffs against the newest non-draft prerelease, taken from
+      # the first page of 100 releases; any other branch uses /releases/latest, the
+      # newest non-draft, non-prerelease release, which has no window at all.
       - name: Get Previous Release
         id: previous-release
         env:
@@ -132,9 +131,22 @@ jobs:
 
       - name: Create signed tag
         run: |
-          git tag -s v${{ inputs.version }} -m "Release v${{ inputs.version }}"
-          git push origin v${{ inputs.version }}
+          set -euo pipefail
+          tag="v$VERSION"
+          # Peeled (^{}) line first: an annotated tag points at a tag object, and
+          # the commit it resolves to is what has to match this run.
+          remote=$(git ls-remote origin "refs/tags/$tag^{}" "refs/tags/$tag" | awk '{print $1}' | head -n1)
+          if [[ -z "$remote" ]]; then
+            git tag -s "$tag" -m "Release $tag"
+            git push origin "$tag"
+          elif [[ "$remote" == "$GITHUB_SHA" ]]; then
+            echo "Tag $tag already exists at $GITHUB_SHA; skipping"
+          else
+            echo "Tag $tag already exists at $remote, not $GITHUB_SHA" >&2
+            exit 1
+          fi
         env:
+          VERSION: ${{ inputs.version }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Generate Commit Changelog
