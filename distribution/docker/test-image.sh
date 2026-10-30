@@ -191,17 +191,12 @@ test_puid() {
     done
 }
 
-test_ffmpeg_health() {
-    [[ -n "${FRESH_PORT}" ]] || { log "no fresh container (test_boots failed)"; return 1; }
-    local key body code
-    key="$(api_key_from "${FRESH_NAME}" /config/config5.xml)"
-    [[ -n "${key}" ]] || { log "no ApiKey in config5.xml"; return 1; }
-    body="${WORK_DIR}/health.json"
-    code="$(http_get "${body}" -H "X-Api-Key: ${key}" "http://127.0.0.1:${FRESH_PORT}/api/v5/health")"
-    [[ "${code}" == "200" ]] || { log "/api/v5/health returned ${code}"; return 1; }
-    local ffmpeg
-    ffmpeg="$(jq -c '[.[] | select(.source == "FFmpegCheck")]' "${body}")" || { log "health body is not a JSON array"; return 1; }
-    [[ "${ffmpeg}" == "[]" ]] || { log "health reports FFmpegCheck: ${ffmpeg}"; return 1; }
+# The health check only tests that the file exists, so run the binary as the app user.
+test_ffmpeg_runs() {
+    [[ -n "${FRESH_NAME}" ]] || { log "no fresh container (test_boots failed)"; return 1; }
+    local app_dir out
+    app_dir="$(docker exec "${FRESH_NAME}" printenv APP_DIR 2>&1)" || { log "APP_DIR: ${app_dir}"; return 1; }
+    out="$(docker exec "${FRESH_NAME}" s6-setuidgid hotio "${app_dir}/bin/ffmpeg" -version 2>&1)" || { log "ffmpeg -version failed: ${out}"; return 1; }
 }
 
 test_halt_screen() {
@@ -286,7 +281,7 @@ echo "Testing image: ${IMAGE}"
 run_test test_boots
 run_test test_keeps_answering
 run_test test_puid
-run_test test_ffmpeg_health
+run_test test_ffmpeg_runs
 run_test test_halt_screen
 run_test test_legacy_files_unchanged
 run_test test_legacy_with_puid

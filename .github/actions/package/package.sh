@@ -31,6 +31,7 @@ do
   cp -r $uiFolder $whisparrFolder
 
   echo "Setting permissions"
+  find $whisparrFolder -name "ffmpeg" -exec chmod a+x {} \;
   find $whisparrFolder -name "ffprobe" -exec chmod a+x {} \;
   find $whisparrFolder -name "Whisparr" -exec chmod a+x {} \;
   find $whisparrFolder -name "Whisparr.Update" -exec chmod a+x {} \;
