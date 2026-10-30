@@ -131,7 +131,70 @@ namespace NzbDrone.Core.LegacyMigration
 
             pass = LegacyImportPass.Combine(pass, scenePass);
 
-            return LegacyImportPass.Combine(pass, _movieRunner.RunMovieSeeds(state, progress, recordOutages));
+            pass = LegacyImportPass.Combine(pass, _movieRunner.RunMovieSeeds(state, progress, recordOutages));
+
+            return pass.Pending == 0 ? RestoreMonitoring(state, now, pass) : pass;
+        }
+
+        // Once every seed is placed the studios and performers get the monitoring they had. Safe to run again: it only
+        // writes what differs. Only the entity a seed created is touched; one it merged into keeps its own.
+        private LegacyImportPass RestoreMonitoring(LegacyMigrationState state, DateTime now, LegacyImportPass pass)
+        {
+            try
+            {
+                foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
+                {
+                    var studio = _studioService.FindByForeignId(seed.NewForeignId);
+
+                    if (studio != null && CreatedByMigration(state, studio.Added) &&
+                        (studio.Monitored != seed.Monitored || studio.MoviesMonitored != seed.MoviesMonitored || studio.WhisparrMonitorNewItems != seed.WhisparrMonitorNewItems))
+                    {
+                        studio.Monitored = seed.Monitored;
+                        studio.MoviesMonitored = seed.MoviesMonitored;
+                        studio.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
+                        _studioService.Update(studio);
+                    }
+                }
+
+                foreach (var seed in FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId))
+                {
+                    var performer = _performerService.FindByForeignId(seed.NewForeignId);
+
+                    if (performer != null && CreatedByMigration(state, performer.Added) &&
+                        (performer.Monitored != seed.Monitored || performer.MoviesMonitored != seed.MoviesMonitored || performer.WhisparrMonitorNewItems != seed.WhisparrMonitorNewItems))
+                    {
+                        performer.Monitored = seed.Monitored;
+                        performer.MoviesMonitored = seed.MoviesMonitored;
+                        performer.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
+                        _performerService.Update(performer);
+                    }
+                }
+            }
+            catch (Exception ex) when (IsTransient(ex))
+            {
+                _logger.Warn(ex, "Could not restore studio and performer monitoring, will retry");
+
+                pass.Pending++;
+                pass.WaitingRetry++;
+                pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, now + LegacyRetryPolicy.DelayBefore(1));
+            }
+
+            return pass;
+        }
+
+        // Seeds that merged into the same entity share its id; the first is the one that created it
+        private static IEnumerable<T> FirstPerTarget<T>(IEnumerable<T> seeds, Func<T, int> id, Func<T, string> target)
+        {
+            return seeds.Where(s => target(s).IsNotNullOrWhiteSpace())
+                        .OrderBy(id)
+                        .GroupBy(target)
+                        .Select(g => g.First());
+        }
+
+        // An entity older than the migration was already in the library, so the seed merged into it
+        private static bool CreatedByMigration(LegacyMigrationState state, DateTime added)
+        {
+            return !state.StartedAt.HasValue || added >= state.StartedAt.Value;
         }
 
         private static void AdvanceResolved<T>(ILegacyImportProgress progress, string area, List<T> seeds)
@@ -353,6 +416,7 @@ namespace NzbDrone.Core.LegacyMigration
                 Title = seed.Title,
                 Monitored = false,
                 MoviesMonitored = false,
+                WhisparrMonitorNewItems = false,
                 SearchOnAdd = false,
                 RootFolderPath = seed.RootFolderPath,
                 QualityProfileId = seed.QualityProfileId,
@@ -361,9 +425,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             studio = _studioService.FindByForeignId(targetId) ?? studio;
 
-            studio.Monitored = seed.Monitored;
-            studio.MoviesMonitored = seed.MoviesMonitored;
-            studio.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
+            // Monitoring waits for the end of the rebuild: a monitored studio would import its whole catalog now
             studio.AfterDate = seed.AfterDate;
             studio.RootFolderPath = seed.RootFolderPath;
             studio.QualityProfileId = seed.QualityProfileId;
@@ -410,6 +472,7 @@ namespace NzbDrone.Core.LegacyMigration
                 Name = seed.Name,
                 Monitored = false,
                 MoviesMonitored = false,
+                WhisparrMonitorNewItems = false,
                 SearchOnAdd = false,
                 RootFolderPath = seed.RootFolderPath,
                 QualityProfileId = seed.QualityProfileId,
@@ -418,9 +481,6 @@ namespace NzbDrone.Core.LegacyMigration
 
             performer = _performerService.FindByForeignId(targetId) ?? performer;
 
-            performer.Monitored = seed.Monitored;
-            performer.MoviesMonitored = seed.MoviesMonitored;
-            performer.WhisparrMonitorNewItems = seed.WhisparrMonitorNewItems;
             performer.AfterDate = seed.AfterDate;
             performer.RootFolderPath = seed.RootFolderPath;
             performer.QualityProfileId = seed.QualityProfileId;

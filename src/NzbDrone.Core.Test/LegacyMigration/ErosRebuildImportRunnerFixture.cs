@@ -43,6 +43,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private Dictionary<int, ImportFile> _importFiles;
         private List<Studio> _studioAdds;
         private List<Performer> _performerAdds;
+        private List<Studio> _studioUpdates;
+        private List<Performer> _performerUpdates;
         private List<string> _order;
         private ScenePageWalkResult _walkResult;
         private Mock<ILegacyImportProgress> _progress;
@@ -74,12 +76,15 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _importFiles = new Dictionary<int, ImportFile>();
             _studioAdds = new List<Studio>();
             _performerAdds = new List<Performer>();
+            _studioUpdates = new List<Studio>();
+            _performerUpdates = new List<Performer>();
             _order = new List<string>();
             _walkResult = new ScenePageWalkResult();
             _progress = new Mock<ILegacyImportProgress>();
             _fill = null;
             _now = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
             _nextId = 100;
+            _state.StartedAt = _now.AddHours(-1);
 
             Mocker.GetMock<ISkyhookPacer>().SetupGet(p => p.UtcNow).Returns(() => _now);
 
@@ -104,11 +109,16 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   {
                       // The settings are applied to this same instance afterwards, so what it was added with is kept apart
                       _studioAdds.Add(new Studio { ForeignId = studio.ForeignId, Title = studio.Title, Monitored = studio.Monitored, MoviesMonitored = studio.MoviesMonitored, SearchOnAdd = studio.SearchOnAdd });
+                      studio.Added = _now;
                       _studios[studio.ForeignId] = studio;
                       _order.Add("studio");
 
                       return studio;
                   });
+            Mocker.GetMock<IStudioService>()
+                  .Setup(s => s.Update(It.IsAny<Studio>()))
+                  .Callback<Studio>(s => _studioUpdates.Add(new Studio { ForeignId = s.ForeignId, Monitored = s.Monitored, MoviesMonitored = s.MoviesMonitored, WhisparrMonitorNewItems = s.WhisparrMonitorNewItems, AfterDate = s.AfterDate, RootFolderPath = s.RootFolderPath, QualityProfileId = s.QualityProfileId, Tags = s.Tags }))
+                  .Returns<Studio>(s => s);
 
             Mocker.GetMock<IPerformerService>()
                   .Setup(s => s.FindByForeignId(It.IsAny<string>()))
@@ -118,10 +128,15 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns<Performer, bool>((performer, _) =>
                   {
                       _performerAdds.Add(new Performer { ForeignId = performer.ForeignId, Monitored = performer.Monitored, MoviesMonitored = performer.MoviesMonitored, SearchOnAdd = performer.SearchOnAdd });
+                      performer.Added = _now;
                       _performers[performer.ForeignId] = performer;
 
                       return performer;
                   });
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.Update(It.IsAny<Performer>()))
+                  .Callback<Performer>(p => _performerUpdates.Add(new Performer { ForeignId = p.ForeignId, Monitored = p.Monitored, MoviesMonitored = p.MoviesMonitored, WhisparrMonitorNewItems = p.WhisparrMonitorNewItems, AfterDate = p.AfterDate, RootFolderPath = p.RootFolderPath, QualityProfileId = p.QualityProfileId, Tags = p.Tags }))
+                  .Returns<Performer>(p => p);
 
             Mocker.GetMock<IMovieService>()
                   .Setup(s => s.FindByForeignId(It.IsAny<string>()))
@@ -367,17 +382,19 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _studioAdds[0].MoviesMonitored.Should().BeFalse();
             _studioAdds[0].SearchOnAdd.Should().BeFalse();
 
-            Mocker.GetMock<IStudioService>().Verify(
-                s => s.Update(It.Is<Studio>(x => x.ForeignId == "new-stash-s1" &&
-                                                 x.Monitored &&
-                                                 x.MoviesMonitored &&
-                                                 !x.WhisparrMonitorNewItems &&
-                                                 x.AfterDate == new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) &&
-                                                 x.RootFolderPath == Root &&
-                                                 x.QualityProfileId == 4 &&
-                                                 x.Tags.SetEquals(new[] { 2, 3 }) &&
-                                                 !x.SearchOnAdd)),
-                Times.Once());
+            // The settings go on unmonitored; the monitoring comes in the final stage of the same pass
+            _studioUpdates.Should().HaveCount(2);
+            _studioUpdates[0].ForeignId.Should().Be("new-stash-s1");
+            _studioUpdates[0].Monitored.Should().BeFalse();
+            _studioUpdates[0].MoviesMonitored.Should().BeFalse();
+            _studioUpdates[0].WhisparrMonitorNewItems.Should().BeFalse();
+            _studioUpdates[0].AfterDate.Should().Be(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            _studioUpdates[0].RootFolderPath.Should().Be(Root);
+            _studioUpdates[0].QualityProfileId.Should().Be(4);
+            _studioUpdates[0].Tags.Should().BeEquivalentTo(new[] { 2, 3 });
+            _studioUpdates[1].Monitored.Should().BeTrue();
+            _studioUpdates[1].MoviesMonitored.Should().BeTrue();
+            _studioUpdates[1].WhisparrMonitorNewItems.Should().BeFalse();
 
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Verify(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Never());
@@ -396,7 +413,10 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             _studioAdds.Should().ContainSingle();
-            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.IsAny<Studio>()), Times.Once());
+
+            // One apply at add time and one restore, both for the studio the first seed created
+            _studioUpdates.Should().HaveCount(2);
+            _studios["new-stash-a"].Monitored.Should().BeTrue();
             VerifyReport("Studios", "Studio Uno", "Merged with Studio One", Times.Once());
             first.Resolved.Should().BeTrue();
             second.Resolved.Should().BeTrue();
@@ -413,8 +433,76 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             VerifyReport("Studios", "Studio stash-s1", "Merged with Existing", Times.Once());
             _studios["new-stash-s1"].Monitored.Should().BeFalse();
-            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.IsAny<Studio>()), Times.Never());
+            _studioUpdates.Should().BeEmpty();
             Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void monitoring_waits_until_every_scene_seed_is_resolved()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+            var seed = GivenSceneSeed("stash-s1", fileId: 5);
+            GivenCatalog("new-stash-s1", CatalogItem("scene-match", "Big Scene", seed.ReleaseDate));
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()))
+                  .Throws(new TimeoutException());
+
+            var pass = Run();
+
+            pass.Pending.Should().Be(1);
+            _studios["new-stash-s1"].Monitored.Should().BeFalse();
+            _studios["new-stash-s1"].MoviesMonitored.Should().BeFalse();
+            _studios["new-stash-s1"].WhisparrMonitorNewItems.Should().BeFalse();
+            _performers["new-stash-p1"].Monitored.Should().BeFalse();
+            _performers["new-stash-p1"].WhisparrMonitorNewItems.Should().BeFalse();
+            _studioUpdates.Should().OnlyContain(s => !s.Monitored && !s.MoviesMonitored && !s.WhisparrMonitorNewItems);
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>()))
+                  .Returns(LinkOutcome.Linked);
+
+            Run().Pending.Should().Be(0);
+
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
+            _studios["new-stash-s1"].MoviesMonitored.Should().BeTrue();
+            _studios["new-stash-s1"].WhisparrMonitorNewItems.Should().BeFalse();
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
+            _performers["new-stash-p1"].MoviesMonitored.Should().BeFalse();
+            _performers["new-stash-p1"].WhisparrMonitorNewItems.Should().BeTrue();
+        }
+
+        [Test]
+        public void rerunning_the_final_stage_is_a_no_op()
+        {
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            Run();
+
+            var studioUpdates = _studioUpdates.Count;
+            var performerUpdates = _performerUpdates.Count;
+
+            Run().Pending.Should().Be(0);
+
+            _studioUpdates.Should().HaveCount(studioUpdates);
+            _performerUpdates.Should().HaveCount(performerUpdates);
+        }
+
+        [Test]
+        public void merged_seeds_do_not_overwrite_existing_monitoring()
+        {
+            _studios["new-stash-s1"] = new Studio { ForeignId = "new-stash-s1", Title = "Existing", Added = _now.AddDays(-30), Monitored = false };
+            _performers["new-stash-p1"] = new Performer { ForeignId = "new-stash-p1", Name = "Existing", Added = _now.AddDays(-30), Monitored = false };
+            GivenStudioSeed("stash-s1");
+            GivenPerformerSeed("stash-p1");
+
+            Run().Pending.Should().Be(0);
+
+            _studios["new-stash-s1"].Monitored.Should().BeFalse();
+            _performers["new-stash-p1"].Monitored.Should().BeFalse();
+            _studioUpdates.Should().BeEmpty();
+            _performerUpdates.Should().BeEmpty();
         }
 
         [Test]
@@ -422,13 +510,13 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             var seed = GivenStudioSeed("stash-s1");
             seed.NewForeignId = "new-stash-s1";
-            _studios["new-stash-s1"] = new Studio { ForeignId = "new-stash-s1", Title = "Studio stash-s1" };
+            _studios["new-stash-s1"] = new Studio { ForeignId = "new-stash-s1", Title = "Studio stash-s1", Added = _now };
 
             Run();
 
             VerifyNoReports();
             Mocker.GetMock<ISceneSourceIdMapper>().Verify(m => m.MapStudio(It.IsAny<SceneMetadataType>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
-            Mocker.GetMock<IStudioService>().Verify(s => s.Update(It.Is<Studio>(x => x.Monitored)), Times.Once());
+            _studios["new-stash-s1"].Monitored.Should().BeTrue();
             seed.Resolved.Should().BeTrue();
         }
 
@@ -471,9 +559,15 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _performerAdds[0].Monitored.Should().BeFalse();
             _performerAdds[0].MoviesMonitored.Should().BeFalse();
             _performerAdds[0].SearchOnAdd.Should().BeFalse();
-            Mocker.GetMock<IPerformerService>().Verify(
-                s => s.Update(It.Is<Performer>(p => p.Monitored && !p.MoviesMonitored && p.WhisparrMonitorNewItems && p.RootFolderPath == Root && p.QualityProfileId == 4 && p.Tags.SetEquals(new[] { 5 }))),
-                Times.Once());
+            _performerUpdates.Should().HaveCount(2);
+            _performerUpdates[0].Monitored.Should().BeFalse();
+            _performerUpdates[0].WhisparrMonitorNewItems.Should().BeFalse();
+            _performerUpdates[0].RootFolderPath.Should().Be(Root);
+            _performerUpdates[0].QualityProfileId.Should().Be(4);
+            _performerUpdates[0].Tags.Should().BeEquivalentTo(new[] { 5 });
+            _performerUpdates[1].Monitored.Should().BeTrue();
+            _performerUpdates[1].MoviesMonitored.Should().BeFalse();
+            _performerUpdates[1].WhisparrMonitorNewItems.Should().BeTrue();
             seed.NewForeignId.Should().Be("tpdb-p1");
             seed.Resolved.Should().BeTrue();
         }
@@ -499,7 +593,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             VerifyReport("Performers", "Seed Name", "Merged with Existing Name", Times.Once());
-            Mocker.GetMock<IPerformerService>().Verify(s => s.Update(It.IsAny<Performer>()), Times.Never());
+            _performerUpdates.Should().BeEmpty();
         }
 
         [Test]
@@ -512,7 +606,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             VerifyNoReports();
             Mocker.GetMock<IAddPerformerService>().Verify(s => s.AddPerformer(It.IsAny<Performer>(), It.IsAny<bool>()), Times.Once());
-            Mocker.GetMock<IPerformerService>().Verify(s => s.Update(It.Is<Performer>(p => p.Monitored)), Times.Once());
+            _performers["new-stash-p1"].Monitored.Should().BeTrue();
         }
 
         [Test]
