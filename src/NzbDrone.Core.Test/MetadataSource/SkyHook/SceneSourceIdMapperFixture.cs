@@ -171,6 +171,32 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             _requests[0].Url.FullUri.Should().Contain("/search");
         }
 
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("   ")]
+        [TestCase("!!!")]
+        public void blank_title_without_mapping_is_none_and_not_searched(string title)
+        {
+            GivenSearchResults();
+
+            Subject.MapStudio(SceneMetadataType.StashDb, null, title).Should().Be(new IdMapResult(null, IdMapMethod.None));
+            Subject.MapPerformer(SceneMetadataType.Tpdb, null, title).Should().Be(new IdMapResult(null, IdMapMethod.None));
+
+            _requests.Should().BeEmpty();
+        }
+
+        [Test]
+        public void blank_title_after_unmapped_fetch_is_none_and_not_searched()
+        {
+            _respond = _ => (HttpStatusCode.NotFound, null);
+
+            Subject.MapStudio(SceneMetadataType.StashDb, StashId, " ").Method.Should().Be(IdMapMethod.None);
+            Subject.MapPerformer(SceneMetadataType.StashDb, StashId, null).Method.Should().Be(IdMapMethod.None);
+
+            _requests.Should().HaveCount(2);
+            _requests.Should().OnlyContain(r => !r.Url.FullUri.Contains("/search"));
+        }
+
         [Test]
         public void server_error_throws_http_exception()
         {

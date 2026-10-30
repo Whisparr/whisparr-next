@@ -65,6 +65,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 }
             }
 
+            if (title.CleanMovieTitle().IsNullOrWhiteSpace())
+            {
+                return new IdMapResult(null, IdMapMethod.None);
+            }
+
             var results = Search<StudioResource>(to, "site/search", title) ?? new List<StudioResource>();
 
             return ByTitle(title, to, results.Select(s => (s.Title, s.ForeignIds)));
@@ -83,6 +88,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 {
                     return new IdMapResult(mapped, IdMapMethod.Mapping);
                 }
+            }
+
+            if (name.CleanMovieTitle().IsNullOrWhiteSpace())
+            {
+                return new IdMapResult(null, IdMapMethod.None);
             }
 
             var results = Search<PerformerResource>(to, "performer/search", name) ?? new List<PerformerResource>();
