@@ -37,7 +37,7 @@ jobs:
 
       # So a private package is readable; an unreadable one would look absent.
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
