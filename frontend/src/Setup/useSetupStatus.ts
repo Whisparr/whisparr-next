@@ -47,6 +47,7 @@ export interface SetupStatus {
   installs: SetupInstall[];
   errors: string[];
   pendingEnvSwitch: boolean;
+  hasUsableCredentials: boolean;
   envTargets: SetupEnvTarget[];
   defaults: {
     kind: LegacyKind;

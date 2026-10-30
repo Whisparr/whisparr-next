@@ -45,6 +45,7 @@ namespace Whisparr.Http.Setup
                 Installs = detection.Installs.Select(SetupInstallResource.MapToResource).ToList(),
                 Errors = detection.Errors,
                 PendingEnvSwitch = detection.PendingEnvSwitch,
+                HasUsableCredentials = detection.HasUsableCredentials,
                 EnvTargets = envTargets.Select(SetupEnvTargetResource.MapToResource).ToList(),
                 Defaults = GetDefaults(detection),
                 Progress = SetupProgressResource.MapToResource(_wizard.Progress)

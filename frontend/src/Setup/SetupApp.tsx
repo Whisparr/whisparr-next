@@ -141,6 +141,12 @@ function EnvSwitchScreen({
   );
 }
 
+function LocalOnlyNotice({
+  hasUsableCredentials,
+}: Readonly<{ hasUsableCredentials: boolean }>) {
+  return hasUsableCredentials ? null : <p>{translate('SetupLocalOnly')}</p>;
+}
+
 function SetupApp() {
   useSetupTheme();
 
@@ -272,6 +278,8 @@ function SetupApp() {
   return (
     <div className={styles.page}>
       <h1>{translate('SetupHeader')}</h1>
+
+      <LocalOnlyNotice hasUsableCredentials={status.hasUsableCredentials} />
 
       {install && !hasErrors ? (
         <SetupSummary

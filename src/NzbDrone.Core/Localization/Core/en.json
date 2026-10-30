@@ -2191,6 +2191,7 @@
   "SetupFoundSummary": "Found {app} on {database}: {studios} studios, {scenes} scenes, {movies} movies and {files} files.",
   "SetupHeader": "Migration needed",
   "SetupKindChoice": "Both installs were found. Which one do you want to migrate?",
+  "SetupLocalOnly": "The legacy install has no one to sign in as, so this page is only served to local addresses.",
   "SetupMigrationFailed": "The migration stopped",
   "SetupMovieSource": "Movie source",
   "SetupNoticeBackup": "Your legacy data is backed up first and never changed.",

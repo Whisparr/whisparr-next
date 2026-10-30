@@ -93,6 +93,15 @@ namespace NzbDrone.Api.Test.Setup
             defaults.MovieSource.Should().Be(MovieMetadataType.TPDB);
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void status_should_say_whether_the_legacy_install_has_usable_credentials(bool usable)
+        {
+            _detection.Installs.Add(new LegacyInstall { Kind = LegacyKind.Eros, HasUsableCredentials = usable });
+
+            Status().HasUsableCredentials.Should().Be(usable);
+        }
+
         [Test]
         public void status_should_expose_errors_and_env_targets()
         {

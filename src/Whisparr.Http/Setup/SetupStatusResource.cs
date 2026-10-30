@@ -101,6 +101,9 @@ namespace Whisparr.Http.Setup
         public List<SetupInstallResource> Installs { get; set; } = new();
         public List<string> Errors { get; set; } = new();
         public bool PendingEnvSwitch { get; set; }
+
+        // False when there is no one to sign in as, so the page is only served to local addresses.
+        public bool HasUsableCredentials { get; set; }
         public List<SetupEnvTargetResource> EnvTargets { get; set; } = new();
         public SetupDefaultsResource Defaults { get; set; }
         public SetupProgressResource Progress { get; set; }
