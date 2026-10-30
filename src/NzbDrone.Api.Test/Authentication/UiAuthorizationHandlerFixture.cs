@@ -179,13 +179,27 @@ namespace NzbDrone.Api.Test.Authentication
             IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().BeFalse();
         }
 
-        [TestCase(AuthenticationRequiredType.Enabled)]
-        public void should_not_change_normal_mode_when_credentials_are_missing(AuthenticationRequiredType required)
+        [TestCase(AuthenticationRequiredType.Enabled, false)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalAddresses, true)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalhost, true)]
+        public void should_not_change_normal_mode_when_credentials_are_missing(AuthenticationRequiredType required, bool expected)
         {
             Mocker.GetMock<IConfigFileProvider>().SetupGet(c => c.AuthenticationRequired).Returns(required);
             GivenSetupMode(false, false);
 
-            IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().BeFalse();
+            // Same outcome the handler gave before setup mode existed for a loopback client.
+            IsAuthorized(GetHttpContext("127.0.0.1", null)).Should().Be(expected);
+        }
+
+        [TestCase(AuthenticationRequiredType.Enabled)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalAddresses)]
+        [TestCase(AuthenticationRequiredType.DisabledForLocalhost)]
+        public void should_not_authorize_a_public_address_in_normal_mode_when_credentials_are_missing(AuthenticationRequiredType required)
+        {
+            Mocker.GetMock<IConfigFileProvider>().SetupGet(c => c.AuthenticationRequired).Returns(required);
+            GivenSetupMode(false, false);
+
+            IsAuthorized(GetHttpContext("203.0.113.66", null)).Should().BeFalse();
         }
     }
 }

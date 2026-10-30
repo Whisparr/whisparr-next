@@ -1,12 +1,11 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
 {
     // Setup mode takes its sign-in settings from the legacy config.xml on every start. config5.xml is seeded from it,
-    // and a small marker next to it holds the hash of what was written, so a later start can tell its own file from
-    // one the user made (or changed) and only ever overwrites its own.
+    // and a small marker next to it records that setup created the file, so a later start can tell it from one the
+    // user made and only ever overwrites its own. A hand edit to a setup-made file loses to config.xml on purpose.
     public static class SetupConfig5Seeding
     {
         private const string MarkerSuffix = ".setup-seeded";
@@ -28,17 +27,16 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             }
 
             seeder.Seed(legacyConfigPath, config5Path, install);
-            File.WriteAllText(MarkerPath(config5Path), Hash(config5Path));
+            File.WriteAllText(MarkerPath(config5Path), DateTime.UtcNow.ToString("O"));
 
             return true;
         }
 
-        // True when config5.xml is still byte for byte what setup wrote.
+        // True when setup created config5.xml. The app adds its own defaults to the file afterwards, so the marker
+        // means "setup made this", not "unchanged".
         public static bool IsSetupSeeded(string config5Path)
         {
-            var marker = MarkerPath(config5Path);
-
-            return File.Exists(config5Path) && File.Exists(marker) && string.Equals(File.ReadAllText(marker).Trim(), Hash(config5Path), StringComparison.Ordinal);
+            return File.Exists(config5Path) && File.Exists(MarkerPath(config5Path));
         }
 
         public static void ClearMarker(string config5Path)
@@ -49,11 +47,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private static string MarkerPath(string config5Path)
         {
             return config5Path + MarkerSuffix;
-        }
-
-        private static string Hash(string path)
-        {
-            return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
         }
     }
 }

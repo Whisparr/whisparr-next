@@ -80,17 +80,31 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void should_leave_a_seeded_config5_alone_once_it_was_changed_afterwards()
+        public void should_keep_reseeding_after_the_app_adds_its_own_defaults()
         {
             WriteLegacy("Enabled");
             SetupConfig5Seeding.Seed(_seeder, _legacyPath, _config5Path, _install);
-            File.WriteAllText(_config5Path, "<Config><AuthenticationRequired>Mine</AuthenticationRequired></Config>");
+
+            // What ConfigFileProvider does on first read: persist keys the legacy config lacks.
+            var document = XDocument.Load(_config5Path);
+            document.Root.Add(new XElement("ConsoleLogFormat", "Standard"));
+            document.Save(_config5Path);
 
             WriteLegacy("DisabledForLocalAddresses");
 
-            SetupConfig5Seeding.Seed(_seeder, _legacyPath, _config5Path, _install).Should().BeFalse();
+            SetupConfig5Seeding.Seed(_seeder, _legacyPath, _config5Path, _install).Should().BeTrue();
 
-            AuthenticationRequired().Should().Be("Mine");
+            AuthenticationRequired().Should().Be("DisabledForLocalAddresses");
+        }
+
+        [Test]
+        public void should_ignore_a_marker_when_there_is_no_config5()
+        {
+            WriteLegacy("Enabled");
+            SetupConfig5Seeding.Seed(_seeder, _legacyPath, _config5Path, _install);
+            File.Delete(_config5Path);
+
+            SetupConfig5Seeding.IsSetupSeeded(_config5Path).Should().BeFalse();
         }
 
         [Test]
