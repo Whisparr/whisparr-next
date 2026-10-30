@@ -67,8 +67,16 @@ jobs:
             runtime: linux-musl-arm64
     runs-on: ${{ matrix.runner }}
     steps:
+      # A release rebuild checks out the release tag, so the Dockerfile and the
+      # test script match the tarball being packaged.
       - name: Check out
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source == 'release' && format('refs/tags/v{0}', inputs.version) || github.sha }}
+
+      - name: Resolve revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Download package artifact
         if: ${{ inputs.source == 'artifact' }}
@@ -115,7 +123,7 @@ jobs:
             BASE_DIGEST=${{ needs.base.outputs.digest }}
             VERSION=${{ inputs.version }}
             BRANCH=${{ inputs.branch }}
-            REVISION=${{ github.sha }}
+            REVISION=${{ steps.revision.outputs.sha }}
 
       - name: Test image
         run: distribution/docker/test-image.sh whisparr-test:${{ matrix.arch }}
@@ -140,7 +148,7 @@ jobs:
             BASE_DIGEST=${{ needs.base.outputs.digest }}
             VERSION=${{ inputs.version }}
             BRANCH=${{ inputs.branch }}
-            REVISION=${{ github.sha }}
+            REVISION=${{ steps.revision.outputs.sha }}
 
       - name: Record digest
         if: ${{ inputs.push }}
@@ -207,7 +215,30 @@ jobs:
           if [[ "$COMMIT_TAG" == "true" ]]; then
             tags+=("$CHANNEL-${SHA:0:7}")
           fi
-          tags+=("$CHANNEL-$VERSION" "$CHANNEL")
+          tags+=("$CHANNEL-$VERSION")
+
+          # Never move the channel tag backwards: a delayed or re-run older build
+          # must not replace a newer image. A missing channel tag (first publish)
+          # or one without the label means proceed; any other registry error fails.
+          current=""
+          if inspect=$(docker buildx imagetools inspect "$IMAGE:$CHANNEL" --format '{{json .Image}}' 2>_inspect.err); then
+            current=$(jq -r '."linux/amd64".config.Labels["org.opencontainers.image.version"] // empty' <<< "$inspect")
+          elif grep -qiE 'not found|denied|unknown' _inspect.err; then
+            echo "No existing $CHANNEL tag; publishing it"
+          else
+            cat _inspect.err >&2
+            exit 1
+          fi
+
+          newest=""
+          if [[ -n "$current" ]]; then
+            newest=$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n1)
+          fi
+          if [[ -n "$current" && "$current" != "$VERSION" && "$newest" == "$current" ]]; then
+            echo "::notice::Not moving $CHANNEL: it is at $current, newer than $VERSION"
+          else
+            tags+=("$CHANNEL")
+          fi
 
           for tag in "${tags[@]}"; do
             docker buildx imagetools create -t "$IMAGE:$tag" "${sources[@]}"
