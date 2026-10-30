@@ -211,6 +211,10 @@ test_halt_screen() {
     kind="$(jq -r '.installs[0].kind' "${body}" | tr '[:upper:]' '[:lower:]')"
     [[ "${kind}" == "v2" ]] || { log "installs[0].kind was '${kind}'"; return 1; }
 
+    # A compose healthcheck on /ping must not call a waiting halt screen unhealthy
+    code="$(http_get /dev/null "http://127.0.0.1:${LEGACY_PORT}/ping")"
+    [[ "${code}" == "200" ]] || { log "/ping returned ${code} on the halt screen"; return 1; }
+
     local errors
     errors="$(docker exec "${LEGACY_NAME}" grep -E '\|(Error|Fatal)\|' /config/logs/whisparr.txt 2>&1 || true)"
     [[ -z "${errors}" ]] || { log "log has error lines:"; echo "${errors}" | head -n 5 | sed 's/^/        /'; return 1; }
