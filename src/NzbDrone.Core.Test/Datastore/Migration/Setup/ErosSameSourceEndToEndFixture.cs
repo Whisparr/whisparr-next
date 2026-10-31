@@ -10,6 +10,7 @@ using Moq;
 using NLog;
 using NUnit.Framework;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Framework;
 using NzbDrone.Core.Datastore.Migration.Setup;
@@ -80,6 +81,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 new SceneSourceSeeder(),
                 _preflight.Object,
                 new V5DatabaseFinisher(),
+                new LegacyCoverCleaner(_folders.Object),
                 _lifecycle.Object,
                 _folders.Object,
                 options);
@@ -88,6 +90,79 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private static long Count(SQLiteConnection connection, string table)
         {
             return connection.ExecuteScalar<long>($"SELECT COUNT(*) FROM \"{table}\"");
+        }
+
+        private string GivenCover(string kind, int id)
+        {
+            var path = Path.Combine(_appData, "MediaCover", kind, id.ToString());
+
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, "poster.jpg"), "image");
+
+            return path;
+        }
+
+        private void RunToRestart(SceneMetadataType sceneSource)
+        {
+            var detection = new LegacyInstallDetector(_folders.Object, Options.Create(new PostgresOptions())).Detect();
+            var install = detection.Installs.Should().ContainSingle().Subject;
+            var wizard = Wizard(detection);
+
+            wizard.Start(new SetupChoice
+            {
+                Kind = LegacyKind.Eros,
+                SceneSource = sceneSource,
+                MovieSource = install.PreviousMovieSource
+            });
+
+            var deadline = DateTime.UtcNow.AddSeconds(120);
+
+            while (wizard.Progress.Status is SetupStatus.Running or SetupStatus.Idle && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(50);
+            }
+
+            wizard.Progress.Status.Should().Be(SetupStatus.Restarting, wizard.Progress.ErrorMessage);
+        }
+
+        [Test]
+        public void should_reuse_covers_when_the_scene_source_stays_the_same()
+        {
+            var scene = GivenCover("movie", 1);
+            var movie = GivenCover("movie", 3);
+            var studio = GivenCover("studio", 1);
+            var leftover = GivenCover("movie", 500);
+
+            RunToRestart(SceneMetadataType.StashDb);
+
+            File.Exists(Path.Combine(scene, "poster.jpg")).Should().BeTrue();
+            File.Exists(Path.Combine(movie, "poster.jpg")).Should().BeTrue();
+            File.Exists(Path.Combine(studio, "poster.jpg")).Should().BeTrue();
+            Directory.Exists(leftover).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_keep_only_surviving_movie_covers_when_the_scene_source_changes()
+        {
+            var scene = GivenCover("movie", 1);
+            var movie = GivenCover("movie", 3);
+            var studio = GivenCover("studio", 1);
+
+            RunToRestart(SceneMetadataType.Tpdb);
+
+            Directory.Exists(scene).Should().BeFalse();
+            File.Exists(Path.Combine(movie, "poster.jpg")).Should().BeTrue();
+            Directory.Exists(studio).Should().BeFalse();
+
+            var archive = Directory.GetDirectories(Path.Combine(_appData, "Backups", "pre-v5"), "MediaCover-*").Should().ContainSingle().Subject;
+
+            File.Exists(Path.Combine(archive, "movie", "1", "poster.jpg")).Should().BeTrue();
+            File.Exists(Path.Combine(archive, "studio", "1", "poster.jpg")).Should().BeTrue();
+
+            using var v5 = new SQLiteConnection(new SQLiteConnectionStringBuilder { DataSource = Path.Combine(_appData, "whisparr5.db"), Pooling = false }.ConnectionString);
+            v5.Open();
+
+            v5.ExecuteScalar<string>("SELECT \"Subject\" FROM \"LegacyMigrationReportItems\" WHERE \"Area\" = 'MediaCover'").Should().Be(archive);
         }
 
         [Test]

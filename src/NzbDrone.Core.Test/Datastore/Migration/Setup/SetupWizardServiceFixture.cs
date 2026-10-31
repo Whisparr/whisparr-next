@@ -37,6 +37,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         private SceneSeedResult _seeded;
         private Mock<ISkyhookPreflight> _preflight;
         private Mock<IV5DatabaseFinisher> _finisher;
+        private Mock<ILegacyCoverCleaner> _coverCleaner;
         private Mock<ILifecycleService> _lifecycle;
         private LegacyInstall _install;
         private DetectionResult _detection;
@@ -129,6 +130,8 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                     _finishedState = state;
                 });
 
+            _coverCleaner = new Mock<ILegacyCoverCleaner>();
+
             _lifecycle = new Mock<ILifecycleService>();
             _lifecycle.Setup(l => l.Restart()).Callback(() => _calls.Add("restart"));
         }
@@ -163,6 +166,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 _sceneSeeder.Object,
                 _preflight.Object,
                 _finisher.Object,
+                _coverCleaner.Object,
                 _lifecycle.Object,
                 folders.Object,
                 Options.Create(_options));
@@ -209,6 +213,36 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             progress.Steps.Single(s => s.Step == SetupStep.SceneSeeds).State.Should().Be("skipped");
             _sceneSeeder.Verify(s => s.Seed(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>()), Times.Never);
             _runState.Verify(r => r.Begin(true), Times.Once);
+        }
+
+        [Test]
+        public void should_archive_orphaned_covers_once_the_database_is_in_place()
+        {
+            var cleanup = new LegacyCoverCleanup();
+            var databaseInPlace = false;
+
+            _coverCleaner.Setup(c => c.Prepare(It.IsAny<IDbConnection>())).Returns(cleanup);
+            _coverCleaner.Setup(c => c.Archive(cleanup))
+                .Callback(() => databaseInPlace = File.Exists(Path.Combine(_appData, "whisparr5.db")));
+
+            var progress = Run();
+
+            progress.Status.Should().Be(SetupStatus.Restarting);
+            databaseInPlace.Should().BeTrue();
+            _coverCleaner.Verify(c => c.Archive(cleanup), Times.Once);
+        }
+
+        [Test]
+        public void should_leave_covers_alone_when_the_run_fails_before_commit()
+        {
+            _finisher.Setup(f => f.Finish(It.IsAny<IDbConnection>(), It.IsAny<IDbTransaction>(), It.IsAny<SceneMetadataType>(), It.IsAny<MovieMetadataType>(), It.IsAny<LegacyMigrationState>()))
+                .Throws(new InvalidOperationException("boom"));
+
+            var progress = Run();
+
+            progress.Status.Should().Be(SetupStatus.Failed);
+            _coverCleaner.Verify(c => c.Archive(It.IsAny<LegacyCoverCleanup>()), Times.Never);
+            ExceptionVerification.ExpectedErrors(1);
         }
 
         [Test]
