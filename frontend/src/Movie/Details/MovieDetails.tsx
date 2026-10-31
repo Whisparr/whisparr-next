@@ -288,7 +288,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
               }
               coverType={itemType === 'movie' ? 'poster' : 'screenshot'}
               images={images}
-              size={500}
+              size={itemType === 'movie' ? 500 : 180}
               lazy={true}
               placeholder={posterPlaceholder}
               title={title}
