@@ -164,7 +164,7 @@ namespace NzbDrone.Core.Movies.Performers
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {
-                                                  new ValidationFailure("StashId", $"A performer with this ID was not found.", newPerformer.ForeignId)
+                                                  new ValidationFailure("StashId", $"A performer with this ID was not found: {newPerformer.ForeignId}", newPerformer.ForeignId)
                                               });
             }
 

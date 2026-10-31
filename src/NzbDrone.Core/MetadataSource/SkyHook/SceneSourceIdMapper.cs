@@ -25,6 +25,10 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     {
         IdMapResult MapStudio(SceneMetadataType from, string fromId, string title);
         IdMapResult MapPerformer(SceneMetadataType from, string fromId, string name);
+
+        // Title only, for when a cross-reference turns out to name a record the target source doesn't have
+        IdMapResult FindStudio(SceneMetadataType target, string title);
+        IdMapResult FindPerformer(SceneMetadataType target, string name);
     }
 
     // Maps a studio or performer id from one scene source to the other through the Skyhook metadata server.
@@ -66,12 +70,17 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 }
             }
 
+            return FindStudio(to, title);
+        }
+
+        public IdMapResult FindStudio(SceneMetadataType target, string title)
+        {
             if (title.CleanMovieTitle().IsNullOrWhiteSpace())
             {
                 return new IdMapResult(null, IdMapMethod.None);
             }
 
-            return SearchByTitle<StudioResource>(to, "site/search", title, s => (s.Title, s.ForeignIds));
+            return SearchByTitle<StudioResource>(target, "site/search", title, s => (s.Title, s.ForeignIds));
         }
 
         public IdMapResult MapPerformer(SceneMetadataType from, string fromId, string name)
@@ -89,12 +98,17 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 }
             }
 
+            return FindPerformer(to, name);
+        }
+
+        public IdMapResult FindPerformer(SceneMetadataType target, string name)
+        {
             if (name.CleanMovieTitle().IsNullOrWhiteSpace())
             {
                 return new IdMapResult(null, IdMapMethod.None);
             }
 
-            return SearchByTitle<PerformerResource>(to, "performer/search", name, p => (p.Name, p.ForeignIds));
+            return SearchByTitle<PerformerResource>(target, "performer/search", name, p => (p.Name, p.ForeignIds));
         }
 
         // The sources spell some names differently ("Nubiles ET" vs "NubilesET"), and the server's search
