@@ -76,6 +76,8 @@ namespace NzbDrone.Core.LegacyMigration
         {
             var seeds = _seedRepository.All().ToList();
 
+            progress.PhaseTotal(Area, seeds.Count);
+
             var alreadyResolved = seeds.Count(s => s.Resolved);
 
             if (alreadyResolved > 0)

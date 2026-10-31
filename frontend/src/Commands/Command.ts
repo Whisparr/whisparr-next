@@ -32,6 +32,7 @@ export interface CommandProgress {
   done: number;
   total: number;
   percent: number;
+  phaseRemaining?: number | null;
 }
 
 interface Command extends ModelBase {

@@ -134,6 +134,9 @@ namespace NzbDrone.Core.LegacyMigration
 
             // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
             progress.Total(studios.Count + performers.Count + scenes.Count + _movieSeeds.All().Count());
+            progress.PhaseTotal(StudioArea, studios.Count);
+            progress.PhaseTotal(PerformerArea, performers.Count);
+            progress.PhaseTotal(SceneArea, scenes.Count);
 
             AdvanceResolved(progress, StudioArea, studios);
             AdvanceResolved(progress, PerformerArea, performers);
