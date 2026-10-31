@@ -3,6 +3,7 @@ import Button from 'Components/Link/Button';
 import { kinds } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
 import SetupEnvTargets from './SetupEnvTargets';
+import SetupShutDown from './SetupShutDown';
 import {
   MovieSource,
   SceneSource,
@@ -17,6 +18,7 @@ interface SetupSourceFormProps {
   choice: SetupChoice;
   envTargets: SetupEnvTarget[];
   isBusy: boolean;
+  isDocker: boolean;
   submitError: string | null;
   onChange: (choice: SetupChoice) => void;
   onMigrate: () => void;
@@ -38,6 +40,7 @@ function SetupSourceForm({
   choice,
   envTargets,
   isBusy,
+  isDocker,
   submitError,
   onChange,
   onMigrate,
@@ -123,7 +126,7 @@ function SetupSourceForm({
           {translate('SetupBackUpAndMigrate')}
         </Button>
 
-        <Button onPress={onShutDown}>{translate('SetupShutDown')}</Button>
+        <SetupShutDown isDocker={isDocker} onPress={onShutDown} />
       </div>
     </div>
   );

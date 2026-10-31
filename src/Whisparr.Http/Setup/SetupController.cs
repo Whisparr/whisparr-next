@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
 
@@ -16,9 +17,11 @@ namespace Whisparr.Http.Setup
         private readonly ISetupModeState _setupModeState;
         private readonly ISetupWizardService _wizard;
         private readonly IConfig5Seeder _config5Seeder;
+        private readonly IOsInfo _osInfo;
 
-        public SetupController(ISetupModeState setupModeState, ISetupWizardService wizard, IConfig5Seeder config5Seeder)
+        public SetupController(ISetupModeState setupModeState, ISetupWizardService wizard, IConfig5Seeder config5Seeder, IOsInfo osInfo)
         {
+            _osInfo = osInfo;
             _setupModeState = setupModeState;
             _wizard = wizard;
             _config5Seeder = config5Seeder;
@@ -46,6 +49,7 @@ namespace Whisparr.Http.Setup
                 Errors = detection.Errors,
                 PendingEnvSwitch = detection.PendingEnvSwitch,
                 HasUsableCredentials = detection.HasUsableCredentials,
+                IsDocker = _osInfo.IsDocker,
                 EnvTargets = envTargets.Select(SetupEnvTargetResource.MapToResource).ToList(),
                 Defaults = GetDefaults(detection),
                 Progress = SetupProgressResource.MapToResource(_wizard.Progress)
