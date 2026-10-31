@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.LegacyMigration.Events;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 
 namespace NzbDrone.Core.LegacyMigration
@@ -18,7 +20,7 @@ namespace NzbDrone.Core.LegacyMigration
         List<LegacyMigrationReportItem> GetReport();
     }
 
-    public class LegacyMigrationService : ILegacyMigrationService
+    public class LegacyMigrationService : ILegacyMigrationService, IHandle<MovieFileAddedEvent>
     {
         private const string PhaseDone = "Done";
         private const string IncompleteKey = "incomplete";
@@ -117,6 +119,18 @@ namespace NzbDrone.Core.LegacyMigration
         public List<LegacyMigrationReportItem> GetReport()
         {
             return _reportRepository.All().ToList();
+        }
+
+        // A report row about a file is settled once that file is on a scene, however it got there.
+        // MovieId 0 is an unmapped file: added to the table, but still nobody's.
+        public void Handle(MovieFileAddedEvent message)
+        {
+            var movieFile = message.MovieFile;
+
+            if (movieFile.MovieId > 0 && movieFile.Path.IsNotNullOrWhiteSpace())
+            {
+                _reportRepository.DeleteBySubject(movieFile.Path);
+            }
         }
     }
 }

@@ -5,6 +5,8 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore.Migration.Setup;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.LegacyMigration.Events;
+using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Test.Framework;
 
@@ -123,6 +125,43 @@ namespace NzbDrone.Core.Test.LegacyMigration
             report[0].Subject.Should().Be("Studio");
             report[0].Detail.Should().Be("No match");
             report[0].Count.Should().Be(1);
+        }
+
+        [Test]
+        public void adding_a_file_clears_the_report_rows_about_it()
+        {
+            const string path = "/media/movies/A Scene (2011)/A Scene (2011).mp4";
+
+            Subject.Report(LegacyReportCategory.NeedsAttention, "Movies", path, "File could not be linked: Missing");
+            Subject.Report(LegacyReportCategory.UnmatchedFile, "Scenes", path, "No match");
+            Subject.Report(LegacyReportCategory.NeedsAttention, "Movies", "/media/movies/Other.mp4", "File could not be linked: Missing");
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile { MovieId = 1, Path = path }));
+
+            Subject.GetReport().Should().ContainSingle()
+                   .Which.Subject.Should().Be("/media/movies/Other.mp4");
+        }
+
+        [Test]
+        public void adding_an_unmapped_file_keeps_the_report_rows_about_it()
+        {
+            const string path = "/media/movies/A Scene (2011)/A Scene (2011).mp4";
+
+            Subject.Report(LegacyReportCategory.UnmatchedFile, "Scenes", path, "No match");
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile { MovieId = 0, Path = path }));
+
+            Subject.GetReport().Should().ContainSingle();
+        }
+
+        [Test]
+        public void adding_a_file_without_a_path_keeps_the_report()
+        {
+            Subject.Report(LegacyReportCategory.SkippedSetting, "Config", null, "Skipped");
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile { MovieId = 1 }));
+
+            Subject.GetReport().Should().ContainSingle();
         }
 
         [Test]
