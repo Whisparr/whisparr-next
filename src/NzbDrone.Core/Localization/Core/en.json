@@ -295,7 +295,7 @@
   "ColonReplacementFormatHelpText": "Change how {appName} handles colon replacement",
   "CommandProgress": "{phase} | Overall: {done} / {total} ({percent}%)",
   "CommandProgressEta": "About {eta} left",
-  "CommandProgressPhaseRemaining": "{phase} {remaining} remaining",
+  "CommandProgressPhaseRemaining": "{phase}: {remaining} remaining",
   "Complete": "Complete",
   "Completed": "Completed",
   "CompletedDownloadHandling": "Completed Download Handling",

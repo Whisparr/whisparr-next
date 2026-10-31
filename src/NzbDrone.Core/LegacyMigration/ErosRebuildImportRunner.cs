@@ -51,6 +51,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly IAddMovieService _addMovieService;
         private readonly IMovieService _movieService;
         private readonly IImportlFileService _importFileService;
+        private readonly ILegacyImportFileLocator _importFileLocator;
         private readonly ILegacyFileLinker _fileLinker;
         private readonly ILegacyMigrationService _migrationService;
         private readonly IDiskProvider _diskProvider;
@@ -85,6 +86,7 @@ namespace NzbDrone.Core.LegacyMigration
                                        IAddMovieService addMovieService,
                                        IMovieService movieService,
                                        IImportlFileService importFileService,
+                                       ILegacyImportFileLocator importFileLocator,
                                        ILegacyFileLinker fileLinker,
                                        ILegacyMigrationService migrationService,
                                        IDiskProvider diskProvider,
@@ -108,6 +110,7 @@ namespace NzbDrone.Core.LegacyMigration
             _addMovieService = addMovieService;
             _movieService = movieService;
             _importFileService = importFileService;
+            _importFileLocator = importFileLocator;
             _fileLinker = fileLinker;
             _migrationService = migrationService;
             _diskProvider = diskProvider;
@@ -801,7 +804,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             foreach (var seed in due.Where(s => s.ImportFileId.HasValue))
             {
-                var file = ErosSeedImportRunner.FindImportFile(_importFileService, seed.ImportFileId.Value);
+                var file = _importFileLocator.Locate(ErosSeedImportRunner.FindImportFile(_importFileService, seed.ImportFileId.Value));
 
                 if (file == null)
                 {
