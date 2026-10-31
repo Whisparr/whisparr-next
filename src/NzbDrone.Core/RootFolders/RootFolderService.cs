@@ -11,6 +11,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
@@ -36,6 +37,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IRootFolderRepository _rootFolderRepository;
         private readonly IQualityProfileRepository _profileRepository;
         private readonly IImportFileRepository _importFileRepository;
+        private readonly ILegacyMigrationService _legacyMigrationService;
         private readonly IDiskProvider _diskProvider;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IMovieRepository _movieRepository;
@@ -69,8 +71,10 @@ namespace NzbDrone.Core.RootFolders
                                     IConfigService configService,
                                     INamingConfigService namingConfigService,
                                     ICacheManager cacheManager,
+                                    ILegacyMigrationService legacyMigrationService,
                                     Logger logger)
         {
+            _legacyMigrationService = legacyMigrationService;
             _rootFolderRepository = rootFolderRepository;
             _profileRepository = profileRepository;
             _importFileRepository = importFileRepository;
@@ -301,7 +305,10 @@ namespace NzbDrone.Core.RootFolders
             }).ToList();
 
             var toAdd = newUnmappedFiles.Where(n => !existingUnmappedFiles.Any(e => e.Path.PathEquals(n.Path))).ToList();
-            var toRemove = existingUnmappedFiles.Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path))).ToList();
+            var toRemove = existingUnmappedFiles
+                .Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path)))
+                .Where(e => importFolder.IsParentPath(e.Path) || CanForgetOutsideImportFolder(e))
+                .ToList();
 
             _logger.ProgressInfo("Scanning Adding {0} new files to the database in {1}", toAdd.Count, importFolder);
             _logger.ProgressInfo("Scanning Cleaning {0} old files from the database in {1}", toRemove.Count, importFolder);
@@ -320,6 +327,13 @@ namespace NzbDrone.Core.RootFolders
 
             _logger.ProgressInfo("Scanning {0} Completed", importFolder);
             return rootFolder;
+        }
+
+        // A migration parks files where they already live, and only the import folder is scanned, so missing from the
+        // scan says nothing about them. A running migration still needs even a dead row to find the file by.
+        private bool CanForgetOutsideImportFolder(ImportFile file)
+        {
+            return !_legacyMigrationService.IsIncomplete() && !_diskProvider.FileExists(file.Path);
         }
 
         private string GetImportFolder(string folder)

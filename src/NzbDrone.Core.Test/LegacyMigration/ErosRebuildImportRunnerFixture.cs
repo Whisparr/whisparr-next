@@ -1147,7 +1147,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
             seed.Resolved.Should().BeTrue();
         }
 
@@ -1177,7 +1177,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", $"Legacy StashDB id legacy-scene-1; file: {FilePath(seed)}", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
@@ -1216,6 +1216,93 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Scenes", FilePath(second), It.Is<string>(d => d.StartsWith("Scene already has a file") && d.Contains(FilePath(second))), 1), Times.Once());
             first.Resolved.Should().BeTrue();
             second.Resolved.Should().BeTrue();
+        }
+
+        private void GivenSceneSearch(params (string Id, string Title, DateTime? Date)[] results)
+        {
+            Mocker.GetMock<ISearchForNewMovie>()
+                  .Setup(s => s.SearchForNewScene("Big Scene"))
+                  .Returns(results.Select(r => new Movie { MovieMetadata = new MovieMetadata { ForeignId = r.Id, Title = r.Title, ReleaseDateUtc = r.Date } }).ToList());
+        }
+
+        [Test]
+        public void scene_filed_under_another_studio_is_found_by_exact_title_and_date()
+        {
+            GivenSceneSeed(fileId: 5);
+            GivenSceneSearch(("other-studio-scene", "Big Scene", new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Single().ForeignId == "other-studio-scene")), Times.Once());
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void search_with_another_date_is_not_a_match()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            GivenSceneSearch(("other-scene", "Big Scene", new DateTime(2021, 5, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+            Run();
+
+            VerifyReport("Scenes", "Big Scene (2020-05-01)", $"Legacy StashDB id legacy-scene-1; file: {FilePath(seed)}", Times.Once());
+        }
+
+        [Test]
+        public void search_with_two_exact_results_is_not_a_match()
+        {
+            GivenSceneSeed(fileId: 5);
+            var date = new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+            GivenSceneSearch(("a", "Big Scene", date), ("b", "Big Scene", date));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>().Verify(r => r.RefreshNewScenes(It.IsAny<List<Movie>>()), Times.Never());
+        }
+
+        [Test]
+        public void unmonitored_scene_without_a_file_is_not_searched_for()
+        {
+            GivenSceneSeed();
+
+            Run();
+
+            Mocker.GetMock<ISearchForNewMovie>().Verify(s => s.SearchForNewScene(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void unmatched_scene_names_its_studio()
+        {
+            GivenStudioSeed("stash-s1", "Vixen");
+            GivenSceneSeed(studioLegacyId: "stash-s1");
+
+            Run();
+
+            VerifyReport("Scenes", "Vixen: Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+        }
+
+        [Test]
+        public void new_scene_is_refreshed_after_its_file_is_linked()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            _hashes[FilePath(seed)] = new HashMatch("tpdb-scene-9", "h1", false);
+
+            var linked = false;
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Callback(() => linked = true)
+                  .Returns(LinkOutcome.Linked);
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Setup(r => r.RefreshNewScenes(It.IsAny<List<Movie>>()))
+                  .Callback(() => linked.Should().BeTrue());
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Single().ForeignId == "tpdb-scene-9")), Times.Once());
         }
 
         [Test]
@@ -1290,7 +1377,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             VerifyMoviesAdded(Times.Once());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }
@@ -1325,7 +1412,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             VerifyMoviesAdded(Times.Never());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }
