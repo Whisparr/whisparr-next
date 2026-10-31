@@ -41,7 +41,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
+      # One value per run, so both architectures match and the pushed build reuses the tested one's layers
+      created: ${{ steps.created.outputs.created }}
     steps:
+      - name: Resolve build time
+        id: created
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Resolve base image digest
         id: digest
         run: |
@@ -124,6 +130,7 @@ jobs:
             VERSION=${{ inputs.version }}
             BRANCH=${{ inputs.branch }}
             REVISION=${{ steps.revision.outputs.sha }}
+            CREATED=${{ needs.base.outputs.created }}
 
       - name: Test image
         run: distribution/docker/test-image.sh whisparr-test:${{ matrix.arch }}
@@ -149,6 +156,7 @@ jobs:
             VERSION=${{ inputs.version }}
             BRANCH=${{ inputs.branch }}
             REVISION=${{ steps.revision.outputs.sha }}
+            CREATED=${{ needs.base.outputs.created }}
 
       - name: Record digest
         if: ${{ inputs.push }}

@@ -15,12 +15,14 @@ ARG BASE_DIGEST
 ARG VERSION
 ARG BRANCH
 ARG REVISION
+ARG CREATED
 ARG PACKAGE_VERSION=${VERSION}
 
-# title, vendor and documentation would otherwise be inherited from the base image and name it instead
+# title, vendor, documentation and created would otherwise be inherited from the base image and describe it instead
 LABEL org.opencontainers.image.title="Whisparr" \
       org.opencontainers.image.vendor="Whisparr" \
       org.opencontainers.image.documentation="https://github.com/Whisparr/whisparr-next" \
+      org.opencontainers.image.created="${CREATED}" \
       org.opencontainers.image.source="https://github.com/Whisparr/whisparr-next" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
