@@ -31,7 +31,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         [SetUp]
         public void Setup()
         {
-            _path = "/data/library/Studio/movie.mp4".AsOsAgnostic();
+            _path = @"C:\data\library\Studio\movie.mp4".AsOsAgnostic();
             _state = new LegacyMigrationState { SourceKind = LegacyKind.Eros, MovieSource = MovieMetadataType.TMDB };
             _importFile = new ImportFile { Id = 5, Path = _path };
             _seed = new LegacyMovieSeed
@@ -43,7 +43,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                 TmdbId = 123,
                 Monitored = true,
                 QualityProfileId = 4,
-                RootFolderPath = "/data/library".AsOsAgnostic(),
+                RootFolderPath = @"C:\data\library".AsOsAgnostic(),
                 Tags = "[2,3]",
                 ImportFileId = 5
             };
@@ -365,7 +365,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private void AddHealthySeed()
         {
             GivenSearch("tmdb:456", Candidate("Healthy", 2021, 456));
-            _seeds.Add(new LegacyMovieSeed { Id = 2, LegacyForeignId = "legacy-2", Title = "Healthy", Year = 2021, TmdbId = 456, RootFolderPath = "/data/library".AsOsAgnostic() });
+            _seeds.Add(new LegacyMovieSeed { Id = 2, LegacyForeignId = "legacy-2", Title = "Healthy", Year = 2021, TmdbId = 456, RootFolderPath = @"C:\data\library".AsOsAgnostic() });
         }
 
         [Test]
@@ -456,14 +456,14 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             Mocker.GetMock<IAddMovieService>()
-                  .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l[0].Path == "/data/library/Studio".AsOsAgnostic()), false, true), Times.Once());
+                  .Verify(s => s.AddMovies(It.Is<List<Movie>>(l => l[0].Path == @"C:\data\library\Studio".AsOsAgnostic()), false, true), Times.Once());
         }
 
         [Test]
         public void file_directly_in_the_root_folder_leaves_the_path_to_the_naming_scheme()
         {
             GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
-            _importFile.Path = "/data/library/movie.mp4".AsOsAgnostic();
+            _importFile.Path = @"C:\data\library\movie.mp4".AsOsAgnostic();
 
             Run();
 

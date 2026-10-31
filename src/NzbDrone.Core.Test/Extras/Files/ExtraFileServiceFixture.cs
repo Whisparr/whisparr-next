@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using FizzWare.NBuilder;
 using Moq;
 using NUnit.Framework;
@@ -9,13 +10,15 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Test.Framework;
+using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.Extras.Files
 {
     [TestFixture]
     public class ExtraFileServiceFixture : CoreTest<SubtitleFileService>
     {
-        private const string MoviePath = "/lib/scenes/Shady Spa";
+        private static readonly string LibraryPath = @"C:\lib\scenes".AsOsAgnostic();
+        private static readonly string MoviePath = Path.Combine(LibraryPath, "Shady Spa");
 
         private Movie _movie;
         private MovieFile _movieFile;
@@ -50,10 +53,10 @@ namespace NzbDrone.Core.Test.Extras.Files
 
             Mocker.GetMock<IDiskProvider>()
                   .Setup(s => s.GetParentFolder(MoviePath))
-                  .Returns("/lib/scenes");
+                  .Returns(LibraryPath);
 
             Mocker.GetMock<IDiskProvider>()
-                  .Setup(s => s.GetParentFolder(MoviePath + "/scene.en.srt"))
+                  .Setup(s => s.GetParentFolder(Path.Combine(MoviePath, "scene.en.srt")))
                   .Returns(MoviePath);
         }
 
