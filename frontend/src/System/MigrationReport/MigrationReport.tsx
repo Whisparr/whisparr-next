@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import Alert from 'Components/Alert';
 import Button from 'Components/Link/Button';
+import IconButton from 'Components/Link/IconButton';
 import Link from 'Components/Link/Link';
 import SpinnerButton from 'Components/Link/SpinnerButton';
 import LoadingIndicator from 'Components/Loading/LoadingIndicator';
@@ -11,16 +12,18 @@ import Column from 'Components/Table/Column';
 import Table from 'Components/Table/Table';
 import TableBody from 'Components/Table/TableBody';
 import TableRow from 'Components/Table/TableRow';
-import { kinds } from 'Helpers/Props';
+import { icons, kinds } from 'Helpers/Props';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import MigrationReportModel, {
   MigrationReportCategory,
   MigrationReportItem,
 } from 'typings/MigrationReport';
 import formatDateTime from 'Utilities/Date/formatDateTime';
+import { ApiError } from 'Utilities/Fetch/fetchJson';
 import translate from 'Utilities/String/translate';
 import useMigrationReport, {
   useDismissMigrationReport,
+  useRemoveMigrationReportItem,
 } from './useMigrationReport';
 
 const CATEGORIES: {
@@ -68,6 +71,11 @@ const columns: Column[] = [
   {
     name: 'count',
     label: () => translate('MigrationReportCount'),
+    isVisible: true,
+  },
+  {
+    name: 'actions',
+    label: '',
     isVisible: true,
   },
 ];
@@ -121,10 +129,53 @@ function getSummary(report: MigrationReportModel) {
   });
 }
 
+function RequestError({ error }: Readonly<{ error: ApiError | null }>) {
+  return error ? (
+    <Alert kind={kinds.DANGER}>
+      {error.statusBody?.message ?? error.message}
+    </Alert>
+  ) : null;
+}
+
+interface ReportRowProps {
+  item: MigrationReportItem;
+  canRemove: boolean;
+  onRemovePress: (id: number) => void;
+}
+
+function ReportRow({
+  item,
+  canRemove,
+  onRemovePress,
+}: Readonly<ReportRowProps>) {
+  const handleRemovePress = useCallback(() => {
+    onRemovePress(item.id);
+  }, [item.id, onRemovePress]);
+
+  return (
+    <TableRow>
+      <TableRowCell>{item.area}</TableRowCell>
+      <TableRowCell>{item.subject}</TableRowCell>
+      <TableRowCell>{item.detail}</TableRowCell>
+      <TableRowCell>{item.count}</TableRowCell>
+      <TableRowCell>
+        <IconButton
+          name={icons.REMOVE}
+          title={translate('MigrationReportRemoveItem')}
+          isDisabled={!canRemove}
+          onPress={handleRemovePress}
+        />
+      </TableRowCell>
+    </TableRow>
+  );
+}
+
 interface CategorySectionProps {
   category: MigrationReportCategory;
   title: string;
   items: MigrationReportItem[];
+  canRemove: boolean;
+  onRemovePress: (id: number) => void;
 }
 
 // An empty category is hidden.
@@ -132,6 +183,8 @@ function CategorySection({
   category,
   title,
   items,
+  canRemove,
+  onRemovePress,
 }: Readonly<CategorySectionProps>) {
   if (!items.length) {
     return null;
@@ -151,13 +204,13 @@ function CategorySection({
 
       <Table columns={columns}>
         <TableBody>
-          {items.map((item, index) => (
-            <TableRow key={`${item.area}-${item.subject}-${index}`}>
-              <TableRowCell>{item.area}</TableRowCell>
-              <TableRowCell>{item.subject}</TableRowCell>
-              <TableRowCell>{item.detail}</TableRowCell>
-              <TableRowCell>{item.count}</TableRowCell>
-            </TableRow>
+          {items.map((item) => (
+            <ReportRow
+              key={item.id}
+              item={item}
+              canRemove={canRemove}
+              onRemovePress={onRemovePress}
+            />
           ))}
         </TableBody>
       </Table>
@@ -169,6 +222,8 @@ function MigrationReport() {
   const { data: report, hasReport, isLoading } = useMigrationReport();
   const { dismissReport, isDismissing, dismissError } =
     useDismissMigrationReport();
+  const { removeItem, isRemoving, removeError } =
+    useRemoveMigrationReportItem();
   const { longDateFormat, timeFormat, timeZone } = useUiSettingsValues();
 
   const items = useMemo(() => report?.items ?? [], [report]);
@@ -234,11 +289,8 @@ function MigrationReport() {
               </SpinnerButton>
             </div>
 
-            {dismissError ? (
-              <Alert kind={kinds.DANGER}>
-                {dismissError.statusBody?.message ?? dismissError.message}
-              </Alert>
-            ) : null}
+            <RequestError error={dismissError} />
+            <RequestError error={removeError} />
 
             {CATEGORIES.map(({ category, title }) => {
               const categoryItems = items.filter(
@@ -251,6 +303,8 @@ function MigrationReport() {
                   category={category}
                   title={title()}
                   items={categoryItems}
+                  canRemove={report.completed && !isRemoving}
+                  onRemovePress={removeItem}
                 />
               );
             })}

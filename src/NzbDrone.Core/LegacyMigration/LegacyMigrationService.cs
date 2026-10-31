@@ -18,6 +18,7 @@ namespace NzbDrone.Core.LegacyMigration
         void DismissReport();
         void Report(LegacyReportCategory category, string area, string subject, string detail, int count = 1);
         List<LegacyMigrationReportItem> GetReport();
+        void RemoveReportItem(int id);
     }
 
     public class LegacyMigrationService : ILegacyMigrationService, IHandle<MovieFileAddedEvent>
@@ -119,6 +120,11 @@ namespace NzbDrone.Core.LegacyMigration
         public List<LegacyMigrationReportItem> GetReport()
         {
             return _reportRepository.All().ToList();
+        }
+
+        public void RemoveReportItem(int id)
+        {
+            _reportRepository.Delete(id);
         }
 
         // A report row about a file is settled once that file is on a scene, however it got there.

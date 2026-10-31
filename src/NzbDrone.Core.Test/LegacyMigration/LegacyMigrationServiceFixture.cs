@@ -1,3 +1,4 @@
+using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -125,6 +126,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
             report[0].Subject.Should().Be("Studio");
             report[0].Detail.Should().Be("No match");
             report[0].Count.Should().Be(1);
+        }
+
+        [Test]
+        public void remove_report_item_removes_only_that_row()
+        {
+            Subject.Report(LegacyReportCategory.NeedsAttention, "Series", "First", "No match");
+            Subject.Report(LegacyReportCategory.NeedsAttention, "Series", "Second", "No match");
+
+            Subject.RemoveReportItem(Subject.GetReport().Single(i => i.Subject == "First").Id);
+
+            Subject.GetReport().Should().ContainSingle()
+                   .Which.Subject.Should().Be("Second");
         }
 
         [Test]

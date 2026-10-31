@@ -1298,6 +1298,7 @@
   "MigrationReportManualImport": "Manual import",
   "MigrationReportNeedsAttention": "Needs Attention",
   "MigrationReportNone": "No migration report. This install wasn't migrated from an earlier Whisparr version.",
+  "MigrationReportRemoveItem": "Remove from report",
   "MigrationReportSkippedSettings": "Skipped Settings",
   "MigrationReportSubject": "Subject",
   "MigrationReportSummary": "Migrated from Whisparr {legacy}. Scenes now come from {sceneSource}, movies from {movieSource}.",
