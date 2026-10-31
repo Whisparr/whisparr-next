@@ -1108,7 +1108,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            VerifyReport("Scenes", FilePath(seed), "File could not be linked: Missing", Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.ReportUnlinkedFile(It.IsAny<int>(), "Scenes", FilePath(seed), "File could not be linked: Missing"), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }

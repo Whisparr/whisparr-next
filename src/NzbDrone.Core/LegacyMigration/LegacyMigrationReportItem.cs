@@ -19,5 +19,6 @@ namespace NzbDrone.Core.LegacyMigration
         public string Subject { get; set; }
         public string Detail { get; set; }
         public int Count { get; set; }
+        public int? MovieId { get; set; }
     }
 }

@@ -875,11 +875,14 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             // The file stays parked in the import list either way
-            var detail = outcome == LinkOutcome.SceneHasOtherFile
-                ? $"Scene already has a file; legacy also had {importFile.Path}"
-                : $"File could not be linked: {outcome}";
+            if (outcome == LinkOutcome.SceneHasOtherFile)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, importFile.Path, $"Scene already has a file; legacy also had {importFile.Path}");
 
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, importFile.Path, detail);
+                return;
+            }
+
+            _migrationService.ReportUnlinkedFile(movie.Id, SceneArea, importFile.Path, $"File could not be linked: {outcome}");
         }
 
         // The file as Eros had it, through the same converters the repositories read the columns with

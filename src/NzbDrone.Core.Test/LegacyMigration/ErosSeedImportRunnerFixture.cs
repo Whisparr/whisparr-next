@@ -244,7 +244,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.ReportUnlinkedFile(It.IsAny<int>(), "Movies", _path, "File could not be linked: Missing"), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
         }
 

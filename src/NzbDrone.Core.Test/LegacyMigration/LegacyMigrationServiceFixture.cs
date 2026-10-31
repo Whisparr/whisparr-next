@@ -156,6 +156,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void adding_a_file_under_another_name_clears_its_scenes_unlinked_file_row()
+        {
+            Subject.ReportUnlinkedFile(1, "Movies", "/media/movies/A Scene (2011)/A Scene (2011).mp4", "File could not be linked: Missing");
+            Subject.ReportUnlinkedFile(2, "Movies", "/media/movies/Other (2012)/Other (2012).mp4", "File could not be linked: Missing");
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile { MovieId = 1, Path = "/media/movies/A Scene (2011)/a.scene.2011.mp4" }));
+
+            Subject.GetReport().Should().ContainSingle()
+                   .Which.MovieId.Should().Be(2);
+        }
+
+        [Test]
         public void adding_an_unmapped_file_keeps_the_report_rows_about_it()
         {
             const string path = "/media/movies/A Scene (2011)/A Scene (2011).mp4";
