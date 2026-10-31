@@ -168,6 +168,43 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             Mocker.GetMock<IHttpClient>().VerifyNoOtherCalls();
         }
 
+        [TestCase("stash: 99999999999999999999")]
+        [TestCase("stash: 0")]
+        [TestCase("stash: -12")]
+        [TestCase("stash:1")]
+        [TestCase("stashid:1")]
+        [TestCase("https://stashdb.org/scenes/dhhiuooidhoiuhdojhdoduh")]
+        public void should_return_nothing_without_a_request_for_a_malformed_stashdb_id(string term)
+        {
+            GivenSceneSource(SceneMetadataType.StashDb);
+
+            Subject.SearchForNewScene(term).Should().BeEmpty();
+
+            Mocker.GetMock<IHttpClient>().VerifyNoOtherCalls();
+        }
+
+        [TestCase("stash:" + SceneStashId)]
+        [TestCase("https://stashdb.org/scenes/" + SceneStashId)]
+        public void should_still_request_a_stashdb_scene_for_a_uuid(string term)
+        {
+            GivenSceneSource(SceneMetadataType.StashDb);
+            GivenSceneGet(Scene(SceneStashId));
+
+            var results = Subject.SearchForNewScene(term);
+
+            _request.Url.Path.Should().EndWith($"scene/{SceneStashId}");
+            results.Should().ContainSingle();
+        }
+
+        [TestCase("tpdb:12345")]
+        [TestCase("tpdbid:12345")]
+        public void should_keep_returning_nothing_for_a_non_uuid_tpdb_term(string term)
+        {
+            Subject.SearchForNewEntity(term, ItemType.Scene).Should().BeEmpty();
+
+            Mocker.GetMock<IHttpClient>().VerifyNoOtherCalls();
+        }
+
         [Test]
         public void should_return_an_owned_tpdb_scene_as_the_existing_movie()
         {
