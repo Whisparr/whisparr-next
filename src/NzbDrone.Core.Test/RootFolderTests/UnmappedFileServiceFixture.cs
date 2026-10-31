@@ -148,7 +148,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.Link(7, "a", ItemType.Scene, 4, false);
 
             Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(
-                It.Is<List<Movie>>(l => l[0].Path == "/media/Studio" && l[0].QualityProfileId == 4 && !l[0].Monitored && l[0].MovieMetadata.Value.ItemType == ItemType.Scene),
+                It.Is<List<Movie>>(l => l[0].Path == System.IO.Path.GetDirectoryName(FilePath) && l[0].QualityProfileId == 4 && !l[0].Monitored && l[0].MovieMetadata.Value.ItemType == ItemType.Scene),
                 false,
                 true));
             Mocker.GetMock<IRefreshNewScenes>().Verify(s => s.RefreshNewScenes(It.Is<List<Movie>>(l => l[0] == movie)));
