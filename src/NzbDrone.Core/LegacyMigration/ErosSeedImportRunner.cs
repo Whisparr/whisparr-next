@@ -11,6 +11,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser;
@@ -26,6 +27,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ILegacyMovieSeedRepository _seedRepository;
         private readonly ISearchForNewMovie _searchForNewMovie;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
         private readonly IImportlFileService _importFileService;
         private readonly ILegacyImportFileLocator _importFileLocator;
@@ -39,6 +41,7 @@ namespace NzbDrone.Core.LegacyMigration
         public ErosSeedImportRunner(ILegacyMovieSeedRepository seedRepository,
                                     ISearchForNewMovie searchForNewMovie,
                                     IAddMovieService addMovieService,
+                                    IRefreshNewScenes refreshNewScenes,
                                     IMovieService movieService,
                                     IImportlFileService importFileService,
                                     ILegacyImportFileLocator importFileLocator,
@@ -52,6 +55,7 @@ namespace NzbDrone.Core.LegacyMigration
             _seedRepository = seedRepository;
             _searchForNewMovie = searchForNewMovie;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
             _importFileService = importFileService;
             _importFileLocator = importFileLocator;
@@ -168,8 +172,9 @@ namespace NzbDrone.Core.LegacyMigration
 
             var importFile = seed.ImportFileId.HasValue ? _importFileLocator.Locate(FindImportFile(_importFileService, seed.ImportFileId.Value)) : null;
             var movie = _movieService.FindByForeignId(candidate.ForeignId);
+            var isNew = movie == null;
 
-            if (movie == null)
+            if (isNew)
             {
                 candidate.Monitored = seed.Monitored;
                 candidate.QualityProfileId = seed.QualityProfileId;
@@ -196,6 +201,12 @@ namespace NzbDrone.Core.LegacyMigration
             if (seed.ImportFileId.HasValue)
             {
                 LinkImportFile(seed, movie, importFile);
+            }
+
+            // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+            if (isNew)
+            {
+                _refreshNewScenes.RefreshNewScenes(new List<Movie> { movie });
             }
 
             MarkResolved(seed);
@@ -246,6 +257,10 @@ namespace NzbDrone.Core.LegacyMigration
             {
                 file.Size = _diskProvider.GetFileSize(importFile.Path);
                 file.DateAdded = DateTime.UtcNow;
+
+                // The seed doesn't carry the legacy file's details, and these columns are required
+                file.Quality = QualityParser.ParseQuality(Path.GetFileName(importFile.Path));
+                file.Languages = new List<Language> { Language.Unknown };
             });
 
             if (outcome == LinkOutcome.Linked || outcome == LinkOutcome.AlreadyLinked)

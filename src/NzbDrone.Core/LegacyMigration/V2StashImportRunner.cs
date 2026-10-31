@@ -25,6 +25,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ISceneCatalogImporter _catalogImporter;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
@@ -39,6 +40,7 @@ namespace NzbDrone.Core.LegacyMigration
                                    ISceneCatalogImporter catalogImporter,
                                    IProvideMovieInfo movieInfo,
                                    IAddMovieService addMovieService,
+                                   IRefreshNewScenes refreshNewScenes,
                                    IMovieService movieService,
                                    ILegacyFileLinker fileLinker,
                                    ILegacyMigrationService migrationService,
@@ -52,6 +54,7 @@ namespace NzbDrone.Core.LegacyMigration
             _catalogImporter = catalogImporter;
             _movieInfo = movieInfo;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
         }
 
@@ -310,9 +313,15 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (missing.Count > 0)
             {
-                foreach (var added in _addMovieService.AddMovies(missing.Select(buildStub).ToList(), true, refreshInline: true))
+                var addedScenes = _addMovieService.AddMovies(missing.Select(buildStub).ToList(), true, refreshInline: true);
+
+                // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+                _refreshNewScenes.RefreshNewScenes(addedScenes);
+
+                foreach (var added in addedScenes)
                 {
-                    scenes[added.ForeignId] = added;
+                    // The refresh can repoint the scene, and the files are linked to what it left
+                    scenes[added.ForeignId] = _movieService.FindByForeignId(added.ForeignId) ?? added;
                 }
             }
 

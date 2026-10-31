@@ -251,6 +251,34 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void linked_file_gets_the_required_quality_and_languages()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+
+            var file = new MovieFile();
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Callback<Movie, string, Action<MovieFile>, MatchTier>((_, _, fill, _) => fill(file))
+                  .Returns(LinkOutcome.Linked);
+
+            Run();
+
+            file.Quality.Should().NotBeNull();
+            file.Languages.Should().NotBeEmpty();
+        }
+
+        [Test]
+        public void new_movie_is_refreshed()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>().Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Count == 1)), Times.Once());
+        }
+
+        [Test]
         public void links_the_file_where_it_really_is()
         {
             var actual = _path + ".renamed.mp4";
