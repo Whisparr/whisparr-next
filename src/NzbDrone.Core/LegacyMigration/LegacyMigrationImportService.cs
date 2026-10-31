@@ -187,9 +187,17 @@ namespace NzbDrone.Core.LegacyMigration
                     _phaseRemaining[phase] = remaining.Value;
                 }
 
-                var percent = _total > 0 ? (double)_done / _total * 100 : 0;
+                _reporter.Report(phase, _done, _total, Percent(), remaining);
+            }
 
-                _reporter.Report(phase, _done, _total, percent, remaining);
+            public void Status(string phase, long remaining)
+            {
+                _reporter.Report(phase, _done, _total, Percent(), remaining);
+            }
+
+            private double Percent()
+            {
+                return _total > 0 ? (double)_done / _total * 100 : 0;
             }
         }
     }

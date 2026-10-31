@@ -317,6 +317,22 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void status_shows_the_step_without_moving_the_overall_count()
+        {
+            _duringPass = p =>
+            {
+                p.Total(4);
+                p.Advance("Performers");
+                p.Status("Hashing files", 100);
+            };
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<IReportCommandProgress>().Verify(r => r.Report("Hashing files", 1, 4, 25, 100L), Times.Once());
+        }
+
+        [Test]
         public void a_new_pass_forgets_the_last_passes_phase_totals()
         {
             _duringPass = p =>

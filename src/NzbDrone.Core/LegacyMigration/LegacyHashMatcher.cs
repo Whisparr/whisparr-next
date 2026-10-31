@@ -15,12 +15,17 @@ namespace NzbDrone.Core.LegacyMigration
     {
         // One entry per input key.
         Dictionary<string, HashMatch> Match(IReadOnlyCollection<HashQuery> files);
+
+        // reportRemaining gets the step and how many files it has left, so a long run can show it's moving.
+        Dictionary<string, HashMatch> Match(IReadOnlyCollection<HashQuery> files, Action<string, long> reportRemaining);
     }
 
     // Identifies files by oshash only; a file that hashes to more than one scene is left unmatched.
     public class LegacyHashMatcher : ILegacyHashMatcher
     {
         private const string OsHashAlgorithm = "OSHASH";
+        private const string HashingStep = "Hashing files";
+        private const string LookupStep = "Looking up hashes";
 
         private readonly IVideoHashService _videoHashService;
         private readonly IFingerprintLookupClient _lookupClient;
@@ -37,12 +42,29 @@ namespace NzbDrone.Core.LegacyMigration
 
         public Dictionary<string, HashMatch> Match(IReadOnlyCollection<HashQuery> files)
         {
+            return Match(files, null);
+        }
+
+        public Dictionary<string, HashMatch> Match(IReadOnlyCollection<HashQuery> files, Action<string, long> reportRemaining)
+        {
             var results = new Dictionary<string, HashMatch>();
             var fingerprints = new List<FileFingerprint>();
+            long toHash = files.Count(f => f.KnownOsHash == null);
+
+            if (toHash > 0)
+            {
+                reportRemaining?.Invoke(HashingStep, toHash);
+            }
 
             foreach (var file in files)
             {
-                var osHash = file.KnownOsHash ?? Hash(file.Path);
+                var osHash = file.KnownOsHash;
+
+                if (osHash == null)
+                {
+                    osHash = Hash(file.Path);
+                    reportRemaining?.Invoke(HashingStep, --toHash);
+                }
 
                 if (osHash == null)
                 {
@@ -59,7 +81,7 @@ namespace NzbDrone.Core.LegacyMigration
                 return results;
             }
 
-            var lookup = _lookupClient.Lookup(fingerprints, false);
+            var lookup = reportRemaining == null ? _lookupClient.Lookup(fingerprints, false) : LookupWithProgress(fingerprints, reportRemaining);
 
             foreach (var fingerprint in fingerprints)
             {
@@ -88,6 +110,19 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             return results;
+        }
+
+        private Dictionary<string, FingerprintLookupResult> LookupWithProgress(List<FileFingerprint> fingerprints, Action<string, long> reportRemaining)
+        {
+            long remaining = fingerprints.Count;
+
+            reportRemaining(LookupStep, remaining);
+
+            return _lookupClient.Lookup(fingerprints, false, done =>
+            {
+                remaining -= done;
+                reportRemaining(LookupStep, remaining);
+            });
         }
 
         private string Hash(string path)

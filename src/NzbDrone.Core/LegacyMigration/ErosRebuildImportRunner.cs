@@ -783,7 +783,7 @@ namespace NzbDrone.Core.LegacyMigration
                 Subject = SceneSubject,
                 LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
                 Update = s => _sceneSeeds.Update(s),
-                Prepare = due => HashFiles(due, context),
+                Prepare = due => HashFiles(due, context, progress),
                 Resolve = s => ResolveScene(state, s, context)
             };
 
@@ -798,7 +798,7 @@ namespace NzbDrone.Core.LegacyMigration
         }
 
         // One lookup for every scene with a file. A failed lookup is each of those scenes' own transient failure.
-        private void HashFiles(List<LegacySceneSeed> due, SceneContext context)
+        private void HashFiles(List<LegacySceneSeed> due, SceneContext context, ILegacyImportProgress progress)
         {
             var queries = new List<HashQuery>();
 
@@ -822,7 +822,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             try
             {
-                context.Hashes = _hashMatcher.Match(queries);
+                context.Hashes = _hashMatcher.Match(queries, progress.Status);
             }
             catch (Exception ex) when (IsTransient(ex))
             {
