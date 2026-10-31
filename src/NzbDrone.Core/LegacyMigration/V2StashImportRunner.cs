@@ -230,7 +230,9 @@ namespace NzbDrone.Core.LegacyMigration
             var (_, catalog, _, claimed, buildStub, _) = link;
 
             // One lookup for all the files left, so the whole series retries if the source asks for it
-            var hashes = _hashMatcher.Match(unmatched.Select(f => new HashQuery(f.LegacyId.ToString(CultureInfo.InvariantCulture), f.Path, null)).ToList());
+            var hashes = _hashMatcher.Match(
+                unmatched.Select(f => new HashQuery(f.LegacyId.ToString(CultureInfo.InvariantCulture), f.Path, null)).ToList(),
+                (step, remaining) => progress.Status(step, remaining));
 
             if (hashes.Values.Any(h => h.TryLater))
             {

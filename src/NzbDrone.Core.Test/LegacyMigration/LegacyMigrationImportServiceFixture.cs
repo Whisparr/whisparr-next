@@ -317,6 +317,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void waiting_between_passes_shows_on_the_task()
+        {
+            _passes.Enqueue(Pass(3, waiting: 3, dueIn: TimeSpan.FromMinutes(5)));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<IReportCommandProgress>()
+                  .Verify(r => r.Report("Waiting 00:05:00 to retry", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), 3L), Times.Once());
+        }
+
+        [Test]
         public void status_shows_the_step_without_moving_the_overall_count()
         {
             _duringPass = p =>

@@ -101,6 +101,7 @@ namespace NzbDrone.Core.LegacyMigration
                     return;
                 }
 
+                progress.Status($"Waiting {delay.Value:hh\\:mm\\:ss} to retry", pass.Pending);
                 _pacer.Sleep(delay.Value);
             }
         }
@@ -190,7 +191,7 @@ namespace NzbDrone.Core.LegacyMigration
                 _reporter.Report(phase, _done, _total, Percent(), remaining);
             }
 
-            public void Status(string phase, long remaining)
+            public void Status(string phase, long? remaining)
             {
                 _reporter.Report(phase, _done, _total, Percent(), remaining);
             }

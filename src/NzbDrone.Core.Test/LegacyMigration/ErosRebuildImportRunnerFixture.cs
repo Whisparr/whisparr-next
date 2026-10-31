@@ -544,6 +544,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void catalog_and_monitoring_steps_show_on_the_task()
+        {
+            GivenStudioSeed("stash-s1", "Studio");
+            _studioMap["stash-s1"] = new IdMapResult("new-stash-s1", IdMapMethod.Mapping);
+
+            Run();
+
+            _progress.Verify(p => p.Status("Importing catalogs", 1), Times.Once());
+            _progress.Verify(p => p.Status("Restoring monitoring", null), Times.Once());
+        }
+
+        [Test]
         public void catalogs_are_added_unmonitored_and_reported_before_monitoring_is_restored()
         {
             GivenStudioSeed("stash-s1");
