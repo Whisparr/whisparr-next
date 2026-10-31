@@ -1863,6 +1863,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 case "fanart":
                     return MediaCoverTypes.Fanart;
                 case "clearlogo":
+                case "logo":
                     return MediaCoverTypes.Clearlogo;
                 case "screenshot":
                     return MediaCoverTypes.Screenshot;
