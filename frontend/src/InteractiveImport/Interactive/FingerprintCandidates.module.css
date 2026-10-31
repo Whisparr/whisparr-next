@@ -1,8 +1,8 @@
 .list {
-  min-width: 300px;
-  max-width: 400px;
   margin: 0;
   padding: 0;
+  min-width: 300px;
+  max-width: 400px;
   list-style: none;
 }
 
@@ -11,6 +11,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+
   padding: 6px 0;
 }
 
@@ -31,5 +32,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
+
   font-size: 12px;
 }
