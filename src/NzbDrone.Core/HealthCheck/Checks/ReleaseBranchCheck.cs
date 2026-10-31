@@ -31,6 +31,8 @@ namespace NzbDrone.Core.HealthCheck.Checks
 
         public enum ReleaseBranches
         {
+            Main,
+            Develop,
             Eros,
             ErosDevelop
         }
