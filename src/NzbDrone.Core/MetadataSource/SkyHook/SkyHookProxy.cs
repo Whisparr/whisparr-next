@@ -1991,6 +1991,14 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 return new List<Movie>();
             }
 
+            // StashDB ids are UUIDs and the server answers any other id with a 500, so a malformed one is no result.
+            // TPDB also takes numeric ids, and TryGetLookupId has already screened its terms.
+            if (sceneSource == SceneMetadataType.StashDb && !Guid.TryParseExact(sceneId, "D", out _))
+            {
+                _logger.Debug("'{0}' is not a StashDB scene id", sceneId.ForLog());
+                return new List<Movie>();
+            }
+
             try
             {
                 var movieLookup = GetSceneInfo(sceneId, sceneSource).Item1;

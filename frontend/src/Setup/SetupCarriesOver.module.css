@@ -2,8 +2,8 @@
   margin: 20px 0;
 
   summary {
-    cursor: pointer;
     font-weight: bold;
+    cursor: pointer;
   }
 
   h4 {

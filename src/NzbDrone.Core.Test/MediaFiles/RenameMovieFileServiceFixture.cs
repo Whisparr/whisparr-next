@@ -195,7 +195,7 @@ namespace NzbDrone.Core.Test.MediaFiles
 
         private (Movie Movie, MovieFile File) GivenSceneInOwnFolder()
         {
-            _rootFolder = "/lib".AsOsAgnostic();
+            _rootFolder = @"C:\lib".AsOsAgnostic();
             _studioFolder = Path.Combine(_rootFolder, "scenes", "Shady Spa");
             _oldFolder = Path.Combine(_studioFolder, "2020 - Buffy [id]");
 
@@ -411,7 +411,7 @@ namespace NzbDrone.Core.Test.MediaFiles
             var movies = movieIds.Distinct()
                                  .Select(id => Builder<Movie>.CreateNew()
                                                              .With(m => m.Id = id)
-                                                             .With(m => m.Path = Path.Combine("/media", $"movie{id}").AsOsAgnostic())
+                                                             .With(m => m.Path = Path.Combine(@"C:\media", $"movie{id}").AsOsAgnostic())
                                                              .Build())
                                  .ToList();
 

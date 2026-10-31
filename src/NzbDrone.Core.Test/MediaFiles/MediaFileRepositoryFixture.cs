@@ -259,11 +259,11 @@ namespace NzbDrone.Core.Test.MediaFiles
         [Test]
         public void find_by_full_path_should_match_movie_folder_plus_relative_path()
         {
-            var flat = GivenTrackedFile("flat", "/media/Studio".AsOsAgnostic(), "scene.mp4");
-            var nested = GivenTrackedFile("nested", "/media".AsOsAgnostic(), "Studio2/scene.mp4".AsOsAgnostic());
+            var flat = GivenTrackedFile("flat", @"C:\media\Studio".AsOsAgnostic(), "scene.mp4");
+            var nested = GivenTrackedFile("nested", @"C:\media".AsOsAgnostic(), @"Studio2\scene.mp4".AsOsAgnostic());
 
-            var foundFlat = Subject.FindByFullPath("/media/Studio/scene.mp4".AsOsAgnostic());
-            var foundNested = Subject.FindByFullPath("/media/Studio2/scene.mp4".AsOsAgnostic());
+            var foundFlat = Subject.FindByFullPath(@"C:\media\Studio\scene.mp4".AsOsAgnostic());
+            var foundNested = Subject.FindByFullPath(@"C:\media\Studio2\scene.mp4".AsOsAgnostic());
 
             foundFlat.Id.Should().Be(flat.Id);
             foundFlat.MovieId.Should().Be(flat.MovieId);
@@ -273,20 +273,20 @@ namespace NzbDrone.Core.Test.MediaFiles
         [Test]
         public void find_by_full_path_should_return_the_stored_match_tier()
         {
-            var tracked = GivenTrackedFile("tiered", "/media/Studio".AsOsAgnostic(), "scene.mp4");
+            var tracked = GivenTrackedFile("tiered", @"C:\media\Studio".AsOsAgnostic(), "scene.mp4");
             tracked.MatchTier = MatchTier.Name;
             Subject.SaveMatchTiers(new List<MovieFile> { tracked });
 
-            Subject.FindByFullPath("/media/Studio/scene.mp4".AsOsAgnostic()).MatchTier.Should().Be(MatchTier.Name);
+            Subject.FindByFullPath(@"C:\media\Studio\scene.mp4".AsOsAgnostic()).MatchTier.Should().Be(MatchTier.Name);
         }
 
         [Test]
         public void find_by_full_path_should_return_null_for_untracked_paths()
         {
-            GivenTrackedFile("flat", "/media/Studio".AsOsAgnostic(), "scene.mp4");
+            GivenTrackedFile("flat", @"C:\media\Studio".AsOsAgnostic(), "scene.mp4");
 
-            Subject.FindByFullPath("/media/Studio/other.mp4".AsOsAgnostic()).Should().BeNull();
-            Subject.FindByFullPath("/media/Elsewhere/scene.mp4".AsOsAgnostic()).Should().BeNull();
+            Subject.FindByFullPath(@"C:\media\Studio\other.mp4".AsOsAgnostic()).Should().BeNull();
+            Subject.FindByFullPath(@"C:\media\Elsewhere\scene.mp4".AsOsAgnostic()).Should().BeNull();
         }
     }
 }
