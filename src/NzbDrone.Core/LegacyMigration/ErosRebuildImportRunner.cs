@@ -47,9 +47,11 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly IAddPerformerService _addPerformerService;
         private readonly IPerformerService _performerService;
         private readonly IProvideMovieInfo _movieInfo;
+        private readonly ISearchForNewMovie _searchForNewMovie;
         private readonly IScenePageWalker _pageWalker;
         private readonly ISceneCatalogImporter _catalogImporter;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
         private readonly IImportlFileService _importFileService;
         private readonly ILegacyImportFileLocator _importFileLocator;
@@ -82,9 +84,11 @@ namespace NzbDrone.Core.LegacyMigration
                                        IAddPerformerService addPerformerService,
                                        IPerformerService performerService,
                                        IProvideMovieInfo movieInfo,
+                                       ISearchForNewMovie searchForNewMovie,
                                        IScenePageWalker pageWalker,
                                        ISceneCatalogImporter catalogImporter,
                                        IAddMovieService addMovieService,
+                                       IRefreshNewScenes refreshNewScenes,
                                        IMovieService movieService,
                                        IImportlFileService importFileService,
                                        ILegacyImportFileLocator importFileLocator,
@@ -106,9 +110,11 @@ namespace NzbDrone.Core.LegacyMigration
             _addPerformerService = addPerformerService;
             _performerService = performerService;
             _movieInfo = movieInfo;
+            _searchForNewMovie = searchForNewMovie;
             _pageWalker = pageWalker;
             _catalogImporter = catalogImporter;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
             _importFileService = importFileService;
             _importFileLocator = importFileLocator;
@@ -786,12 +792,16 @@ namespace NzbDrone.Core.LegacyMigration
                 .Where(s => s.LegacyForeignId.IsNotNullOrWhiteSpace())
                 .GroupBy(s => s.LegacyForeignId)
                 .ToDictionary(g => g.Key, g => g.First().NewForeignId);
-            var context = new SceneContext(studioIds) { Progress = progress };
+            var studioTitles = _studioSeeds.All()
+                .Where(s => s.LegacyForeignId.IsNotNullOrWhiteSpace())
+                .GroupBy(s => s.LegacyForeignId)
+                .ToDictionary(g => g.Key, g => g.First().Title);
+            var context = new SceneContext(studioIds) { Progress = progress, StudioTitles = studioTitles };
 
             var stage = new Stage<LegacySceneSeed>
             {
                 Area = SceneArea,
-                Subject = SceneSubject,
+                Subject = s => SceneSubject(s, context),
                 LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
                 Update = s => _sceneSeeds.Update(s),
                 Prepare = due => HashFiles(due, context, progress),
@@ -799,6 +809,14 @@ namespace NzbDrone.Core.LegacyMigration
             };
 
             return RunStage(stage, scenes, progress, recordOutages, now);
+        }
+
+        // With the studio as Eros had it, since a title alone doesn't say which scene a report row means
+        private static string SceneSubject(LegacySceneSeed seed, SceneContext context)
+        {
+            var studio = seed.LegacyStudioForeignId.IsNotNullOrWhiteSpace() ? context.StudioTitles.GetValueOrDefault(seed.LegacyStudioForeignId) : null;
+
+            return studio.IsNotNullOrWhiteSpace() ? $"{studio}: {SceneSubject(seed)}" : SceneSubject(seed);
         }
 
         private static string SceneSubject(LegacySceneSeed seed)
@@ -876,10 +894,24 @@ namespace NzbDrone.Core.LegacyMigration
                 sceneId = LegacySceneMatcher.FindExact(Catalog(studioId, context), seed.Title, seed.ReleaseDate);
             }
 
+            // The catalog only holds the studio the scene was resolved to, and the source may file it under another.
+            // A scene nobody wants and with no file isn't worth a search.
+            if (sceneId == null && (importFile != null || seed.Monitored))
+            {
+                sceneId = FindBySearch(seed);
+            }
+
             if (sceneId == null)
             {
                 // The file stays parked in the import list
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed), LegacyIdDetail(state, seed.LegacyForeignId));
+                var detail = LegacyIdDetail(state, seed.LegacyForeignId);
+
+                if (importFile != null)
+                {
+                    detail += $"; file: {importFile.Path}";
+                }
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed, context), detail);
                 MarkResolved(seed);
 
                 return;
@@ -887,8 +919,9 @@ namespace NzbDrone.Core.LegacyMigration
 
             var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
             var movie = _movieService.FindByForeignId(sceneId);
+            var isNew = movie == null;
 
-            if (movie == null)
+            if (isNew)
             {
                 var stub = new Movie
                 {
@@ -910,7 +943,13 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (seed.ImportFileId.HasValue)
             {
-                LinkImportFile(seed, movie, importFile, tier);
+                LinkImportFile(seed, movie, importFile, tier, context);
+            }
+
+            // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+            if (isNew)
+            {
+                _refreshNewScenes.RefreshNewScenes(new List<Movie> { movie });
             }
 
             MarkResolved(seed);
@@ -969,11 +1008,25 @@ namespace NzbDrone.Core.LegacyMigration
             return keys;
         }
 
-        private void LinkImportFile(LegacySceneSeed seed, Movie movie, ImportFile importFile, MatchTier tier)
+        // Across all studios, so still exact: same title and date, and only one such scene
+        private string FindBySearch(LegacySceneSeed seed)
+        {
+            if (seed.Title.IsNullOrWhiteSpace() || !seed.ReleaseDate.HasValue)
+            {
+                return null;
+            }
+
+            var results = _searchForNewMovie.SearchForNewScene(seed.Title) ?? new List<Movie>();
+            var keys = results.Select(m => new SceneKey(m.ForeignId, m.MovieMetadata?.Value?.Title, m.MovieMetadata?.Value?.ReleaseDateUtc));
+
+            return LegacySceneMatcher.FindExact(keys, seed.Title, seed.ReleaseDate);
+        }
+
+        private void LinkImportFile(LegacySceneSeed seed, Movie movie, ImportFile importFile, MatchTier tier, SceneContext context)
         {
             if (importFile == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed), "Parked file no longer exists");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, SceneSubject(seed, context), "Parked file no longer exists");
 
                 return;
             }
@@ -1025,6 +1078,7 @@ namespace NzbDrone.Core.LegacyMigration
             public Dictionary<int, ImportFile> Files { get; } = new();
             public Dictionary<string, HashMatch> Hashes { get; set; }
             public ILegacyImportProgress Progress { get; init; }
+            public Dictionary<string, string> StudioTitles { get; init; }
             public Exception HashError { get; set; }
             public Dictionary<string, List<SceneKey>> Catalogs { get; } = new();
         }
