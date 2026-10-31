@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using FluentValidation;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -134,6 +135,9 @@ namespace NzbDrone.Core.LegacyMigration
 
             // Seeds resolved on an earlier pass count as done so the bar stays consistent across passes
             progress.Total(studios.Count + performers.Count + scenes.Count + _movieSeeds.All().Count());
+            progress.PhaseTotal(StudioArea, studios.Count);
+            progress.PhaseTotal(PerformerArea, performers.Count);
+            progress.PhaseTotal(SceneArea, scenes.Count);
 
             AdvanceResolved(progress, StudioArea, studios);
             AdvanceResolved(progress, PerformerArea, performers);
@@ -539,15 +543,31 @@ namespace NzbDrone.Core.LegacyMigration
             return map().Id;
         }
 
+        // The add services report an id the source doesn't have under this property; a cross-reference can be out of date
+        private static bool IsIdNotFound(ValidationException ex)
+        {
+            return ex.Errors.Any(e => e.PropertyName == "StashId");
+        }
+
+        private static string UnmappedDetail(string kind, LegacyMigrationState state, IdMapResult mapping)
+        {
+            var source = SourceName(state.SceneSource);
+
+            return mapping?.Method == IdMapMethod.Ambiguous
+                ? $"More than one {kind} on {source} has this name"
+                : $"{char.ToUpperInvariant(kind[0])}{kind[1..]} not found on {source}";
+        }
+
         private void ResolveStudio(LegacyMigrationState state, LegacyStudioSeed seed)
         {
             var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
             var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
-            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapStudio(PreviousSource(state), seed.LegacyForeignId, seed.Title));
+            IdMapResult mapping = null;
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => mapping = _idMapper.MapStudio(PreviousSource(state), seed.LegacyForeignId, seed.Title));
 
             if (targetId == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, $"Studio not found on {SourceName(state.SceneSource)}");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, UnmappedDetail("studio", state, mapping));
                 MarkResolved(seed);
 
                 return;
@@ -568,9 +588,9 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             // Created unmonitored, so the refresh it queues only fetches metadata; the settings go on afterwards
-            var studio = existing ?? _addStudioService.AddStudio(new Studio
+            Studio NewStudio(string id) => new()
             {
-                ForeignId = targetId,
+                ForeignId = id,
                 Title = seed.Title,
                 Monitored = false,
                 MoviesMonitored = false,
@@ -579,7 +599,45 @@ namespace NzbDrone.Core.LegacyMigration
                 RootFolderPath = seed.RootFolderPath,
                 QualityProfileId = seed.QualityProfileId,
                 Tags = tags
-            });
+            };
+
+            Studio studio;
+
+            try
+            {
+                studio = existing ?? _addStudioService.AddStudio(NewStudio(targetId));
+            }
+            catch (ValidationException ex) when (IsIdNotFound(ex))
+            {
+                var found = _idMapper.FindStudio(state.SceneSource, seed.Title);
+
+                if (found.Id == null || found.Id == targetId)
+                {
+                    seed.NewForeignId = null;
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, UnmappedDetail("studio", state, found));
+                    MarkResolved(seed);
+
+                    return;
+                }
+
+                _logger.Info(ex, "{0} has no studio {1}, using {2} found by name for {3}", SourceName(state.SceneSource), targetId, found.Id, seed.Title);
+
+                targetId = found.Id;
+                seed.NewForeignId = targetId;
+                _studioSeeds.Update(seed);
+
+                existing = _studioService.FindByForeignId(targetId);
+
+                if (existing != null)
+                {
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, $"Merged with {existing.Title}");
+                    MarkResolved(seed);
+
+                    return;
+                }
+
+                studio = _addStudioService.AddStudio(NewStudio(targetId));
+            }
 
             studio = _studioService.FindByForeignId(targetId) ?? studio;
 
@@ -598,11 +656,12 @@ namespace NzbDrone.Core.LegacyMigration
         {
             var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
             var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
-            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapPerformer(PreviousSource(state), seed.LegacyForeignId, seed.Name));
+            IdMapResult mapping = null;
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => mapping = _idMapper.MapPerformer(PreviousSource(state), seed.LegacyForeignId, seed.Name));
 
             if (targetId == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, $"Performer not found on {SourceName(state.SceneSource)}");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, UnmappedDetail("performer", state, mapping));
                 MarkResolved(seed);
 
                 return;
@@ -624,9 +683,9 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            var performer = isMerge ? existing : _addPerformerService.AddPerformer(new Performer
+            Performer NewPerformer(string id) => new()
             {
-                ForeignId = targetId,
+                ForeignId = id,
                 Name = seed.Name,
                 Monitored = false,
                 MoviesMonitored = false,
@@ -635,7 +694,45 @@ namespace NzbDrone.Core.LegacyMigration
                 RootFolderPath = seed.RootFolderPath,
                 QualityProfileId = seed.QualityProfileId,
                 Tags = tags
-            });
+            };
+
+            Performer performer;
+
+            try
+            {
+                performer = isMerge ? existing : _addPerformerService.AddPerformer(NewPerformer(targetId));
+            }
+            catch (ValidationException ex) when (IsIdNotFound(ex))
+            {
+                var found = _idMapper.FindPerformer(state.SceneSource, seed.Name);
+
+                if (found.Id == null || found.Id == targetId)
+                {
+                    seed.NewForeignId = null;
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, UnmappedDetail("performer", state, found));
+                    MarkResolved(seed);
+
+                    return;
+                }
+
+                _logger.Info(ex, "{0} has no performer {1}, using {2} found by name for {3}", SourceName(state.SceneSource), targetId, found.Id, seed.Name);
+
+                targetId = found.Id;
+                seed.NewForeignId = targetId;
+                _performerSeeds.Update(seed);
+
+                existing = _performerService.FindByForeignId(targetId);
+
+                if (existing is { Visibility: not PerformerVisibility.Hidden })
+                {
+                    _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, $"Merged with {existing.Name}");
+                    MarkResolved(seed);
+
+                    return;
+                }
+
+                performer = _addPerformerService.AddPerformer(NewPerformer(targetId));
+            }
 
             performer = _performerService.FindByForeignId(targetId) ?? performer;
 
@@ -875,11 +972,14 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             // The file stays parked in the import list either way
-            var detail = outcome == LinkOutcome.SceneHasOtherFile
-                ? $"Scene already has a file; legacy also had {importFile.Path}"
-                : $"File could not be linked: {outcome}";
+            if (outcome == LinkOutcome.SceneHasOtherFile)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, importFile.Path, $"Scene already has a file; legacy also had {importFile.Path}");
 
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, SceneArea, importFile.Path, detail);
+                return;
+            }
+
+            _migrationService.ReportUnlinkedFile(movie.Id, SceneArea, importFile.Path, $"File could not be linked: {outcome}");
         }
 
         // The file as Eros had it, through the same converters the repositories read the columns with

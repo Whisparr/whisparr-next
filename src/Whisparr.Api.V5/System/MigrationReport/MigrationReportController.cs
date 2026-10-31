@@ -31,6 +31,7 @@ namespace Whisparr.Api.V5.System.MigrationReport
                 .ThenBy(i => i.Subject)
                 .Select(i => new MigrationReportItemResource
                 {
+                    Id = i.Id,
                     Category = i.Category.ToString(),
                     Area = i.Area,
                     Subject = i.Subject,
@@ -70,6 +71,27 @@ namespace Whisparr.Api.V5.System.MigrationReport
             }
 
             _migrationService.DismissReport();
+
+            return Ok();
+        }
+
+        [HttpDelete("item/{id:int}")]
+        public IActionResult RemoveItem(int id)
+        {
+            var state = _migrationService.GetCurrent();
+
+            if (state == null)
+            {
+                return NotFound();
+            }
+
+            // The report is still filling in until the import completes, so it can't be edited yet
+            if (!state.Completed)
+            {
+                return Conflict();
+            }
+
+            _migrationService.RemoveReportItem(id);
 
             return Ok();
         }

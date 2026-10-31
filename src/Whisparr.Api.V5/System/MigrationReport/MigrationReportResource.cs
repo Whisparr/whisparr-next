@@ -18,6 +18,7 @@ namespace Whisparr.Api.V5.System.MigrationReport
 
     public class MigrationReportItemResource
     {
+        public int Id { get; set; }
         public string Category { get; set; }
         public string Area { get; set; }
         public string Subject { get; set; }

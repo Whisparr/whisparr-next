@@ -50,7 +50,7 @@ namespace NzbDrone.Api.Test.v5
                 .Setup(s => s.GetReport())
                 .Returns(new List<LegacyMigrationReportItem>
                 {
-                    new() { Category = LegacyReportCategory.NeedsAttention, Area = "Files", Subject = "a", Detail = "d1", Count = 1 },
+                    new() { Id = 7, Category = LegacyReportCategory.NeedsAttention, Area = "Files", Subject = "a", Detail = "d1", Count = 1 },
                     new() { Category = LegacyReportCategory.SkippedSetting, Area = "Naming", Subject = "z", Detail = "d2", Count = 2 },
                     new() { Category = LegacyReportCategory.SkippedSetting, Area = "Naming", Subject = "b", Detail = "d3", Count = 3 },
                     new() { Category = LegacyReportCategory.SkippedSetting, Area = "Indexers", Subject = "m", Detail = "d4", Count = 4 }
@@ -71,6 +71,7 @@ namespace NzbDrone.Api.Test.v5
             resource.Items[0].Category.Should().Be("SkippedSetting");
             resource.Items[0].Detail.Should().Be("d4");
             resource.Items[0].Count.Should().Be(4);
+            resource.Items[3].Id.Should().Be(7);
         }
 
         [Test]
@@ -95,6 +96,42 @@ namespace NzbDrone.Api.Test.v5
             Subject.Dismiss().Should().BeOfType<ConflictResult>();
 
             Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.DismissReport(), Times.Never());
+        }
+
+        [Test]
+        public void remove_item_calls_service()
+        {
+            Mocker.GetMock<ILegacyMigrationService>()
+                .Setup(s => s.GetCurrent())
+                .Returns(new LegacyMigrationState { Completed = true });
+
+            Subject.RemoveItem(5).Should().BeOfType<OkResult>();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.RemoveReportItem(5), Times.Once());
+        }
+
+        [Test]
+        public void remove_item_returns_409_until_the_migration_has_completed()
+        {
+            Mocker.GetMock<ILegacyMigrationService>()
+                .Setup(s => s.GetCurrent())
+                .Returns(new LegacyMigrationState { Completed = false });
+
+            Subject.RemoveItem(5).Should().BeOfType<ConflictResult>();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.RemoveReportItem(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void remove_item_returns_404_without_state()
+        {
+            Mocker.GetMock<ILegacyMigrationService>()
+                .Setup(s => s.GetCurrent())
+                .Returns((LegacyMigrationState)null);
+
+            Subject.RemoveItem(5).Should().BeOfType<NotFoundResult>();
+
+            Mocker.GetMock<ILegacyMigrationService>().Verify(s => s.RemoveReportItem(It.IsAny<int>()), Times.Never());
         }
 
         [Test]

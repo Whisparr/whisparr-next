@@ -151,6 +151,9 @@ namespace NzbDrone.Core.LegacyMigration
         private sealed class ImportProgress : ILegacyImportProgress
         {
             private readonly IReportCommandProgress _reporter;
+
+            // What's still to do per phase, for the phases a runner gave a total
+            private readonly Dictionary<string, long> _phaseRemaining = new();
             private long _total;
             private long _done;
 
@@ -164,15 +167,29 @@ namespace NzbDrone.Core.LegacyMigration
                 // A runner sets the total at the start of each pass, so the count starts over with it
                 _total = total;
                 _done = 0;
+                _phaseRemaining.Clear();
+            }
+
+            public void PhaseTotal(string phase, long total)
+            {
+                _phaseRemaining[phase] = total;
             }
 
             public void Advance(string phase, long by = 1)
             {
                 _done += by;
 
+                long? remaining = null;
+
+                if (_phaseRemaining.TryGetValue(phase, out var left))
+                {
+                    remaining = Math.Max(left - by, 0);
+                    _phaseRemaining[phase] = remaining.Value;
+                }
+
                 var percent = _total > 0 ? (double)_done / _total * 100 : 0;
 
-                _reporter.Report(phase, _done, _total, percent);
+                _reporter.Report(phase, _done, _total, percent, remaining);
             }
         }
     }

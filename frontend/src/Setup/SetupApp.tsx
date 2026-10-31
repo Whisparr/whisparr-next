@@ -4,12 +4,12 @@ import React, {
   useLayoutEffect,
   useState,
 } from 'react';
-import Button from 'Components/Link/Button';
 import themes from 'Styles/Themes';
 import translate, { setTranslations } from 'Utilities/String/translate';
 import SetupCarriesOver from './SetupCarriesOver';
 import SetupEnvTargets from './SetupEnvTargets';
 import SetupProgress from './SetupProgress';
+import SetupShutDown from './SetupShutDown';
 import SetupSourceForm from './SetupSourceForm';
 import SetupSummary from './SetupSummary';
 import useSetupStatus, {
@@ -84,9 +84,9 @@ function defaultsFor(status: SetupStatus, kind: LegacyKind): SetupChoice {
   };
 }
 
-// Polls initialize.json until the app is back out of setup mode, then reloads
-// into it.
-function useReloadWhenBack(isRestarting: boolean) {
+// Polls initialize.json until the app is back out of setup mode, then opens
+// the migration report, which covers what the migration did and what's left.
+function useOpenReportWhenBack(isRestarting: boolean) {
   useEffect(() => {
     if (!isRestarting) {
       return;
@@ -100,7 +100,9 @@ function useReloadWhenBack(isRestarting: boolean) {
         const json = (await response.json()) as { setupMode?: boolean };
 
         if (response.ok && json.setupMode === false) {
-          window.location.reload();
+          window.location.assign(
+            `${window.Whisparr.urlBase}/system/migration-report`
+          );
         }
       } catch {
         // Still down; try again.
@@ -136,7 +138,7 @@ function EnvSwitchScreen({
 
       <p>{translate('SetupEnvSwitchInstruction')}</p>
 
-      <Button onPress={onShutDown}>{translate('SetupShutDown')}</Button>
+      <SetupShutDown isDocker={status.isDocker} onPress={onShutDown} />
     </>
   );
 }
@@ -162,7 +164,7 @@ function SetupApp() {
     (hasError &&
       (progressStatus === 'succeeded' || progressStatus === 'running'));
 
-  useReloadWhenBack(isRestarting);
+  useOpenReportWhenBack(isRestarting);
 
   const activeChoice =
     choice ?? (status ? defaultsFor(status, status.defaults.kind) : null);
@@ -241,13 +243,14 @@ function SetupApp() {
           ))}
         </ul>
 
-        <Button onPress={handleShutDown}>{translate('SetupShutDown')}</Button>
+        <SetupShutDown isDocker={status.isDocker} onPress={handleShutDown} />
       </div>
     );
   } else if (!isIdle) {
     body = (
       <SetupProgress
         progress={progress}
+        isDocker={status.isDocker}
         onRetry={handleRetry}
         onShutDown={handleShutDown}
       />
@@ -257,7 +260,7 @@ function SetupApp() {
       <div className={styles.errors}>
         <p>{translate(refusal)}</p>
 
-        <Button onPress={handleShutDown}>{translate('SetupShutDown')}</Button>
+        <SetupShutDown isDocker={status.isDocker} onPress={handleShutDown} />
       </div>
     );
   } else if (install) {
@@ -267,6 +270,7 @@ function SetupApp() {
         choice={activeChoice}
         envTargets={status.envTargets}
         isBusy={isBusy}
+        isDocker={status.isDocker}
         submitError={submitError ?? progress.errorMessage}
         onChange={setChoice}
         onMigrate={handleMigrate}

@@ -67,14 +67,21 @@ namespace NzbDrone.Core.Test.Datastore.Migration
                 DateAdded = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
             });
 
-            db.Insert(new LegacyMigrationReportItem
+            // LegacyMigrationReportItem gained MovieId in migration 311, so the report row also goes through explicit columns
+            using (var connection = db.OpenConnection())
             {
-                Category = LegacyReportCategory.UnmatchedFile,
-                Area = "Library",
-                Subject = "scene.mp4",
-                Detail = "no match",
-                Count = 3
-            });
+                connection.Execute(
+                    "INSERT INTO \"LegacyMigrationReportItems\" (\"Category\", \"Area\", \"Subject\", \"Detail\", \"Count\") " +
+                    "VALUES (@Category, @Area, @Subject, @Detail, @Count)",
+                    new
+                    {
+                        Category = (int)LegacyReportCategory.UnmatchedFile,
+                        Area = "Library",
+                        Subject = "scene.mp4",
+                        Detail = "no match",
+                        Count = 3
+                    });
+            }
 
             using (var connection = db.OpenConnection())
             {

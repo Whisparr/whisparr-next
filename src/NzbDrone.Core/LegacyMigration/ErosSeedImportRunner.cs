@@ -76,6 +76,8 @@ namespace NzbDrone.Core.LegacyMigration
         {
             var seeds = _seedRepository.All().ToList();
 
+            progress.PhaseTotal(Area, seeds.Count);
+
             var alreadyResolved = seeds.Count(s => s.Resolved);
 
             if (alreadyResolved > 0)
@@ -251,11 +253,14 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             // The file stays parked in the import list either way
-            var detail = outcome == LinkOutcome.SceneHasOtherFile
-                ? $"Scene already has a file; legacy also had {importFile.Path}"
-                : $"File could not be linked: {outcome}";
+            if (outcome == LinkOutcome.SceneHasOtherFile)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, $"Scene already has a file; legacy also had {importFile.Path}");
 
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, detail);
+                return;
+            }
+
+            _migrationService.ReportUnlinkedFile(movie.Id, Area, importFile.Path, $"File could not be linked: {outcome}");
         }
 
         private void ReportUnmatched(LegacyMigrationState state, LegacyMovieSeed seed)

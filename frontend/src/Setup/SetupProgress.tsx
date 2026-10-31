@@ -2,11 +2,13 @@ import React from 'react';
 import Button from 'Components/Link/Button';
 import { kinds } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
+import SetupShutDown from './SetupShutDown';
 import { SetupProgressStatus } from './useSetupStatus';
 import styles from './SetupProgress.module.css';
 
 interface SetupProgressProps {
   progress: SetupProgressStatus;
+  isDocker: boolean;
   onRetry: () => void;
   onShutDown: () => void;
 }
@@ -25,6 +27,7 @@ function capitalize(value: string) {
 
 function SetupProgress({
   progress,
+  isDocker,
   onRetry,
   onShutDown,
 }: Readonly<SetupProgressProps>) {
@@ -79,7 +82,7 @@ function SetupProgress({
               </Button>
             ) : null}
 
-            <Button onPress={onShutDown}>{translate('SetupShutDown')}</Button>
+            <SetupShutDown isDocker={isDocker} onPress={onShutDown} />
           </div>
         </div>
       ) : null}

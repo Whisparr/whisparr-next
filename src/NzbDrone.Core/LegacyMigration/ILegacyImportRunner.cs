@@ -51,6 +51,7 @@ namespace NzbDrone.Core.LegacyMigration
     public interface ILegacyImportProgress
     {
         void Total(long total);
+        void PhaseTotal(string phase, long total);
         void Advance(string phase, long by = 1);
     }
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using DryIoc;
 using FluentAssertions;
+using FluentValidation;
+using FluentValidation.Results;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
@@ -364,6 +366,112 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Mocker.GetMock<ISceneSourceIdMapper>().Verify(m => m.MapStudio(SceneMetadataType.StashDb, "stash-s1", "Studio stash-s1"), Times.Once());
             seed.NewForeignId.Should().Be("new-stash-s1");
+        }
+
+        private void GivenDeadStudio(string id)
+        {
+            Mocker.GetMock<IAddStudioService>()
+                  .Setup(s => s.AddStudio(It.Is<Studio>(x => x.ForeignId == id), It.IsAny<bool>()))
+                  .Throws(new ValidationException(new List<ValidationFailure> { new("StashId", "A studio with this ID was not found: " + id, id) }));
+        }
+
+        private void GivenDeadPerformer(string id)
+        {
+            Mocker.GetMock<IAddPerformerService>()
+                  .Setup(s => s.AddPerformer(It.Is<Performer>(x => x.ForeignId == id), It.IsAny<bool>()))
+                  .Throws(new ValidationException(new List<ValidationFailure> { new("StashId", "A performer with this ID was not found: " + id, id) }));
+        }
+
+        [Test]
+        public void studio_with_a_dead_cross_reference_is_found_by_name()
+        {
+            var seed = GivenStudioSeed("stash-s1", "All Her Luv");
+            _studioMap["stash-s1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "All Her Luv"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            _studios.Should().ContainKey("live-id");
+            seed.NewForeignId.Should().Be("live-id");
+            seed.Resolved.Should().BeTrue();
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void studio_with_a_dead_cross_reference_and_no_name_match_is_reported()
+        {
+            var seed = GivenStudioSeed("stash-s1", "Lost Studio");
+            _studioMap["stash-s1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "Lost Studio"))
+                  .Returns(new IdMapResult(null, IdMapMethod.None));
+
+            Run();
+
+            VerifyReport("Studios", "Lost Studio", "Studio not found on TPDB", Times.Once());
+            seed.NewForeignId.Should().BeNull();
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void studio_with_a_dead_tpdb_id_from_eros_is_found_by_name()
+        {
+            var seed = GivenStudioSeed("stash-s1", "All Her Luv", tpdbId: "dead-id");
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "All Her Luv"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            seed.NewForeignId.Should().Be("live-id");
+            _studios.Should().ContainKey("live-id");
+        }
+
+        [Test]
+        public void performer_with_a_dead_cross_reference_is_found_by_name()
+        {
+            var seed = GivenPerformerSeed("stash-p1", "Jane Doe");
+            _performerMap["stash-p1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadPerformer("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindPerformer(SceneMetadataType.Tpdb, "Jane Doe"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            _performers.Should().ContainKey("live-id");
+            seed.NewForeignId.Should().Be("live-id");
+            seed.Resolved.Should().BeTrue();
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void studio_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenStudioSeed("stash-s1", "Twin Studio");
+            _studioMap["stash-s1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Studios", "Twin Studio", "More than one studio on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void performer_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenPerformerSeed("stash-p1", "Twin Performer");
+            _performerMap["stash-p1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Performers", "Twin Performer", "More than one performer on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
         }
 
         [Test]
@@ -1108,7 +1216,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            VerifyReport("Scenes", FilePath(seed), "File could not be linked: Missing", Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.ReportUnlinkedFile(It.IsAny<int>(), "Scenes", FilePath(seed), "File could not be linked: Missing"), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }

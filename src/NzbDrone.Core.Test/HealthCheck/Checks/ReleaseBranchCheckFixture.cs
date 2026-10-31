@@ -35,6 +35,10 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             Subject.Check().ShouldBeWarning();
         }
 
+        [TestCase("main")]
+        [TestCase("develop")]
+        [TestCase("Main")]
+        [TestCase("Develop")]
         [TestCase("eros")]
         [TestCase("eros-develop")]
         [TestCase("Eros")]

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
@@ -15,6 +16,7 @@ namespace NzbDrone.Api.Test.Setup
     {
         private Mock<ISetupWizardService> _wizard;
         private Mock<IConfig5Seeder> _seeder;
+        private Mock<IOsInfo> _osInfo;
         private DetectionResult _detection;
         private SetupProgress _progress;
 
@@ -23,13 +25,14 @@ namespace NzbDrone.Api.Test.Setup
         {
             _wizard = new Mock<ISetupWizardService>();
             _seeder = new Mock<IConfig5Seeder>();
+            _osInfo = new Mock<IOsInfo>();
             _progress = new SetupProgress { Status = SetupStatus.Idle };
             _detection = new DetectionResult { SetupModeRequired = true, LegacyConfigPath = "config.xml" };
 
             _wizard.SetupGet(w => w.Progress).Returns(() => _progress);
         }
 
-        private SetupController Subject() => new(new SetupModeState(_detection, false), _wizard.Object, _seeder.Object);
+        private SetupController Subject() => new(new SetupModeState(_detection, false), _wizard.Object, _seeder.Object, _osInfo.Object);
 
         private SetupStatusResource Status()
         {
@@ -62,6 +65,16 @@ namespace NzbDrone.Api.Test.Setup
             status.Defaults.Kind.Should().Be(LegacyKind.Eros);
             status.Defaults.SceneSource.Should().Be(SceneMetadataType.StashDb);
             status.Defaults.MovieSource.Should().Be(MovieMetadataType.TPDB);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void status_should_say_whether_it_runs_in_docker(bool isDocker)
+        {
+            _detection.Installs.Add(Install(LegacyKind.Eros));
+            _osInfo.SetupGet(o => o.IsDocker).Returns(isDocker);
+
+            Status().IsDocker.Should().Be(isDocker);
         }
 
         [Test]
