@@ -109,8 +109,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns(new SceneCatalogImportResult(0, 0));
 
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
-                  .Returns<IReadOnlyCollection<HashQuery>>(queries => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
+                  .Returns<IReadOnlyCollection<HashQuery>, Action<string, long>>((queries, _) => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
 
             Mocker.GetMock<ILegacyFileLinker>()
                   .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
@@ -395,7 +395,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             // Its scene may be on a page not fetched, so it is neither fingerprinted nor parked yet
             unmatched.Done.Should().BeFalse();
-            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()), Times.Never());
+            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(unmatched.Path, It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never());
             series.Done.Should().BeFalse();
             series.Attempts.Should().Be(1);
@@ -496,7 +496,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             VerifyLinked("s1", file, MatchTier.Name);
             VerifyReport(LegacyReportCategory.NeedsAttention, "Files", file.Path, "Matched by file name only; check it", Times.Once());
-            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()), Times.Never());
+            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
         }
 
         [Test]
@@ -550,7 +550,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _movies["outside"].Monitored.Should().BeTrue();
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(unhashable.Path, 4, "Files", "Not identified on StashDB"), Times.Once());
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Count == 2 && q.All(h => h.KnownOsHash == null))), Times.Once());
+                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Count == 2 && q.All(h => h.KnownOsHash == null)), It.IsAny<Action<string, long>>()), Times.Once());
         }
 
         [Test]

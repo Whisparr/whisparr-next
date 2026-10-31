@@ -41,6 +41,28 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void reports_what_each_step_has_left()
+        {
+            var reports = new List<(string Step, long Remaining)>();
+
+            Mocker.GetMock<IFingerprintLookupClient>()
+                  .Setup(c => c.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), false, It.IsAny<Action<int>>()))
+                  .Callback<IReadOnlyCollection<FileFingerprint>, bool, Action<int>>((files, _, batchDone) => batchDone(files.Count))
+                  .Returns(new Dictionary<string, FingerprintLookupResult>());
+
+            Subject.Match(
+                new[] { new HashQuery("a", "/a.mp4", null), new HashQuery("b", "/b.mp4", null), new HashQuery("c", "/c.mp4", "known") },
+                (step, remaining) => reports.Add((step, remaining)));
+
+            reports.Should().Equal(
+                ("Hashing files", 2L),
+                ("Hashing files", 1L),
+                ("Hashing files", 0L),
+                ("Looking up hashes", 3L),
+                ("Looking up hashes", 0L));
+        }
+
+        [Test]
         public void single_oshash_candidate_matches()
         {
             GivenLookup(FingerprintLookupStatus.Matched, Candidate("s1", "oshash"), Candidate("s1"));

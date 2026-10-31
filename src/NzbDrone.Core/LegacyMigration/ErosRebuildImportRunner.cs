@@ -30,6 +30,7 @@ namespace NzbDrone.Core.LegacyMigration
         private const string StudioArea = "Studios";
         private const string PerformerArea = "Performers";
         private const string SceneArea = "Scenes";
+        private const string CatalogStep = "Importing catalogs";
 
         // The same converter the repositories use to read this column
         private static readonly EmbeddedDocumentConverter<MediaInfoModel> MediaInfoConverter = new();
@@ -160,18 +161,20 @@ namespace NzbDrone.Core.LegacyMigration
 
             pass = LegacyImportPass.Combine(pass, _movieRunner.RunMovieSeeds(state, progress, recordOutages));
 
-            return pass.Pending == 0 ? RestoreMonitoring(state, now, pass) : pass;
+            return pass.Pending == 0 ? RestoreMonitoring(state, progress, now, pass) : pass;
         }
 
         // Once every seed is placed the studios and performers get the monitoring they had. Safe to run again: it only
         // writes what differs. Only the entity a seed created is touched; one it merged into keeps its own.
-        private LegacyImportPass RestoreMonitoring(LegacyMigrationState state, DateTime now, LegacyImportPass pass)
+        private LegacyImportPass RestoreMonitoring(LegacyMigrationState state, ILegacyImportProgress progress, DateTime now, LegacyImportPass pass)
         {
             try
             {
                 // Before any flag goes on: a monitored studio or performer refreshes its whole catalog, and every scene of
                 // it not in the library yet would come in monitored and be grabbed
-                ImportCatalogs(state);
+                ImportCatalogs(state, progress);
+
+                progress.Status("Restoring monitoring", null);
 
                 foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
                 {
@@ -218,7 +221,7 @@ namespace NzbDrone.Core.LegacyMigration
         // The catalogs of the studios and performers about to be monitored, added unmonitored. Scenes already in the
         // library are left as they are. An owner whose catalog is in has nothing left to add, so a run again writes no
         // second report row, and one whose flags are already restored is not walked at all.
-        private void ImportCatalogs(LegacyMigrationState state)
+        private void ImportCatalogs(LegacyMigrationState state, ILegacyImportProgress progress)
         {
             var incomplete = new List<IncompleteCatalog>();
 
@@ -228,8 +231,14 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            foreach (var seed in FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId))
+            var studioSeeds = FirstPerTarget(_studioSeeds.All(), s => s.Id, s => s.NewForeignId).ToList();
+            var performerSeeds = FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId).ToList();
+            long remaining = studioSeeds.Count + performerSeeds.Count;
+
+            foreach (var seed in studioSeeds)
             {
+                progress.Status(CatalogStep, remaining--);
+
                 var studio = _studioService.FindByForeignId(seed.NewForeignId);
 
                 if (studio == null || !seed.Monitored || studio.Monitored || !CreatedByMigration(state, studio.Added))
@@ -248,8 +257,10 @@ namespace NzbDrone.Core.LegacyMigration
                 SettleCatalog(state, $"studio:{seed.NewForeignId}", title, "studio", imported, incomplete);
             }
 
-            foreach (var seed in FirstPerTarget(_performerSeeds.All(), s => s.Id, s => s.NewForeignId))
+            foreach (var seed in performerSeeds)
             {
+                progress.Status(CatalogStep, remaining--);
+
                 var performer = _performerService.FindByForeignId(seed.NewForeignId);
 
                 if (performer == null || !seed.Monitored || performer.Monitored || !CreatedByMigration(state, performer.Added))
@@ -775,7 +786,7 @@ namespace NzbDrone.Core.LegacyMigration
                 .Where(s => s.LegacyForeignId.IsNotNullOrWhiteSpace())
                 .GroupBy(s => s.LegacyForeignId)
                 .ToDictionary(g => g.Key, g => g.First().NewForeignId);
-            var context = new SceneContext(studioIds);
+            var context = new SceneContext(studioIds) { Progress = progress };
 
             var stage = new Stage<LegacySceneSeed>
             {
@@ -783,7 +794,7 @@ namespace NzbDrone.Core.LegacyMigration
                 Subject = SceneSubject,
                 LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
                 Update = s => _sceneSeeds.Update(s),
-                Prepare = due => HashFiles(due, context),
+                Prepare = due => HashFiles(due, context, progress),
                 Resolve = s => ResolveScene(state, s, context)
             };
 
@@ -798,7 +809,7 @@ namespace NzbDrone.Core.LegacyMigration
         }
 
         // One lookup for every scene with a file. A failed lookup is each of those scenes' own transient failure.
-        private void HashFiles(List<LegacySceneSeed> due, SceneContext context)
+        private void HashFiles(List<LegacySceneSeed> due, SceneContext context, ILegacyImportProgress progress)
         {
             var queries = new List<HashQuery>();
 
@@ -822,7 +833,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             try
             {
-                context.Hashes = _hashMatcher.Match(queries);
+                context.Hashes = _hashMatcher.Match(queries, (step, remaining) => progress.Status(step, remaining));
             }
             catch (Exception ex) when (IsTransient(ex))
             {
@@ -939,6 +950,8 @@ namespace NzbDrone.Core.LegacyMigration
                 return cached;
             }
 
+            context.Progress.Status("Fetching a studio's catalog", null);
+
             var keys = new List<SceneKey>();
             var result = _pageWalker.Walk(
                 cursor => _movieInfo.GetStudioScenePage(studioId, cursor),
@@ -1011,6 +1024,7 @@ namespace NzbDrone.Core.LegacyMigration
             public Dictionary<string, string> StudioIds { get; }
             public Dictionary<int, ImportFile> Files { get; } = new();
             public Dictionary<string, HashMatch> Hashes { get; set; }
+            public ILegacyImportProgress Progress { get; init; }
             public Exception HashError { get; set; }
             public Dictionary<string, List<SceneKey>> Catalogs { get; } = new();
         }

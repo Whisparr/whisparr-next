@@ -80,6 +80,16 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook.Fingerprints
         }
 
         [Test]
+        public void should_report_each_finished_batch()
+        {
+            var done = new List<int>();
+
+            Subject.Lookup(Files(250), true, done.Add);
+
+            done.Should().Equal(100, 100, 50);
+        }
+
+        [Test]
         public void should_send_tpdb_source_from_config()
         {
             Mocker.GetMock<IConfigService>()

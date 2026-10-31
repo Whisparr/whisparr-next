@@ -175,8 +175,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns<string, string>((id, _) => new ScenePage { Items = _catalogs.GetValueOrDefault(id) ?? new List<ScenePageItem>() });
 
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
-                  .Returns<IReadOnlyCollection<HashQuery>>(queries => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
+                  .Returns<IReadOnlyCollection<HashQuery>, Action<string, long>>((queries, _) => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
 
             // The real service throws for a row that is gone
             Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(It.IsAny<ImportFile>())).Returns<ImportFile>(f => f);
@@ -541,6 +541,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             Mocker.GetMock<ILegacyMigrationService>()
                   .Verify(s => s.Report(LegacyReportCategory.LeftBehind, "Scenes", owner, "TPDB scenes with no Eros twin, left unmonitored", count), times);
+        }
+
+        [Test]
+        public void catalog_and_monitoring_steps_show_on_the_task()
+        {
+            GivenStudioSeed("stash-s1", "Studio");
+            _studioMap["stash-s1"] = new IdMapResult("new-stash-s1", IdMapMethod.Mapping);
+
+            Run();
+
+            _progress.Verify(p => p.Status("Importing catalogs", 1), Times.Once());
+            _progress.Verify(p => p.Status("Restoring monitoring", null), Times.Once());
         }
 
         [Test]
@@ -1011,7 +1023,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             pass.WaitingRetry.Should().Be(1);
             _sceneSeeds[0].Resolved.Should().BeFalse();
             _sceneSeeds[0].Attempts.Should().Be(0);
-            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()), Times.Never());
+            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
             Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
         }
@@ -1218,7 +1230,22 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Single().Path == actual.Path)), Times.Once());
+                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Single().Path == actual.Path), It.IsAny<Action<string, long>>()), Times.Once());
+        }
+
+        [Test]
+        public void hashing_progress_reaches_the_task()
+        {
+            GivenSceneSeed(fileId: 5);
+
+            Mocker.GetMock<ILegacyHashMatcher>()
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
+                  .Callback<IReadOnlyCollection<HashQuery>, Action<string, long>>((_, report) => report("Hashing files", 3))
+                  .Returns(new Dictionary<string, HashMatch>());
+
+            Run();
+
+            _progress.Verify(p => p.Status("Hashing files", 3), Times.Once());
         }
 
         [Test]
@@ -1375,7 +1402,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var seed = GivenSceneSeed(fileId: 5);
             var noFile = GivenSceneSeed();
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
                   .Throws(new TimeoutException("down"));
 
             var pass = Run();
