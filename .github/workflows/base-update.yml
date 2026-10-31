@@ -1,5 +1,6 @@
 name: Base Update
 
+# Rebuilds each channel's image around its current release when hotio's base image changes
 on:
   schedule:
     - cron: "17 * * * *"

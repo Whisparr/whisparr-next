@@ -17,7 +17,11 @@ ARG BRANCH
 ARG REVISION
 ARG PACKAGE_VERSION=${VERSION}
 
-LABEL org.opencontainers.image.source="https://github.com/Whisparr/whisparr-next" \
+# title, vendor and documentation would otherwise be inherited from the base image and name it instead
+LABEL org.opencontainers.image.title="Whisparr" \
+      org.opencontainers.image.vendor="Whisparr" \
+      org.opencontainers.image.documentation="https://github.com/Whisparr/whisparr-next" \
+      org.opencontainers.image.source="https://github.com/Whisparr/whisparr-next" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.base.digest="${BASE_DIGEST}" \
