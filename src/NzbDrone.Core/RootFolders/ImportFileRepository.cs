@@ -8,6 +8,7 @@ namespace NzbDrone.Core.RootFolders
     public interface IImportFileRepository : IBasicRepository<ImportFile>
     {
         List<ImportFile> FindByRootFolderId(int rootFolderId);
+        List<ImportFile> FindActiveByRootFolderId(int rootFolderId);
         ImportFile FindByPath(string path);
         List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
@@ -15,6 +16,7 @@ namespace NzbDrone.Core.RootFolders
         void SavePHashes(IList<ImportFile> importFiles);
         List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit);
         void SaveCandidates(IList<ImportFile> importFiles);
+        void SaveDismissed(IList<ImportFile> importFiles);
     }
 
     public class ImportFileRepository : BasicRepository<ImportFile>, IImportFileRepository
@@ -29,6 +31,11 @@ namespace NzbDrone.Core.RootFolders
         public List<ImportFile> FindByRootFolderId(int rootFolderId)
         {
             return Query(x => x.RootFolderId == rootFolderId);
+        }
+
+        public List<ImportFile> FindActiveByRootFolderId(int rootFolderId)
+        {
+            return Query(x => x.RootFolderId == rootFolderId && x.Dismissed == false);
         }
 
         public ImportFile FindByPath(string path)
@@ -57,6 +64,11 @@ namespace NzbDrone.Core.RootFolders
         public void SaveCandidates(IList<ImportFile> importFiles)
         {
             SetFieldsWithoutEvents(importFiles, f => f.Candidates, f => f.CandidatesCheckedAt);
+        }
+
+        public void SaveDismissed(IList<ImportFile> importFiles)
+        {
+            SetFieldsWithoutEvents(importFiles, f => f.Dismissed);
         }
 
         public List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit)

@@ -15,7 +15,7 @@ namespace NzbDrone.Api.Test.v5
         private static readonly string[] V3OnlyControllers = { "CalendarFeedController" };
 
         // The metadata source picker is new in v5, so V3 has no copy of it
-        private static readonly string[] V5OnlyControllers = { "MetadataSourceController", "MigrationReportController" };
+        private static readonly string[] V5OnlyControllers = { "MetadataSourceController", "MigrationReportController", "UnmappedFileController" };
 
         private static readonly Type[] V5Controllers = ControllersIn(typeof(Whisparr.Api.V5.System.SystemController));
         private static readonly Type[] V3Controllers = ControllersIn(typeof(Whisparr.Api.V3.System.SystemController));

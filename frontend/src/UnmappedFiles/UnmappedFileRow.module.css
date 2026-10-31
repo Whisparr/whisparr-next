@@ -1,0 +1,16 @@
+.path {
+  composes: cell from 'Components/Table/Cells/TableRowCell.module.css';
+
+  word-break: break-all;
+}
+
+.missing {
+  margin-left: 8px;
+}
+
+.actions {
+  composes: cell from 'Components/Table/Cells/TableRowCell.module.css';
+
+  width: 70px;
+  white-space: nowrap;
+}

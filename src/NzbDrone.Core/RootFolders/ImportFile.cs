@@ -21,5 +21,8 @@ namespace NzbDrone.Core.RootFolders
         // Null until the first lookup; an empty list means the lookup found nothing
         public List<FingerprintCandidate> Candidates { get; set; }
         public DateTime? CandidatesCheckedAt { get; set; }
+
+        // Hidden from the import and unmapped lists, and kept so a scan doesn't bring the file back
+        public bool Dismissed { get; set; }
     }
 }

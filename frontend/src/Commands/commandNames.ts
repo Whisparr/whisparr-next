@@ -1,6 +1,5 @@
 export const APPLICATION_UPDATE = 'ApplicationUpdate';
 export const BACKUP = 'Backup';
-export const CLEAN_UNMAPPED_FILES = 'CleanUnmappedFiles';
 export const CLEAR_BLOCKLIST = 'ClearBlocklist';
 export const CLEAR_LOGS = 'ClearLog';
 export const CUTOFF_UNMET_MOVIES_SEARCH = 'CutoffUnmetMoviesSearch';
@@ -26,3 +25,4 @@ export const MOVIE_SEARCH = 'MoviesSearch';
 export const STUDIO_SEARCH = 'StudiosSearch';
 export const PERFORMER_SEARCH = 'PerformersSearch';
 export const IMPORT_LIST_SYNC = 'ImportListSync';
+export const SCAN_UNMAPPED_FILES = 'ScanUnmappedFiles';

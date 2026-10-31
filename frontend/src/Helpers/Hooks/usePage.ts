@@ -17,6 +17,7 @@ interface PageStore {
   queue: number;
   sceneIndex: number;
   studioIndex: number;
+  unmappedFiles: number;
 }
 
 const pageStore = create<PageStore>(() => ({
@@ -31,6 +32,7 @@ const pageStore = create<PageStore>(() => ({
   queue: 1,
   sceneIndex: 1,
   studioIndex: 1,
+  unmappedFiles: 1,
 }));
 
 const usePage = (kind: keyof PageStore) => {
