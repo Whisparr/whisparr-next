@@ -10,6 +10,13 @@ import { CoverType, Image } from './Movie';
 import styles from './MovieImage.module.css';
 
 function findImage(images: Image[], coverType: CoverType) {
+  // A scene's cover is the image its details page uses as the background. TPDB calls it fanart, and its poster is a
+  // crop of the same shot; StashDB scenes only have a screenshot.
+  if (coverType === 'screenshot') {
+    const fanart = images.find((image) => image.coverType === 'fanart');
+    if (fanart) return fanart;
+  }
+
   const preferred = images.find((image) => image.coverType === coverType);
   if (preferred) return preferred;
 
@@ -25,8 +32,11 @@ function findImage(images: Image[], coverType: CoverType) {
 
 function getUrl(image: Image, coverType: CoverType, size: number) {
   const imageUrl = image?.url ?? image?.remoteUrl;
+  // Fanart stands in for a screenshot at the same sizes, so its own file name is what gets sized
+  const fileName = image?.coverType === 'fanart' ? 'fanart' : coverType;
+
   return imageUrl
-    ? imageUrl.replace(`${coverType}.jpg`, `${coverType}-${size}.jpg`)
+    ? imageUrl.replace(`${fileName}.jpg`, `${fileName}-${size}.jpg`)
     : null;
 }
 
