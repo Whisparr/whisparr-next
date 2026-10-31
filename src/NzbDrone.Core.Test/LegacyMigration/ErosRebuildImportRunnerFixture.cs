@@ -179,6 +179,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns<IReadOnlyCollection<HashQuery>>(queries => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
 
             // The real service throws for a row that is gone
+            Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(It.IsAny<ImportFile>())).Returns<ImportFile>(f => f);
             Mocker.GetMock<IImportlFileService>()
                   .Setup(s => s.Get(It.IsAny<int>()))
                   .Returns<int>(id => _importFiles.TryGetValue(id, out var file) ? file : throw new ModelNotFoundException(typeof(ImportFile), id));
@@ -1203,6 +1204,21 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Verify(s => s.Report(LegacyReportCategory.NeedsAttention, "Scenes", FilePath(second), It.Is<string>(d => d.StartsWith("Scene already has a file") && d.Contains(FilePath(second))), 1), Times.Once());
             first.Resolved.Should().BeTrue();
             second.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void hashes_the_file_where_it_really_is()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            var stale = _importFiles[seed.ImportFileId.Value];
+            var actual = new ImportFile { Id = stale.Id, Path = stale.Path + ".renamed.mp4" };
+
+            Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(stale)).Returns(actual);
+
+            Run();
+
+            Mocker.GetMock<ILegacyHashMatcher>()
+                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Single().Path == actual.Path)), Times.Once());
         }
 
         [Test]
