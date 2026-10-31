@@ -107,6 +107,12 @@ function SetupSourceForm({
             {translate('SetupTpdbMoviesRecommended')}
           </span>
         ) : null}
+
+        {sceneIsPrevious && movieIsPrevious ? null : (
+          <span className={styles.warning}>
+            {translate('SetupSourceChangeRedownloadsCovers')}
+          </span>
+        )}
       </div>
 
       <p className={styles.locked}>{translate('SetupChoiceLocked')}</p>
