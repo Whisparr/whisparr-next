@@ -229,6 +229,20 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void studio_with_an_ambiguous_name_parks_files_and_says_so()
+        {
+            var series = GivenSeries(1, "Twin Studio");
+            var file = GivenFile(5, series);
+
+            _mapped = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport(LegacyReportCategory.NeedsAttention, "Studios", "Twin Studio", "More than one studio on StashDB has this name", Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "More than one studio on StashDB has this name"), Times.Once());
+        }
+
+        [Test]
         public void studio_unmapped_parks_files_and_reports()
         {
             var series = GivenSeries(1, "Lost Studio");

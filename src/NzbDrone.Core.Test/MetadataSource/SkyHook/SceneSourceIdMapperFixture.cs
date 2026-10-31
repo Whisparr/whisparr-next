@@ -95,13 +95,13 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
-        public void studio_compact_search_with_two_exact_titles_is_none()
+        public void studio_compact_search_with_two_exact_titles_is_ambiguous()
         {
             GivenCompactSearchResults(Studio("NubilesET", "a"), Studio("NUBILESET", "b"));
 
             var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
 
-            result.Should().Be(new IdMapResult(null, IdMapMethod.None));
+            result.Should().Be(new IdMapResult(null, IdMapMethod.Ambiguous));
             _requests.Should().HaveCount(2);
         }
 
@@ -112,7 +112,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
 
             var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Nubiles ET");
 
-            result.Should().Be(new IdMapResult(null, IdMapMethod.None));
+            result.Should().Be(new IdMapResult(null, IdMapMethod.Ambiguous));
             _requests.Should().ContainSingle();
         }
 
@@ -164,13 +164,13 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
-        public void two_exact_titles_is_none()
+        public void two_exact_titles_is_ambiguous()
         {
             GivenSearchResults(Studio("Brazzers", "a"), Studio("BRAZZERS", "b"));
 
             var result = Subject.MapStudio(SceneMetadataType.StashDb, null, "Brazzers");
 
-            result.Should().Be(new IdMapResult(null, IdMapMethod.None));
+            result.Should().Be(new IdMapResult(null, IdMapMethod.Ambiguous));
         }
 
         [Test]

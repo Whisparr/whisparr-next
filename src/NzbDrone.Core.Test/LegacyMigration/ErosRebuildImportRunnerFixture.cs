@@ -367,6 +367,30 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void studio_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenStudioSeed("stash-s1", "Twin Studio");
+            _studioMap["stash-s1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Studios", "Twin Studio", "More than one studio on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void performer_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenPerformerSeed("stash-p1", "Twin Performer");
+            _performerMap["stash-p1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Performers", "Twin Performer", "More than one performer on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
         public void studio_unmapped_reported()
         {
             var seed = GivenStudioSeed("stash-s1", "Lost Studio");

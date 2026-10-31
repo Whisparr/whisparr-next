@@ -14,10 +14,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     {
         None,
         Mapping,
-        Title
+        Title,
+        Ambiguous
     }
 
-    // Id is null when Method is None.
+    // Id is null when Method is None or Ambiguous; Ambiguous means several records share the exact title.
     public sealed record IdMapResult(string Id, IdMapMethod Method);
 
     public interface ISceneSourceIdMapper
@@ -110,9 +111,12 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 ids = ExactTitleIds(title, target, (Search<T>(target, route, compact) ?? new List<T>()).Select(select));
             }
 
-            return ids.Count == 1
-                ? new IdMapResult(ids[0], IdMapMethod.Title)
-                : new IdMapResult(null, IdMapMethod.None);
+            return ids.Count switch
+            {
+                0 => new IdMapResult(null, IdMapMethod.None),
+                1 => new IdMapResult(ids[0], IdMapMethod.Title),
+                _ => new IdMapResult(null, IdMapMethod.Ambiguous)
+            };
         }
 
         private static SceneMetadataType Other(SceneMetadataType source)

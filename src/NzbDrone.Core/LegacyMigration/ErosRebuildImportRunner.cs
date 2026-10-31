@@ -539,15 +539,25 @@ namespace NzbDrone.Core.LegacyMigration
             return map().Id;
         }
 
+        private static string UnmappedDetail(string kind, LegacyMigrationState state, IdMapResult mapping)
+        {
+            var source = SourceName(state.SceneSource);
+
+            return mapping?.Method == IdMapMethod.Ambiguous
+                ? $"More than one {kind} on {source} has this name"
+                : $"{char.ToUpperInvariant(kind[0])}{kind[1..]} not found on {source}";
+        }
+
         private void ResolveStudio(LegacyMigrationState state, LegacyStudioSeed seed)
         {
             var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
             var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
-            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapStudio(PreviousSource(state), seed.LegacyForeignId, seed.Title));
+            IdMapResult mapping = null;
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => mapping = _idMapper.MapStudio(PreviousSource(state), seed.LegacyForeignId, seed.Title));
 
             if (targetId == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, $"Studio not found on {SourceName(state.SceneSource)}");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, seed.Title ?? seed.LegacyForeignId, UnmappedDetail("studio", state, mapping));
                 MarkResolved(seed);
 
                 return;
@@ -598,11 +608,12 @@ namespace NzbDrone.Core.LegacyMigration
         {
             var tags = V2SeriesImportRunnerBase.ParseTags(seed.Tags);
             var resumed = seed.NewForeignId.IsNotNullOrWhiteSpace();
-            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => _idMapper.MapPerformer(PreviousSource(state), seed.LegacyForeignId, seed.Name));
+            IdMapResult mapping = null;
+            var targetId = TargetId(state, seed.NewForeignId, seed.LegacyTpdbId, () => mapping = _idMapper.MapPerformer(PreviousSource(state), seed.LegacyForeignId, seed.Name));
 
             if (targetId == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, $"Performer not found on {SourceName(state.SceneSource)}");
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, PerformerArea, seed.Name ?? seed.LegacyForeignId, UnmappedDetail("performer", state, mapping));
                 MarkResolved(seed);
 
                 return;

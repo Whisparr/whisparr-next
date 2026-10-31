@@ -65,10 +65,14 @@ namespace NzbDrone.Core.LegacyMigration
             var siteUuid = ResolveSite(series);
             var mapped = _idMapper.MapStudio(SceneMetadataType.Tpdb, siteUuid, series.Title);
 
-            if (mapped.Method == IdMapMethod.None)
+            if (mapped.Id == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, "Studio not found on StashDB");
-                ParkAndFinish(series, episodes, files, "Studio not found on StashDB", progress);
+                var reason = mapped.Method == IdMapMethod.Ambiguous
+                    ? "More than one studio on StashDB has this name"
+                    : "Studio not found on StashDB";
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, reason);
+                ParkAndFinish(series, episodes, files, reason, progress);
 
                 return;
             }

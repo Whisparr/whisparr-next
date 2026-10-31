@@ -137,6 +137,27 @@ function RequestError({ error }: Readonly<{ error: ApiError | null }>) {
   ) : null;
 }
 
+const SEARCH_ROUTES: Record<string, string> = {
+  Studios: '/add/new/studio',
+  Performers: '/add/new/performer',
+};
+
+// Only rows the source couldn't match are worth searching for, not merges or
+// errors. The server words them "... not found on X" or "... has this name".
+function getSearchLink(item: MigrationReportItem) {
+  const route = SEARCH_ROUTES[item.area];
+
+  if (
+    !route ||
+    !item.subject ||
+    !/not found on|has this name/.test(item.detail ?? '')
+  ) {
+    return null;
+  }
+
+  return `${route}?term=${encodeURIComponent(item.subject)}`;
+}
+
 interface ReportRowProps {
   item: MigrationReportItem;
   canRemove: boolean;
@@ -152,6 +173,8 @@ function ReportRow({
     onRemovePress(item.id);
   }, [item.id, onRemovePress]);
 
+  const searchLink = getSearchLink(item);
+
   return (
     <TableRow>
       <TableRowCell>{item.area}</TableRowCell>
@@ -159,6 +182,14 @@ function ReportRow({
       <TableRowCell>{item.detail}</TableRowCell>
       <TableRowCell>{item.count}</TableRowCell>
       <TableRowCell>
+        {searchLink ? (
+          <IconButton
+            name={icons.SEARCH}
+            title={translate('Search')}
+            to={searchLink}
+          />
+        ) : null}
+
         <IconButton
           name={icons.REMOVE}
           title={translate('MigrationReportRemoveItem')}
