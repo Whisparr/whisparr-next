@@ -1,4 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import useQueryClient from 'Helpers/Hooks/useQueryClient';
 import fetchJson from 'Utilities/Fetch/fetchJson';
 import getQueryPath from 'Utilities/Fetch/getQueryPath';
 import {
@@ -6,6 +7,11 @@ import {
   ImportItemType,
   MovieLookupResult,
 } from './ImportMovieTypes';
+
+// Kept while the user moves around the app, so coming back doesn't search every file again
+const LOOKUP_RETENTION_MS = 30 * 60 * 1000;
+
+export const IMPORT_LOOKUP_QUERY_KEY = 'importLookup';
 
 interface QueueEntry {
   id: string;
@@ -30,6 +36,7 @@ interface UseImportLookupQueueResult {
 function useImportLookupQueue(
   dispatch: React.Dispatch<ImportAction>
 ): UseImportLookupQueueResult {
+  const queryClient = useQueryClient();
   const queueRef = useRef<QueueEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const processingRef = useRef(false);
@@ -63,14 +70,20 @@ function useImportLookupQueue(
     }
 
     try {
-      const results = await fetchJson<MovieLookupResult[], never>({
-        path: getQueryPath(`/movie/lookup?${params.toString()}`),
-        method: 'GET',
-        headers: {
-          'X-Api-Key': globalThis.Whisparr.apiKey,
-          'X-Whisparr-Client': 'Whisparr',
-        },
-        signal: controller.signal,
+      const results = await queryClient.fetchQuery({
+        queryKey: [IMPORT_LOOKUP_QUERY_KEY, entry.term, entry.itemType ?? null],
+        queryFn: () =>
+          fetchJson<MovieLookupResult[], never>({
+            path: getQueryPath(`/movie/lookup?${params.toString()}`),
+            method: 'GET',
+            headers: {
+              'X-Api-Key': globalThis.Whisparr.apiKey,
+              'X-Whisparr-Client': 'Whisparr',
+            },
+            signal: controller.signal,
+          }),
+        staleTime: LOOKUP_RETENTION_MS,
+        gcTime: LOOKUP_RETENTION_MS,
       });
 
       dispatch({ type: 'SET_LOOKUP_RESULTS', id: entry.id, results });
@@ -93,7 +106,7 @@ function useImportLookupQueue(
         dispatch({ type: 'SET_LOOKING_UP', value: false });
       }
     }
-  }, [dispatch]);
+  }, [dispatch, queryClient]);
 
   const queueLookup = useCallback(
     (entry: QueueEntry & { topOfQueue?: boolean }) => {
@@ -174,6 +187,9 @@ function useImportLookupQueue(
     setIsLookingUp(false);
     dispatch({ type: 'SET_LOOKING_UP', value: false });
   }, [dispatch]);
+
+  // A queue left running would overlap the one started on coming back to the page
+  useEffect(() => cancelQueue, [cancelQueue]);
 
   return { queueLookup, lookupUnsearched, cancelQueue, isLookingUp };
 }

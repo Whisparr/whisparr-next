@@ -41,6 +41,30 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_leave_dismissed_files_out_of_the_active_list_and_filtered_pages()
+        {
+            Db.InsertMany(new List<ImportFile>
+            {
+                new ImportFile { RootFolderId = 1, Path = "/media/kept.mp4", RelativePath = "kept.mp4", Name = "kept" },
+                new ImportFile { RootFolderId = 1, Path = "/media/hidden.mp4", RelativePath = "hidden.mp4", Name = "hidden", Dismissed = true }
+            });
+
+            Subject.FindActiveByRootFolderId(1).Select(f => f.Name).Should().Equal("kept");
+            Subject.FindByRootFolderId(1).Should().HaveCount(2);
+
+            var spec = new NzbDrone.Core.Datastore.PagingSpec<ImportFile> { Page = 1, PageSize = 10, SortKey = "path", SortDirection = NzbDrone.Core.Datastore.SortDirection.Ascending };
+            var term = "hid";
+
+            spec.FilterExpressions.Add(f => f.Dismissed == true);
+            spec.FilterExpressions.Add(f => f.Path.Contains(term));
+
+            var page = Subject.GetPaged(spec);
+
+            page.TotalRecords.Should().Be(1);
+            page.Records.Single().Name.Should().Be("hidden");
+        }
+
+        [Test]
         public void find_by_path_should_return_the_exact_match_or_null()
         {
             Db.InsertMany(new List<ImportFile>

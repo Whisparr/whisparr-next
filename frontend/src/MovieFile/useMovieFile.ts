@@ -1,6 +1,5 @@
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
-import { UnmappedFile } from '../UnmappedFiles/UnmappedFilesTable';
 import { MovieFile } from './MovieFile';
 
 const PATH = '/moviefile';
@@ -11,15 +10,6 @@ function useMovieFile(movieId: number | undefined) {
     path: PATH,
     queryParams: { movieId },
     queryOptions: { enabled: !!movieId },
-  });
-}
-
-// Fetch all unmapped movie files
-export function useUnmappedMovieFiles() {
-  return useApiQuery<UnmappedFile[] | undefined>({
-    path: PATH,
-    queryOptions: { enabled: true },
-    queryParams: { unmapped: true },
   });
 }
 

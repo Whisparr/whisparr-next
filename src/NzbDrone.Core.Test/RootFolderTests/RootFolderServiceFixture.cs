@@ -131,6 +131,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             var parked = Path.Combine(root.Path, "Studio", "scene.mp4");
 
             SetupRefresh(root, importFolder, Array.Empty<string>(), parked);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(root.Path)).Returns(true);
 
             return (root, parked);
         }
@@ -161,6 +162,18 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.Refresh(7);
 
             VerifyDeletedCount(1);
+        }
+
+        [Test]
+        public void refresh_should_keep_parked_files_when_the_root_folder_is_unreachable()
+        {
+            var (root, _) = GivenParkedFile();
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(root.Path)).Returns(false);
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(0);
         }
 
         [Test]

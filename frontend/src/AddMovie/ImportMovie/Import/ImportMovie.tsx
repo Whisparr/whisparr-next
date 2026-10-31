@@ -155,9 +155,11 @@ function ImportMovie({ itemType }: ImportMovieProps) {
 
     initialised.current = true;
 
-    importState.items.forEach((item) => {
-      queueLookup({ id: item.id, term: item.term, itemType: item.itemType });
-    });
+    importState.items
+      .filter((item) => !item.isPopulated && !item.isFetching && !item.isQueued)
+      .forEach((item) => {
+        queueLookup({ id: item.id, term: item.term, itemType: item.itemType });
+      });
   }, [importState.items, queueLookup]);
 
   // Rows land in whatever order the disk scan produced them, so the table is
