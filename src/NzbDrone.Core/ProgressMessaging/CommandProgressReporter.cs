@@ -8,6 +8,7 @@ namespace NzbDrone.Core.ProgressMessaging
     public interface IReportCommandProgress
     {
         void Report(string phase, long done, long total, double percent);
+        void Report(string phase, long done, long total, double percent, long? phaseRemaining);
     }
 
     public class CommandProgressReporter : IReportCommandProgress, IHandle<CommandExecutedEvent>
@@ -29,6 +30,11 @@ namespace NzbDrone.Core.ProgressMessaging
 
         public void Report(string phase, long done, long total, double percent)
         {
+            Report(phase, done, total, percent, null);
+        }
+
+        public void Report(string phase, long done, long total, double percent, long? phaseRemaining)
+        {
             var command = ProgressMessageContext.CommandModel;
 
             if (command?.Body == null || !command.Body.SendUpdatesToClient)
@@ -43,7 +49,7 @@ namespace NzbDrone.Core.ProgressMessaging
             {
                 var previousPhase = command.Progress?.Phase;
 
-                command.Progress = CommandProgress.Create(phase, done, total, percent);
+                command.Progress = CommandProgress.Create(phase, done, total, percent, phaseRemaining);
 
                 var now = UtcNow();
                 var finished = total > 0 && done >= total;

@@ -25,6 +25,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ISceneCatalogImporter _catalogImporter;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
@@ -39,6 +40,7 @@ namespace NzbDrone.Core.LegacyMigration
                                    ISceneCatalogImporter catalogImporter,
                                    IProvideMovieInfo movieInfo,
                                    IAddMovieService addMovieService,
+                                   IRefreshNewScenes refreshNewScenes,
                                    IMovieService movieService,
                                    ILegacyFileLinker fileLinker,
                                    ILegacyMigrationService migrationService,
@@ -52,6 +54,7 @@ namespace NzbDrone.Core.LegacyMigration
             _catalogImporter = catalogImporter;
             _movieInfo = movieInfo;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
         }
 
@@ -65,10 +68,14 @@ namespace NzbDrone.Core.LegacyMigration
             var siteUuid = ResolveSite(series);
             var mapped = _idMapper.MapStudio(SceneMetadataType.Tpdb, siteUuid, series.Title);
 
-            if (mapped.Method == IdMapMethod.None)
+            if (mapped.Id == null)
             {
-                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, "Studio not found on StashDB");
-                ParkAndFinish(series, episodes, files, "Studio not found on StashDB", progress);
+                var reason = mapped.Method == IdMapMethod.Ambiguous
+                    ? "More than one studio on StashDB has this name"
+                    : "Studio not found on StashDB";
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, reason);
+                ParkAndFinish(series, episodes, files, reason, progress);
 
                 return;
             }
@@ -226,7 +233,9 @@ namespace NzbDrone.Core.LegacyMigration
             var (_, catalog, _, claimed, buildStub, _) = link;
 
             // One lookup for all the files left, so the whole series retries if the source asks for it
-            var hashes = _hashMatcher.Match(unmatched.Select(f => new HashQuery(f.LegacyId.ToString(CultureInfo.InvariantCulture), f.Path, null)).ToList());
+            var hashes = _hashMatcher.Match(
+                unmatched.Select(f => new HashQuery(f.LegacyId.ToString(CultureInfo.InvariantCulture), f.Path, null)).ToList(),
+                (step, remaining) => progress.Status(step, remaining));
 
             if (hashes.Values.Any(h => h.TryLater))
             {
@@ -304,9 +313,15 @@ namespace NzbDrone.Core.LegacyMigration
 
             if (missing.Count > 0)
             {
-                foreach (var added in _addMovieService.AddMovies(missing.Select(buildStub).ToList(), true, refreshInline: true))
+                var addedScenes = _addMovieService.AddMovies(missing.Select(buildStub).ToList(), true, refreshInline: true);
+
+                // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+                _refreshNewScenes.RefreshNewScenes(addedScenes);
+
+                foreach (var added in addedScenes)
                 {
-                    scenes[added.ForeignId] = added;
+                    // The refresh can repoint the scene, and the files are linked to what it left
+                    scenes[added.ForeignId] = _movieService.FindByForeignId(added.ForeignId) ?? added;
                 }
             }
 

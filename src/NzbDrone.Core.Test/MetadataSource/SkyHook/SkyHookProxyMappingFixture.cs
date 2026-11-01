@@ -195,6 +195,27 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void should_map_tpdb_studio_logo_to_clearlogo()
+        {
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            GivenStudioGet(new StudioResource
+            {
+                Title = "Studio",
+                ForeignIds = new ExternalIdResource { TpdbId = StudioTpdbId },
+                Images = new List<ImageResource>
+                {
+                    new() { CoverType = "Poster", Url = "https://cdn.example/poster.jpg" },
+                    new() { CoverType = "Logo", Url = "https://cdn.example/logo.png" }
+                }
+            });
+
+            var images = Subject.GetStudioInfo(StudioTpdbId).Images;
+
+            images.Single(i => i.CoverType == MediaCover.MediaCoverTypes.Clearlogo).RemoteUrl.Should().Be("https://cdn.example/logo.png");
+            images.Single(i => i.CoverType == MediaCover.MediaCoverTypes.Poster).RemoteUrl.Should().Be("https://cdn.example/poster.jpg");
+        }
+
+        [Test]
         public void should_map_tpdb_scene_foreign_id_to_bare_uuid()
         {
             SkyHookProxy.MapForeignId(MovieMetadataSource.TpdbScene, new ExternalIdResource { StashId = SceneStashId, TpdbId = SceneTpdbId })

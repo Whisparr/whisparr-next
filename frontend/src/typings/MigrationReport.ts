@@ -6,6 +6,7 @@ export type MigrationReportCategory =
   | 'NeedsAttention';
 
 export interface MigrationReportItem {
+  id: number;
   category: MigrationReportCategory;
   area: string;
   subject: string | null;

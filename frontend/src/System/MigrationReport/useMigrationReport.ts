@@ -23,6 +23,31 @@ const useMigrationReport = () => {
 
 export default useMigrationReport;
 
+export const useRemoveMigrationReportItem = () => {
+  const queryClient = useQueryClient();
+
+  const { mutate, isPending, error } = useApiMutation<
+    object,
+    number,
+    undefined
+  >({
+    path: (id) => `${PATH}/item/${id}`,
+    method: 'DELETE',
+    body: () => undefined,
+    mutationOptions: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: [PATH] });
+      },
+    },
+  });
+
+  return {
+    removeItem: mutate,
+    isRemoving: isPending,
+    removeError: error,
+  };
+};
+
 export const useDismissMigrationReport = () => {
   const queryClient = useQueryClient();
 

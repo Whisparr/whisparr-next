@@ -48,6 +48,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private readonly ISceneSourceSeeder _sceneSourceSeeder;
         private readonly ISkyhookPreflight _skyhookPreflight;
         private readonly IV5DatabaseFinisher _databaseFinisher;
+        private readonly ILegacyCoverCleaner _coverCleaner;
         private readonly ILifecycleService _lifecycleService;
         private readonly IAppFolderInfo _appFolderInfo;
         private readonly IOptions<PostgresOptions> _postgresOptions;
@@ -69,6 +70,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             ISceneSourceSeeder sceneSourceSeeder,
             ISkyhookPreflight skyhookPreflight,
             IV5DatabaseFinisher databaseFinisher,
+            ILegacyCoverCleaner coverCleaner,
             ILifecycleService lifecycleService,
             IAppFolderInfo appFolderInfo,
             IOptions<PostgresOptions> postgresOptions)
@@ -83,6 +85,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _sceneSourceSeeder = sceneSourceSeeder;
             _skyhookPreflight = skyhookPreflight;
             _databaseFinisher = databaseFinisher;
+            _coverCleaner = coverCleaner;
             _lifecycleService = lifecycleService;
             _appFolderInfo = appFolderInfo;
             _postgresOptions = postgresOptions;
@@ -330,12 +333,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 SetStep(current, SetupStepState.Done);
                 current = SetupStep.Finish;
 
+                var coverCleanup = PrepareCoverCleanup(built);
+
                 if (built.SqlitePartialPath != null)
                 {
                     PutSqliteDatabaseInPlace(built.SqlitePartialPath);
                 }
 
                 committed = true;
+
+                // Only now: a failed run leaves the legacy install's covers as they were
+                _coverCleaner.Archive(coverCleanup);
+
                 SetStep(current, SetupStepState.Done);
 
                 CompleteRun(targets);
@@ -460,6 +469,13 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             _databaseFinisher.Finish(connection, transaction, choice.SceneSource, choice.MovieSource, state);
 
             transaction.Commit();
+        }
+
+        private LegacyCoverCleanup PrepareCoverCleanup(BuiltDatabases built)
+        {
+            using var connection = OpenMain(built);
+
+            return _coverCleaner.Prepare(connection);
         }
 
         private static void PutSqliteDatabaseInPlace(string partialPath)

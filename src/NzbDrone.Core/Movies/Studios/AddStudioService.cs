@@ -140,7 +140,7 @@ namespace NzbDrone.Core.Movies.Studios
 
                 throw new ValidationException(new List<ValidationFailure>
                                               {
-                                                  new ValidationFailure("StashId", $"A studio with this ID was not found.", newStudio.ForeignId)
+                                                  new ValidationFailure("StashId", $"A studio with this ID was not found: {newStudio.ForeignId}", newStudio.ForeignId)
                                               });
             }
 

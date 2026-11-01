@@ -11,6 +11,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Migration.Setup;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser;
@@ -26,8 +27,10 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ILegacyMovieSeedRepository _seedRepository;
         private readonly ISearchForNewMovie _searchForNewMovie;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
         private readonly IImportlFileService _importFileService;
+        private readonly ILegacyImportFileLocator _importFileLocator;
         private readonly ILegacyFileLinker _fileLinker;
         private readonly ILegacyMigrationService _migrationService;
         private readonly IDiskProvider _diskProvider;
@@ -38,8 +41,10 @@ namespace NzbDrone.Core.LegacyMigration
         public ErosSeedImportRunner(ILegacyMovieSeedRepository seedRepository,
                                     ISearchForNewMovie searchForNewMovie,
                                     IAddMovieService addMovieService,
+                                    IRefreshNewScenes refreshNewScenes,
                                     IMovieService movieService,
                                     IImportlFileService importFileService,
+                                    ILegacyImportFileLocator importFileLocator,
                                     ILegacyFileLinker fileLinker,
                                     ILegacyMigrationService migrationService,
                                     IDiskProvider diskProvider,
@@ -50,8 +55,10 @@ namespace NzbDrone.Core.LegacyMigration
             _seedRepository = seedRepository;
             _searchForNewMovie = searchForNewMovie;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
             _importFileService = importFileService;
+            _importFileLocator = importFileLocator;
             _fileLinker = fileLinker;
             _migrationService = migrationService;
             _diskProvider = diskProvider;
@@ -75,6 +82,8 @@ namespace NzbDrone.Core.LegacyMigration
         public LegacyImportPass RunMovieSeeds(LegacyMigrationState state, ILegacyImportProgress progress, bool recordOutages)
         {
             var seeds = _seedRepository.All().ToList();
+
+            progress.PhaseTotal(Area, seeds.Count);
 
             var alreadyResolved = seeds.Count(s => s.Resolved);
 
@@ -161,10 +170,11 @@ namespace NzbDrone.Core.LegacyMigration
                 return;
             }
 
-            var importFile = seed.ImportFileId.HasValue ? FindImportFile(_importFileService, seed.ImportFileId.Value) : null;
+            var importFile = seed.ImportFileId.HasValue ? _importFileLocator.Locate(FindImportFile(_importFileService, seed.ImportFileId.Value)) : null;
             var movie = _movieService.FindByForeignId(candidate.ForeignId);
+            var isNew = movie == null;
 
-            if (movie == null)
+            if (isNew)
             {
                 candidate.Monitored = seed.Monitored;
                 candidate.QualityProfileId = seed.QualityProfileId;
@@ -191,6 +201,12 @@ namespace NzbDrone.Core.LegacyMigration
             if (seed.ImportFileId.HasValue)
             {
                 LinkImportFile(seed, movie, importFile);
+            }
+
+            // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+            if (isNew)
+            {
+                _refreshNewScenes.RefreshNewScenes(new List<Movie> { movie });
             }
 
             MarkResolved(seed);
@@ -241,6 +257,10 @@ namespace NzbDrone.Core.LegacyMigration
             {
                 file.Size = _diskProvider.GetFileSize(importFile.Path);
                 file.DateAdded = DateTime.UtcNow;
+
+                // The seed doesn't carry the legacy file's details, and these columns are required
+                file.Quality = QualityParser.ParseQuality(Path.GetFileName(importFile.Path));
+                file.Languages = new List<Language> { Language.Unknown };
             });
 
             if (outcome == LinkOutcome.Linked || outcome == LinkOutcome.AlreadyLinked)
@@ -251,11 +271,14 @@ namespace NzbDrone.Core.LegacyMigration
             }
 
             // The file stays parked in the import list either way
-            var detail = outcome == LinkOutcome.SceneHasOtherFile
-                ? $"Scene already has a file; legacy also had {importFile.Path}"
-                : $"File could not be linked: {outcome}";
+            if (outcome == LinkOutcome.SceneHasOtherFile)
+            {
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, $"Scene already has a file; legacy also had {importFile.Path}");
 
-            _migrationService.Report(LegacyReportCategory.NeedsAttention, Area, importFile.Path, detail);
+                return;
+            }
+
+            _migrationService.ReportUnlinkedFile(movie.Id, Area, importFile.Path, $"File could not be linked: {outcome}");
         }
 
         private void ReportUnmatched(LegacyMigrationState state, LegacyMovieSeed seed)

@@ -55,6 +55,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Mocker.GetMock<ILegacyMovieSeedRepository>().Setup(r => r.All()).Returns(() => _seeds);
             Mocker.GetMock<IImportlFileService>().Setup(s => s.Get(5)).Returns(_importFile);
+            Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(It.IsAny<ImportFile>())).Returns<ImportFile>(f => f);
             Mocker.GetMock<IDiskProvider>().Setup(d => d.GetFileSize(_path)).Returns(1234);
             Mocker.GetMock<IAddMovieService>()
                   .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
@@ -244,8 +245,52 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            VerifyNeedsAttention(Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.ReportUnlinkedFile(It.IsAny<int>(), "Movies", _path, "File could not be linked: Missing"), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
+        }
+
+        [Test]
+        public void linked_file_gets_the_required_quality_and_languages()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+
+            var file = new MovieFile();
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), _path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Callback<Movie, string, Action<MovieFile>, MatchTier>((_, _, fill, _) => fill(file))
+                  .Returns(LinkOutcome.Linked);
+
+            Run();
+
+            file.Quality.Should().NotBeNull();
+            file.Languages.Should().NotBeEmpty();
+        }
+
+        [Test]
+        public void new_movie_is_refreshed()
+        {
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>().Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Count == 1)), Times.Once());
+        }
+
+        [Test]
+        public void links_the_file_where_it_really_is()
+        {
+            var actual = _path + ".renamed.mp4";
+
+            GivenSearch("tmdb:123", Candidate("The Big Movie", 2020));
+            Mocker.GetMock<ILegacyImportFileLocator>()
+                  .Setup(l => l.Locate(_importFile))
+                  .Returns(new ImportFile { Id = 5, Path = actual });
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), actual, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
         }
 
         [Test]

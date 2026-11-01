@@ -6,6 +6,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
@@ -121,6 +122,83 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Never());
             Mocker.GetMock<IManageCommandQueue>()
                   .Verify(c => c.Push(It.IsAny<GenerateOsHashesCommand>(), CommandPriority.Low, CommandTrigger.Unspecified), Times.Once());
+        }
+
+        private (RootFolder Root, string Parked) GivenParkedFile()
+        {
+            var root = new RootFolder { Id = 7, Path = @"C:\TV".AsOsAgnostic() };
+            var importFolder = Path.Combine(root.Path, "import");
+            var parked = Path.Combine(root.Path, "Studio", "scene.mp4");
+
+            SetupRefresh(root, importFolder, Array.Empty<string>(), parked);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(root.Path)).Returns(true);
+
+            return (root, parked);
+        }
+
+        private void VerifyDeletedCount(int count)
+        {
+            Mocker.GetMock<IImportFileRepository>()
+                  .Verify(s => s.DeleteMany(It.Is<List<int>>(ids => ids.Count == count)), Times.Once());
+        }
+
+        [Test]
+        public void refresh_should_keep_a_file_parked_outside_the_import_folder()
+        {
+            var (_, parked) = GivenParkedFile();
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(parked, It.IsAny<StringComparison>())).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(parked)).Returns(true);
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(0);
+        }
+
+        [Test]
+        public void refresh_should_forget_a_parked_file_that_is_gone()
+        {
+            GivenParkedFile();
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(1);
+        }
+
+        [Test]
+        public void refresh_should_keep_parked_files_when_the_root_folder_is_unreachable()
+        {
+            var (root, _) = GivenParkedFile();
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(root.Path)).Returns(false);
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(0);
+        }
+
+        [Test]
+        public void refresh_should_keep_a_dead_parked_file_while_a_migration_runs()
+        {
+            GivenParkedFile();
+            Mocker.GetMock<ILegacyMigrationService>().Setup(s => s.IsIncomplete()).Returns(true);
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(0);
+        }
+
+        [Test]
+        public void refresh_should_still_forget_a_file_gone_from_the_import_folder()
+        {
+            var root = new RootFolder { Id = 7, Path = @"C:\TV".AsOsAgnostic() };
+            var importFolder = Path.Combine(root.Path, "import");
+
+            SetupRefresh(root, importFolder, Array.Empty<string>(), Path.Combine(importFolder, "gone.mp4"));
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(importFolder)).Returns(true);
+
+            Subject.Refresh(7);
+
+            VerifyDeletedCount(1);
         }
 
         [Test]

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.LegacyMigration.Events;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 
 namespace NzbDrone.Core.LegacyMigration
@@ -15,10 +17,12 @@ namespace NzbDrone.Core.LegacyMigration
         void MarkCompleted();
         void DismissReport();
         void Report(LegacyReportCategory category, string area, string subject, string detail, int count = 1);
+        void ReportUnlinkedFile(int movieId, string area, string path, string detail);
         List<LegacyMigrationReportItem> GetReport();
+        void RemoveReportItem(int id);
     }
 
-    public class LegacyMigrationService : ILegacyMigrationService
+    public class LegacyMigrationService : ILegacyMigrationService, IHandle<MovieFileAddedEvent>
     {
         private const string PhaseDone = "Done";
         private const string IncompleteKey = "incomplete";
@@ -114,9 +118,47 @@ namespace NzbDrone.Core.LegacyMigration
             });
         }
 
+        public void ReportUnlinkedFile(int movieId, string area, string path, string detail)
+        {
+            _reportRepository.Insert(new LegacyMigrationReportItem
+            {
+                Category = LegacyReportCategory.NeedsAttention,
+                Area = area,
+                Subject = path,
+                Detail = detail,
+                Count = 1,
+                MovieId = movieId
+            });
+        }
+
         public List<LegacyMigrationReportItem> GetReport()
         {
             return _reportRepository.All().ToList();
+        }
+
+        public void RemoveReportItem(int id)
+        {
+            _reportRepository.Delete(id);
+        }
+
+        // A report row about a file is settled once that file is on a scene, or the scene it was meant for has a file:
+        // the legacy path can be out of date, so the file a scan finds may go by another name.
+        // MovieId 0 is an unmapped file: added to the table, but still nobody's.
+        public void Handle(MovieFileAddedEvent message)
+        {
+            var movieFile = message.MovieFile;
+
+            if (movieFile.MovieId == 0)
+            {
+                return;
+            }
+
+            _reportRepository.DeleteByMovieId(movieFile.MovieId);
+
+            if (movieFile.Path.IsNotNullOrWhiteSpace())
+            {
+                _reportRepository.DeleteBySubject(movieFile.Path);
+            }
         }
     }
 }

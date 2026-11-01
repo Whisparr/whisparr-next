@@ -16,6 +16,9 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
     {
         // One entry per input key, never throws; a failed batch yields TryLater for its keys.
         Dictionary<string, FingerprintLookupResult> Lookup(IReadOnlyCollection<FileFingerprint> files, bool localOnly);
+
+        // batchDone gets how many files each finished batch held, for callers showing progress on a long lookup.
+        Dictionary<string, FingerprintLookupResult> Lookup(IReadOnlyCollection<FileFingerprint> files, bool localOnly, Action<int> batchDone);
     }
 
     public class FingerprintLookupClient : IFingerprintLookupClient
@@ -56,6 +59,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
 
         public Dictionary<string, FingerprintLookupResult> Lookup(IReadOnlyCollection<FileFingerprint> files, bool localOnly)
         {
+            return Lookup(files, localOnly, null);
+        }
+
+        public Dictionary<string, FingerprintLookupResult> Lookup(IReadOnlyCollection<FileFingerprint> files, bool localOnly, Action<int> batchDone)
+        {
             var results = new Dictionary<string, FingerprintLookupResult>();
 
             if (files == null || files.Count == 0)
@@ -92,6 +100,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Fingerprints
                         ? result
                         : Result(key, FingerprintLookupStatus.TryLater);
                 }
+
+                batchDone?.Invoke(batch.Length);
             }
 
             return results;

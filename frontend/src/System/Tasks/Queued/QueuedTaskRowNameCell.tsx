@@ -65,7 +65,13 @@ export default function QueuedTaskRowNameCell(
 
           <div className={styles.progressText}>
             {translate('CommandProgress', {
-              phase: progress.phase,
+              phase:
+                progress.phaseRemaining == null
+                  ? progress.phase
+                  : translate('CommandProgressPhaseRemaining', {
+                      phase: progress.phase,
+                      remaining: formatNumber(progress.phaseRemaining),
+                    }),
               done: formatNumber(progress.done),
               total: formatNumber(progress.total),
               percent: progress.percent.toFixed(1),

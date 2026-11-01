@@ -19,6 +19,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ISceneCatalogImporter _catalogImporter;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IAddMovieService _addMovieService;
+        private readonly IRefreshNewScenes _refreshNewScenes;
         private readonly IMovieService _movieService;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
@@ -31,6 +32,7 @@ namespace NzbDrone.Core.LegacyMigration
                                   ISceneCatalogImporter catalogImporter,
                                   IProvideMovieInfo movieInfo,
                                   IAddMovieService addMovieService,
+                                  IRefreshNewScenes refreshNewScenes,
                                   IMovieService movieService,
                                   ILegacyFileLinker fileLinker,
                                   ILegacyMigrationService migrationService,
@@ -42,6 +44,7 @@ namespace NzbDrone.Core.LegacyMigration
             _catalogImporter = catalogImporter;
             _movieInfo = movieInfo;
             _addMovieService = addMovieService;
+            _refreshNewScenes = refreshNewScenes;
             _movieService = movieService;
         }
 
@@ -103,14 +106,19 @@ namespace NzbDrone.Core.LegacyMigration
 
             var missing = episodeByUuid.Keys.Where(uuid => _movieService.FindByForeignId(uuid) == null).ToList();
 
-            if (missing.Count > 0)
-            {
-                _addMovieService.AddMovies(missing.Select(BuildStub).ToList(), true, refreshInline: true);
-            }
+            var added = missing.Count > 0
+                ? _addMovieService.AddMovies(missing.Select(BuildStub).ToList(), true, refreshInline: true)
+                : new List<Movie>();
 
             foreach (var file in files)
             {
                 LinkFile(series, file, episodes, sceneUuids, progress);
+            }
+
+            // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+            if (added?.Count > 0)
+            {
+                _refreshNewScenes.RefreshNewScenes(added);
             }
 
             // Linked files are done and stay so. Finishing now would leave scenes of the pages given up on to the first

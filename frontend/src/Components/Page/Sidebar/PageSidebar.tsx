@@ -62,6 +62,10 @@ let LINKS: SidebarItem[] = [
         title: () => translate('ImportScenes'),
         to: '/add/import/scenes',
       },
+      {
+        title: () => translate('UnmappedFiles'),
+        to: '/unmapped',
+      },
     ],
   },
 

@@ -11,6 +11,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
@@ -36,6 +37,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IRootFolderRepository _rootFolderRepository;
         private readonly IQualityProfileRepository _profileRepository;
         private readonly IImportFileRepository _importFileRepository;
+        private readonly ILegacyMigrationService _legacyMigrationService;
         private readonly IDiskProvider _diskProvider;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IMovieRepository _movieRepository;
@@ -69,8 +71,10 @@ namespace NzbDrone.Core.RootFolders
                                     IConfigService configService,
                                     INamingConfigService namingConfigService,
                                     ICacheManager cacheManager,
+                                    ILegacyMigrationService legacyMigrationService,
                                     Logger logger)
         {
+            _legacyMigrationService = legacyMigrationService;
             _rootFolderRepository = rootFolderRepository;
             _profileRepository = profileRepository;
             _importFileRepository = importFileRepository;
@@ -223,7 +227,7 @@ namespace NzbDrone.Core.RootFolders
         {
             var rootFolder = _rootFolderRepository.Get(id);
 
-            rootFolder.ImportFiles = _importFileRepository.FindByRootFolderId(rootFolder.Id);
+            rootFolder.ImportFiles = _importFileRepository.FindActiveByRootFolderId(rootFolder.Id);
 
             return rootFolder;
         }
@@ -242,7 +246,7 @@ namespace NzbDrone.Core.RootFolders
                     rootFolder.Accessible = true;
                     rootFolder.FreeSpace = _diskProvider.GetAvailableSpace(rootFolder.Path);
                     rootFolder.TotalSpace = _diskProvider.GetTotalSize(rootFolder.Path);
-                    rootFolder.ImportFiles = _importFileRepository.FindByRootFolderId(rootFolder.Id);
+                    rootFolder.ImportFiles = _importFileRepository.FindActiveByRootFolderId(rootFolder.Id);
                 }
             }).Wait(timeout ? 5000 : -1);
         }
@@ -301,7 +305,10 @@ namespace NzbDrone.Core.RootFolders
             }).ToList();
 
             var toAdd = newUnmappedFiles.Where(n => !existingUnmappedFiles.Any(e => e.Path.PathEquals(n.Path))).ToList();
-            var toRemove = existingUnmappedFiles.Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path))).ToList();
+            var toRemove = existingUnmappedFiles
+                .Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path)))
+                .Where(e => importFolder.IsParentPath(e.Path) || CanForgetOutsideImportFolder(e, rootFolder))
+                .ToList();
 
             _logger.ProgressInfo("Scanning Adding {0} new files to the database in {1}", toAdd.Count, importFolder);
             _logger.ProgressInfo("Scanning Cleaning {0} old files from the database in {1}", toRemove.Count, importFolder);
@@ -320,6 +327,14 @@ namespace NzbDrone.Core.RootFolders
 
             _logger.ProgressInfo("Scanning {0} Completed", importFolder);
             return rootFolder;
+        }
+
+        // A migration parks files where they already live, and only the import folder is scanned, so missing from the
+        // scan says nothing about them. A running migration still needs even a dead row to find the file by.
+        // Every file of an unreachable root folder looks gone, so that says nothing either.
+        private bool CanForgetOutsideImportFolder(ImportFile file, RootFolder rootFolder)
+        {
+            return !_legacyMigrationService.IsIncomplete() && _diskProvider.FolderExists(rootFolder.Path) && !_diskProvider.FileExists(file.Path);
         }
 
         private string GetImportFolder(string folder)

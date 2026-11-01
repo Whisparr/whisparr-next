@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using DryIoc;
 using FluentAssertions;
+using FluentValidation;
+using FluentValidation.Results;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
@@ -173,10 +175,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Returns<string, string>((id, _) => new ScenePage { Items = _catalogs.GetValueOrDefault(id) ?? new List<ScenePageItem>() });
 
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
-                  .Returns<IReadOnlyCollection<HashQuery>>(queries => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
+                  .Returns<IReadOnlyCollection<HashQuery>, Action<string, long>>((queries, _) => queries.ToDictionary(q => q.Key, q => _hashes.GetValueOrDefault(q.Path) ?? new HashMatch(null, null, false)));
 
             // The real service throws for a row that is gone
+            Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(It.IsAny<ImportFile>())).Returns<ImportFile>(f => f);
             Mocker.GetMock<IImportlFileService>()
                   .Setup(s => s.Get(It.IsAny<int>()))
                   .Returns<int>(id => _importFiles.TryGetValue(id, out var file) ? file : throw new ModelNotFoundException(typeof(ImportFile), id));
@@ -366,6 +369,112 @@ namespace NzbDrone.Core.Test.LegacyMigration
             seed.NewForeignId.Should().Be("new-stash-s1");
         }
 
+        private void GivenDeadStudio(string id)
+        {
+            Mocker.GetMock<IAddStudioService>()
+                  .Setup(s => s.AddStudio(It.Is<Studio>(x => x.ForeignId == id), It.IsAny<bool>()))
+                  .Throws(new ValidationException(new List<ValidationFailure> { new("StashId", "A studio with this ID was not found: " + id, id) }));
+        }
+
+        private void GivenDeadPerformer(string id)
+        {
+            Mocker.GetMock<IAddPerformerService>()
+                  .Setup(s => s.AddPerformer(It.Is<Performer>(x => x.ForeignId == id), It.IsAny<bool>()))
+                  .Throws(new ValidationException(new List<ValidationFailure> { new("StashId", "A performer with this ID was not found: " + id, id) }));
+        }
+
+        [Test]
+        public void studio_with_a_dead_cross_reference_is_found_by_name()
+        {
+            var seed = GivenStudioSeed("stash-s1", "All Her Luv");
+            _studioMap["stash-s1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "All Her Luv"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            _studios.Should().ContainKey("live-id");
+            seed.NewForeignId.Should().Be("live-id");
+            seed.Resolved.Should().BeTrue();
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void studio_with_a_dead_cross_reference_and_no_name_match_is_reported()
+        {
+            var seed = GivenStudioSeed("stash-s1", "Lost Studio");
+            _studioMap["stash-s1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "Lost Studio"))
+                  .Returns(new IdMapResult(null, IdMapMethod.None));
+
+            Run();
+
+            VerifyReport("Studios", "Lost Studio", "Studio not found on TPDB", Times.Once());
+            seed.NewForeignId.Should().BeNull();
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void studio_with_a_dead_tpdb_id_from_eros_is_found_by_name()
+        {
+            var seed = GivenStudioSeed("stash-s1", "All Her Luv", tpdbId: "dead-id");
+            GivenDeadStudio("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindStudio(SceneMetadataType.Tpdb, "All Her Luv"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            seed.NewForeignId.Should().Be("live-id");
+            _studios.Should().ContainKey("live-id");
+        }
+
+        [Test]
+        public void performer_with_a_dead_cross_reference_is_found_by_name()
+        {
+            var seed = GivenPerformerSeed("stash-p1", "Jane Doe");
+            _performerMap["stash-p1"] = new IdMapResult("dead-id", IdMapMethod.Mapping);
+            GivenDeadPerformer("dead-id");
+            Mocker.GetMock<ISceneSourceIdMapper>()
+                  .Setup(m => m.FindPerformer(SceneMetadataType.Tpdb, "Jane Doe"))
+                  .Returns(new IdMapResult("live-id", IdMapMethod.Title));
+
+            Run();
+
+            _performers.Should().ContainKey("live-id");
+            seed.NewForeignId.Should().Be("live-id");
+            seed.Resolved.Should().BeTrue();
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void studio_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenStudioSeed("stash-s1", "Twin Studio");
+            _studioMap["stash-s1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Studios", "Twin Studio", "More than one studio on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
+        }
+
+        [Test]
+        public void performer_with_an_ambiguous_name_says_so()
+        {
+            var seed = GivenPerformerSeed("stash-p1", "Twin Performer");
+            _performerMap["stash-p1"] = new IdMapResult(null, IdMapMethod.Ambiguous);
+
+            Run();
+
+            VerifyReport("Performers", "Twin Performer", "More than one performer on TPDB has this name", Times.Once());
+            seed.Resolved.Should().BeTrue();
+        }
+
         [Test]
         public void studio_unmapped_reported()
         {
@@ -432,6 +541,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             Mocker.GetMock<ILegacyMigrationService>()
                   .Verify(s => s.Report(LegacyReportCategory.LeftBehind, "Scenes", owner, "TPDB scenes with no Eros twin, left unmonitored", count), times);
+        }
+
+        [Test]
+        public void catalog_and_monitoring_steps_show_on_the_task()
+        {
+            GivenStudioSeed("stash-s1", "Studio");
+            _studioMap["stash-s1"] = new IdMapResult("new-stash-s1", IdMapMethod.Mapping);
+
+            Run();
+
+            _progress.Verify(p => p.Status("Importing catalogs", 1), Times.Once());
+            _progress.Verify(p => p.Status("Restoring monitoring", null), Times.Once());
         }
 
         [Test]
@@ -902,7 +1023,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             pass.WaitingRetry.Should().Be(1);
             _sceneSeeds[0].Resolved.Should().BeFalse();
             _sceneSeeds[0].Attempts.Should().Be(0);
-            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()), Times.Never());
+            Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
             Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
         }
@@ -1026,7 +1147,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
             seed.Resolved.Should().BeTrue();
         }
 
@@ -1056,7 +1177,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var pass = Run();
 
             pass.Pending.Should().Be(0);
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", $"Legacy StashDB id legacy-scene-1; file: {FilePath(seed)}", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
@@ -1097,6 +1218,123 @@ namespace NzbDrone.Core.Test.LegacyMigration
             second.Resolved.Should().BeTrue();
         }
 
+        private void GivenSceneSearch(params (string Id, string Title, DateTime? Date)[] results)
+        {
+            Mocker.GetMock<ISearchForNewMovie>()
+                  .Setup(s => s.SearchForNewScene("Big Scene"))
+                  .Returns(results.Select(r => new Movie { MovieMetadata = new MovieMetadata { ForeignId = r.Id, Title = r.Title, ReleaseDateUtc = r.Date } }).ToList());
+        }
+
+        [Test]
+        public void scene_filed_under_another_studio_is_found_by_exact_title_and_date()
+        {
+            GivenSceneSeed(fileId: 5);
+            GivenSceneSearch(("other-studio-scene", "Big Scene", new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Single().ForeignId == "other-studio-scene")), Times.Once());
+            VerifyNoReports();
+        }
+
+        [Test]
+        public void search_with_another_date_is_not_a_match()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            GivenSceneSearch(("other-scene", "Big Scene", new DateTime(2021, 5, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+            Run();
+
+            VerifyReport("Scenes", "Big Scene (2020-05-01)", $"Legacy StashDB id legacy-scene-1; file: {FilePath(seed)}", Times.Once());
+        }
+
+        [Test]
+        public void search_with_two_exact_results_is_not_a_match()
+        {
+            GivenSceneSeed(fileId: 5);
+            var date = new DateTime(2020, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+            GivenSceneSearch(("a", "Big Scene", date), ("b", "Big Scene", date));
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>().Verify(r => r.RefreshNewScenes(It.IsAny<List<Movie>>()), Times.Never());
+        }
+
+        [Test]
+        public void unmonitored_scene_without_a_file_is_not_searched_for()
+        {
+            GivenSceneSeed();
+
+            Run();
+
+            Mocker.GetMock<ISearchForNewMovie>().Verify(s => s.SearchForNewScene(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void unmatched_scene_names_its_studio()
+        {
+            GivenStudioSeed("stash-s1", "Vixen");
+            GivenSceneSeed(studioLegacyId: "stash-s1");
+
+            Run();
+
+            VerifyReport("Scenes", "Vixen: Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
+        }
+
+        [Test]
+        public void new_scene_is_refreshed_after_its_file_is_linked()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            _hashes[FilePath(seed)] = new HashMatch("tpdb-scene-9", "h1", false);
+
+            var linked = false;
+
+            Mocker.GetMock<ILegacyFileLinker>()
+                  .Setup(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()))
+                  .Callback(() => linked = true)
+                  .Returns(LinkOutcome.Linked);
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Setup(r => r.RefreshNewScenes(It.IsAny<List<Movie>>()))
+                  .Callback(() => linked.Should().BeTrue());
+
+            Run();
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Single().ForeignId == "tpdb-scene-9")), Times.Once());
+        }
+
+        [Test]
+        public void hashes_the_file_where_it_really_is()
+        {
+            var seed = GivenSceneSeed(fileId: 5);
+            var stale = _importFiles[seed.ImportFileId.Value];
+            var actual = new ImportFile { Id = stale.Id, Path = stale.Path + ".renamed.mp4" };
+
+            Mocker.GetMock<ILegacyImportFileLocator>().Setup(l => l.Locate(stale)).Returns(actual);
+
+            Run();
+
+            Mocker.GetMock<ILegacyHashMatcher>()
+                  .Verify(m => m.Match(It.Is<IReadOnlyCollection<HashQuery>>(q => q.Single().Path == actual.Path), It.IsAny<Action<string, long>>()), Times.Once());
+        }
+
+        [Test]
+        public void hashing_progress_reaches_the_task()
+        {
+            GivenSceneSeed(fileId: 5);
+
+            Mocker.GetMock<ILegacyHashMatcher>()
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
+                  .Callback<IReadOnlyCollection<HashQuery>, Action<string, long>>((_, report) => report("Hashing files", 3))
+                  .Returns(new Dictionary<string, HashMatch>());
+
+            Run();
+
+            _progress.Verify(p => p.Status("Hashing files", 3), Times.Once());
+        }
+
         [Test]
         public void other_link_outcome_keeps_the_file_and_reports()
         {
@@ -1108,7 +1346,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            VerifyReport("Scenes", FilePath(seed), "File could not be linked: Missing", Times.Once());
+            Mocker.GetMock<ILegacyMigrationService>()
+                  .Verify(s => s.ReportUnlinkedFile(It.IsAny<int>(), "Scenes", FilePath(seed), "File could not be linked: Missing"), Times.Once());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.Remove(It.IsAny<int>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }
@@ -1138,7 +1377,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Run();
 
             VerifyMoviesAdded(Times.Once());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }
@@ -1173,7 +1412,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             pass.Pending.Should().Be(0);
             VerifyMoviesAdded(Times.Never());
-            VerifyReport("Scenes", "Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
+            VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Parked file no longer exists", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Never());
             seed.Resolved.Should().BeTrue();
         }
@@ -1250,7 +1489,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             var seed = GivenSceneSeed(fileId: 5);
             var noFile = GivenSceneSeed();
             Mocker.GetMock<ILegacyHashMatcher>()
-                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>()))
+                  .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
                   .Throws(new TimeoutException("down"));
 
             var pass = Run();

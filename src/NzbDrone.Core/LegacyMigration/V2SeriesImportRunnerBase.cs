@@ -78,6 +78,8 @@ namespace NzbDrone.Core.LegacyMigration
             var pendingFiles = files.Where(f => !f.Done).ToList();
 
             progress.Total(pendingSeries.Count + pendingFiles.Count);
+            progress.PhaseTotal(StudioArea, pendingSeries.Count);
+            progress.PhaseTotal(FileArea, pendingFiles.Count);
 
             var pass = new LegacyImportPass();
             var failures = new List<SeriesFailure>();

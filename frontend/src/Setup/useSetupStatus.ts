@@ -48,6 +48,7 @@ export interface SetupStatus {
   errors: string[];
   pendingEnvSwitch: boolean;
   hasUsableCredentials: boolean;
+  isDocker: boolean;
   envTargets: SetupEnvTarget[];
   defaults: {
     kind: LegacyKind;

@@ -290,7 +290,75 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Subject.Execute(new LegacyMigrationImportCommand());
 
-            Mocker.GetMock<IReportCommandProgress>().Verify(r => r.Report("Series", 1, 4, 25), Times.Once());
+            Mocker.GetMock<IReportCommandProgress>().Verify(r => r.Report("Series", 1, 4, 25, null), Times.Once());
+        }
+
+        [Test]
+        public void progress_reports_what_is_left_of_each_phase()
+        {
+            _duringPass = p =>
+            {
+                p.Total(5);
+                p.PhaseTotal("Studios", 2);
+                p.PhaseTotal("Performers", 3);
+                p.Advance("Studios");
+                p.Advance("Studios");
+                p.Advance("Performers", 2);
+            };
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            var reporter = Mocker.GetMock<IReportCommandProgress>();
+
+            reporter.Verify(r => r.Report("Studios", 1, 5, 20, 1L), Times.Once());
+            reporter.Verify(r => r.Report("Studios", 2, 5, 40, 0L), Times.Once());
+            reporter.Verify(r => r.Report("Performers", 4, 5, 80, 1L), Times.Once());
+        }
+
+        [Test]
+        public void waiting_between_passes_shows_on_the_task()
+        {
+            _passes.Enqueue(Pass(3, waiting: 3, dueIn: TimeSpan.FromMinutes(5)));
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<IReportCommandProgress>()
+                  .Verify(r => r.Report("Waiting 00:05:00 to retry", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), 3L), Times.Once());
+        }
+
+        [Test]
+        public void status_shows_the_step_without_moving_the_overall_count()
+        {
+            _duringPass = p =>
+            {
+                p.Total(4);
+                p.Advance("Performers");
+                p.Status("Hashing files", 100);
+            };
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<IReportCommandProgress>().Verify(r => r.Report("Hashing files", 1, 4, 25, 100L), Times.Once());
+        }
+
+        [Test]
+        public void a_new_pass_forgets_the_last_passes_phase_totals()
+        {
+            _duringPass = p =>
+            {
+                p.Total(2);
+                p.PhaseTotal("Studios", 2);
+                p.Total(2);
+                p.Advance("Studios");
+            };
+            _passes.Enqueue(Pass(0));
+
+            Subject.Execute(new LegacyMigrationImportCommand());
+
+            Mocker.GetMock<IReportCommandProgress>().Verify(r => r.Report("Studios", 1, 2, 50, null), Times.Once());
         }
     }
 }

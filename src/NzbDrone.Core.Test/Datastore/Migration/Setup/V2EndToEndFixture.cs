@@ -103,6 +103,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 new SceneSourceSeeder(),
                 _preflight.Object,
                 new V5DatabaseFinisher(),
+                new LegacyCoverCleaner(_folders.Object),
                 _lifecycle.Object,
                 _folders.Object,
                 Options.Create(_pgOptions ?? new PostgresOptions()));

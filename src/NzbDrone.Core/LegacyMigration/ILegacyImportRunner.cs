@@ -51,7 +51,11 @@ namespace NzbDrone.Core.LegacyMigration
     public interface ILegacyImportProgress
     {
         void Total(long total);
+        void PhaseTotal(string phase, long total);
         void Advance(string phase, long by = 1);
+
+        // Long work that finishes no item yet: shows the step and what it has left, if that's known, and leaves the overall count alone.
+        void Status(string phase, long? remaining);
     }
 
     // One per migration source kind; the import command dispatches to the one that handles the state
