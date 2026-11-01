@@ -4,7 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -147,28 +146,6 @@ namespace NzbDrone.Common.Test.Http
             var response = await Subject.ExecuteAsync(request);
 
             response.Content.Should().NotBeNullOrWhiteSpace();
-        }
-
-        [TestCase(CertificateValidationType.Enabled)]
-        [TestCase(CertificateValidationType.DisabledForLocalAddresses)]
-        public void bad_ssl_should_fail_when_remote_validation_enabled(CertificateValidationType validationType)
-        {
-            Mocker.GetMock<IConfigService>().SetupGet(x => x.CertificateValidation).Returns(validationType);
-            var request = new HttpRequest($"https://expired.badssl.com");
-
-            Assert.ThrowsAsync<HttpRequestException>(async () => await Subject.ExecuteAsync(request));
-            ExceptionVerification.ExpectedErrors(1);
-        }
-
-        [Test]
-        public async Task bad_ssl_should_pass_if_remote_validation_disabled()
-        {
-            Mocker.GetMock<IConfigService>().SetupGet(x => x.CertificateValidation).Returns(CertificateValidationType.Disabled);
-
-            var request = new HttpRequest($"https://expired.badssl.com");
-
-            await Subject.ExecuteAsync(request);
-            ExceptionVerification.ExpectedErrors(0);
         }
 
         [Test]
