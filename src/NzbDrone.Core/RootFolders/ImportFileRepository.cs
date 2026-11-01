@@ -10,6 +10,9 @@ namespace NzbDrone.Core.RootFolders
         List<ImportFile> FindByRootFolderId(int rootFolderId);
         List<ImportFile> FindActiveByRootFolderId(int rootFolderId);
         ImportFile FindByPath(string path);
+
+        // Unlike Get(ids), leaves out ids that are no longer stored instead of throwing
+        List<ImportFile> FindByIds(IEnumerable<int> ids);
         List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit);
         List<ImportFile> GetFilesNeedingPHash(int afterId, int limit);
         void SaveOsHashes(IList<ImportFile> importFiles);
@@ -42,6 +45,13 @@ namespace NzbDrone.Core.RootFolders
         public ImportFile FindByPath(string path)
         {
             return Query(x => x.Path == path).FirstOrDefault();
+        }
+
+        public List<ImportFile> FindByIds(IEnumerable<int> ids)
+        {
+            var distinctIds = ids.Distinct().ToList();
+
+            return distinctIds.Count == 0 ? new List<ImportFile>() : Query(x => distinctIds.Contains(x.Id));
         }
 
         public List<ImportFile> GetFilesWithoutOsHash(int afterId, int limit)

@@ -77,6 +77,15 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.FindByPath("/import/c.mp4").Should().BeNull();
         }
 
+        [Test]
+        public void find_by_ids_should_leave_out_ids_that_are_not_stored()
+        {
+            var file = GivenStoredFile();
+
+            Subject.FindByIds(new[] { file.Id, file.Id + 100, file.Id }).Select(f => f.Id).Should().Equal(file.Id);
+            Subject.FindByIds(Array.Empty<int>()).Should().BeEmpty();
+        }
+
         private ImportFile GivenStoredFile()
         {
             var file = new ImportFile

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Localization;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
@@ -29,7 +30,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             _saved = new List<ImportFile>();
 
             Mocker.GetMock<IImportFileRepository>()
-                .Setup(r => r.Get(It.IsAny<IEnumerable<int>>()))
+                .Setup(r => r.FindByIds(It.IsAny<IEnumerable<int>>()))
                 .Returns((IEnumerable<int> ids) => ids.Where(_files.ContainsKey).Select(i => _files[i]).ToList());
 
             Mocker.GetMock<IImportFileRepository>()
@@ -258,6 +259,46 @@ namespace NzbDrone.Core.Test.RootFolderTests
             events.Verify(e => e.PublishEvent(It.Is<UnmappedFileMatchCheckedEvent>(m => m.File.Id == 1 && m.File.TopMatch.ForeignId == "one")), Times.Once);
             events.Verify(e => e.PublishEvent(It.Is<UnmappedFileMatchCheckedEvent>(m => m.File.Id == 2 && m.File.TopMatch == null)), Times.Once);
             events.Verify(e => e.PublishEvent(It.IsAny<UnmappedFileMatchCheckedEvent>()), Times.Exactly(2));
+        }
+
+        [Test]
+        public void should_skip_an_id_that_is_no_longer_stored_and_search_the_rest()
+        {
+            GivenFile(1);
+            GivenFile(3);
+            GivenSuggestions(1, Suggestion("one"));
+            GivenSuggestions(3, Suggestion("three"));
+
+            Subject.Execute(Command(1, 2, 3));
+
+            _saved.Select(f => f.Id).Should().Equal(1, 3);
+            Mocker.GetMock<IUnmappedFileService>().Verify(s => s.Suggest(2, null, ItemType.Scene), Times.Never);
+        }
+
+        [Test]
+        public void should_treat_a_row_that_vanishes_before_its_search_as_a_skip_not_a_failure()
+        {
+            foreach (var id in new[] { 1, 2, 3, 4 })
+            {
+                GivenFile(id);
+            }
+
+            for (var id = 1; id <= 3; id++)
+            {
+                Mocker.GetMock<IUnmappedFileService>()
+                    .Setup(s => s.Suggest(id, null, ItemType.Scene))
+                    .Throws(new ModelNotFoundException(typeof(ImportFile), id));
+            }
+
+            GivenSuggestions(4, Suggestion("four"));
+
+            var action = () => Subject.Execute(Command(1, 2, 3, 4));
+
+            action.Should().NotThrow();
+            _saved.Select(f => f.Id).Should().Equal(4);
+            Mocker.GetMock<ILocalizationService>().Verify(
+                l => l.GetLocalizedString("FindUnmappedFileMatchesComplete", It.Is<Dictionary<string, object>>(t => (int)t["checked"] == 1 && (int)t["failed"] == 0)),
+                Times.Once);
         }
 
         [Test]

@@ -332,8 +332,9 @@ function updatePagedItem(queryKey: string, updatedItem: MovieResource) {
 
 // Patches one row across every cached page of the unmapped files list as a match
 // job finishes it, so a page of pills fills in without a refetch per file. The
-// server omits a null `match`, so the update's own value (or its absence) wins
-// over the cached one; `exists` stays as cached unless the update carries it.
+// server omits a null `match`, so the update's own value (or its absence) wins.
+// Only `match` is patched: the broadcast row was loaded when the job started, so
+// its other fields (dismissed, exists) may be stale.
 function updateUnmappedFileQueryCache(update: UnmappedFileUpdate) {
   queryClient.setQueriesData(
     { queryKey: [UNMAPPED_FILES_PATH] },
@@ -351,14 +352,8 @@ function updateUnmappedFileQueryCache(update: UnmappedFileUpdate) {
       }
 
       const records = [...oldData.records];
-      const current = records[index];
 
-      records[index] = {
-        ...current,
-        ...update,
-        exists: update.exists ?? current.exists,
-        match: update.match,
-      };
+      records[index] = { ...records[index], match: update.match };
 
       return { ...oldData, records };
     }

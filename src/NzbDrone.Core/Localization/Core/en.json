@@ -840,7 +840,7 @@
   "FindMatches": "Find Matches",
   "FindUnmappedFileMatchesComplete": "Checked {checked} files, {matched} matched on studio and date, {failed} failed",
   "FindUnmappedFileMatchesStopped": "Stopped after the first {count} searches failed",
-  "FingerprintCandidates":"Fingerprint candidates",
+  "FingerprintCandidates": "Fingerprint candidates",
   "FingerprintConflictRejection": "Fingerprint matches a different scene: {title}",
   "FingerprintDistance": "Distance {distance}",
   "FingerprintSubmissions": "{submissions} submissions",

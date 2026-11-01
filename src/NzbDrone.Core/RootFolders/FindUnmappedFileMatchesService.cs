@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Localization;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
@@ -51,7 +52,7 @@ namespace NzbDrone.Core.RootFolders
                 return;
             }
 
-            var files = _importFileRepository.Get(ids).ToDictionary(f => f.Id);
+            var files = _importFileRepository.FindByIds(ids).ToDictionary(f => f.Id);
             var done = 0;
             var checkedCount = 0;
             var matched = 0;
@@ -60,30 +61,26 @@ namespace NzbDrone.Core.RootFolders
 
             foreach (var id in ids)
             {
-                if (files.TryGetValue(id, out var file) && !file.Dismissed && _diskProvider.FileExists(file.Path))
+                var outcome = files.TryGetValue(id, out var file) && !file.Dismissed && _diskProvider.FileExists(file.Path)
+                    ? FindMatch(file)
+                    : Outcome.Skipped;
+
+                if (outcome == Outcome.Checked)
                 {
-                    var match = TryFindMatch(file, out var found);
+                    succeeded = true;
+                    checkedCount++;
 
-                    if (match)
+                    if (file.TopMatch != null && file.TopMatch.IsStrong())
                     {
-                        succeeded = true;
-                        checkedCount++;
-
-                        if (found?.IsStrong() == true)
-                        {
-                            matched++;
-                        }
+                        matched++;
                     }
-                    else
-                    {
-                        failed++;
+                }
+                else if (outcome == Outcome.Failed)
+                {
+                    failed++;
 
-                        // An outage would otherwise walk the whole page
-                        if (!succeeded && failed >= MaxLeadingFailures)
-                        {
-                            throw new CommandFailedException(_localizationService.GetLocalizedString("FindUnmappedFileMatchesStopped", new Dictionary<string, object> { { "count", failed } }));
-                        }
-                    }
+                    // An outage would otherwise walk the whole page
+                    StopIfOutage(failed, succeeded);
                 }
 
                 done++;
@@ -98,9 +95,17 @@ namespace NzbDrone.Core.RootFolders
             }));
         }
 
-        private bool TryFindMatch(ImportFile file, out UnmappedFileMatch found)
+        private void StopIfOutage(int failed, bool succeeded)
         {
-            found = null;
+            if (!succeeded && failed >= MaxLeadingFailures)
+            {
+                throw new CommandFailedException(_localizationService.GetLocalizedString("FindUnmappedFileMatchesStopped", new Dictionary<string, object> { { "count", failed } }));
+            }
+        }
+
+        private Outcome FindMatch(ImportFile file)
+        {
+            UnmappedFileMatch found;
 
             try
             {
@@ -108,11 +113,16 @@ namespace NzbDrone.Core.RootFolders
 
                 found = top == null ? null : ToMatch(top);
             }
+            catch (ModelNotFoundException)
+            {
+                // Removed since it was loaded, so there is nothing to check; not a failed search
+                return Outcome.Skipped;
+            }
             catch (Exception ex)
             {
                 _logger.Warn(ex, "Unable to find matches for {0}", file.Path);
 
-                return false;
+                return Outcome.Failed;
             }
 
             file.TopMatch = found;
@@ -121,7 +131,14 @@ namespace NzbDrone.Core.RootFolders
             _importFileRepository.SaveTopMatch(new List<ImportFile> { file });
             _eventAggregator.PublishEvent(new UnmappedFileMatchCheckedEvent(file));
 
-            return true;
+            return Outcome.Checked;
+        }
+
+        private enum Outcome
+        {
+            Checked,
+            Skipped,
+            Failed
         }
 
         private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion)
