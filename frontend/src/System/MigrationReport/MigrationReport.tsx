@@ -25,6 +25,7 @@ import useMigrationReport, {
   useDismissMigrationReport,
   useRemoveMigrationReportItem,
 } from './useMigrationReport';
+import styles from './MigrationReport.module.css';
 
 const CATEGORIES: {
   category: MigrationReportCategory;
@@ -178,8 +179,8 @@ function ReportRow({
   return (
     <TableRow>
       <TableRowCell>{item.area}</TableRowCell>
-      <TableRowCell>{item.subject}</TableRowCell>
-      <TableRowCell>{item.detail}</TableRowCell>
+      <TableRowCell className={styles.text}>{item.subject}</TableRowCell>
+      <TableRowCell className={styles.text}>{item.detail}</TableRowCell>
       <TableRowCell>{item.count}</TableRowCell>
       <TableRowCell>
         {searchLink ? (
