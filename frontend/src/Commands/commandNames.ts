@@ -26,3 +26,4 @@ export const STUDIO_SEARCH = 'StudiosSearch';
 export const PERFORMER_SEARCH = 'PerformersSearch';
 export const IMPORT_LIST_SYNC = 'ImportListSync';
 export const SCAN_UNMAPPED_FILES = 'ScanUnmappedFiles';
+export const FIND_UNMAPPED_FILE_MATCHES = 'FindUnmappedFileMatches';

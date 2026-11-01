@@ -75,6 +75,25 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_leave_a_known_files_stored_match_alone()
+        {
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.FindByRootFolderId(1)).Returns(new List<ImportFile>
+            {
+                new ImportFile { Id = 3, Path = "/media/Other/matched.mp4", TopMatch = new UnmappedFileMatch { ForeignId = "scene" } }
+            });
+            GivenFiles("/media/Other/matched.mp4");
+
+            Subject.Execute(new ScanUnmappedFilesCommand());
+
+            // A scan only inserts new rows and deletes linked ones, so a known row is never rewritten
+            VerifyInserted();
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.Update(It.IsAny<ImportFile>()), Times.Never);
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.UpdateMany(It.IsAny<IList<ImportFile>>()), Times.Never);
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.SaveTopMatch(It.IsAny<IList<ImportFile>>()), Times.Never);
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.DeleteMany(It.Is<List<int>>(l => l.Count > 0)), Times.Never);
+        }
+
+        [Test]
         public void should_remove_rows_for_files_linked_since()
         {
             Mocker.GetMock<IImportFileRepository>().Setup(r => r.FindByRootFolderId(1)).Returns(new List<ImportFile>

@@ -247,6 +247,7 @@ namespace NzbDrone.Core.Datastore
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<Ratings>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<Credit>>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<List<FingerprintCandidate>>());
+            SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<UnmappedFileMatch>());
             SqlMapper.AddTypeHandler(new EmbeddedDocumentConverter<HashSet<int>>());
             SqlMapper.AddTypeHandler(new OsPathConverter());
             SqlMapper.RemoveTypeMap(typeof(Guid));
