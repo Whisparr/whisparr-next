@@ -22,6 +22,10 @@ namespace NzbDrone.Core.RootFolders
         public List<FingerprintCandidate> Candidates { get; set; }
         public DateTime? CandidatesCheckedAt { get; set; }
 
+        // Null until a file is checked, and after a check that found no results (TopMatchCheckedAt tells which)
+        public UnmappedFileMatch TopMatch { get; set; }
+        public DateTime? TopMatchCheckedAt { get; set; }
+
         // Hidden from the import and unmapped lists, and kept so a scan doesn't bring the file back
         public bool Dismissed { get; set; }
     }

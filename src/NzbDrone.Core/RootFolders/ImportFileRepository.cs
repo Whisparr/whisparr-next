@@ -17,6 +17,7 @@ namespace NzbDrone.Core.RootFolders
         List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit);
         void SaveCandidates(IList<ImportFile> importFiles);
         void SaveDismissed(IList<ImportFile> importFiles);
+        void SaveTopMatch(IList<ImportFile> importFiles);
     }
 
     public class ImportFileRepository : BasicRepository<ImportFile>, IImportFileRepository
@@ -69,6 +70,11 @@ namespace NzbDrone.Core.RootFolders
         public void SaveDismissed(IList<ImportFile> importFiles)
         {
             SetFieldsWithoutEvents(importFiles, f => f.Dismissed);
+        }
+
+        public void SaveTopMatch(IList<ImportFile> importFiles)
+        {
+            SetFieldsWithoutEvents(importFiles, f => f.TopMatch, f => f.TopMatchCheckedAt);
         }
 
         public List<ImportFile> GetFilesNeedingCandidates(int afterId, int limit)

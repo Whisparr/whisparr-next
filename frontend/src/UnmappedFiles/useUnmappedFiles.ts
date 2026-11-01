@@ -5,9 +5,20 @@ import usePage from 'Helpers/Hooks/usePage';
 import usePagedApiQuery from 'Helpers/Hooks/usePagedApiQuery';
 import { useUnmappedFilesOptions } from './unmappedFilesOptionsStore';
 
-const PATH = '/unmappedfile';
+export const UNMAPPED_FILES_PATH = '/unmappedfile';
+
+const PATH = UNMAPPED_FILES_PATH;
 
 export type UnmappedItemType = 'scene' | 'movie';
+
+// Present only when the stored top suggestion matches on both studio and date
+export interface UnmappedFileMatch {
+  foreignId: string;
+  title: string;
+  studioTitle?: string;
+  releaseDate?: string;
+  hashMatch: boolean;
+}
 
 export interface UnmappedFile {
   id: number;
@@ -16,6 +27,7 @@ export interface UnmappedFile {
   name: string;
   exists: boolean;
   dismissed: boolean;
+  match?: UnmappedFileMatch;
 }
 
 export interface UnmappedFileSuggestion {

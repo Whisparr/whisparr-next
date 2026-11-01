@@ -53,6 +53,9 @@ function UnmappedFiles() {
   const executeCommand = useExecuteCommand();
   const isScanning = useCommandExecuting(commandNames.SCAN_UNMAPPED_FILES);
   const wasScanning = usePrevious(isScanning);
+  const isFindingMatches = useCommandExecuting(
+    commandNames.FIND_UNMAPPED_FILE_MATCHES
+  );
   const { mutate: dismiss, isPending: isDismissing } =
     useDismissUnmappedFiles();
 
@@ -80,6 +83,20 @@ function UnmappedFiles() {
   const handleScanPress = useCallback(() => {
     executeCommand({ name: commandNames.SCAN_UNMAPPED_FILES });
   }, [executeCommand]);
+
+  // The rows on the current page that can be searched; the job never runs on
+  // anything else, and nothing else starts it
+  const matchableIds = useMemo(
+    () => items.filter((f) => f.exists && !f.dismissed).map((f) => f.id),
+    [items]
+  );
+
+  const handleFindMatchesPress = useCallback(() => {
+    executeCommand({
+      name: commandNames.FIND_UNMAPPED_FILE_MATCHES,
+      fileIds: matchableIds,
+    });
+  }, [executeCommand, matchableIds]);
 
   const handleShowDismissedPress = useCallback(() => {
     setShowDismissed((value) => !value);
@@ -152,6 +169,14 @@ function UnmappedFiles() {
               iconName={icons.REFRESH}
               isSpinning={isScanning}
               onPress={handleScanPress}
+            />
+
+            <PageToolbarButton
+              label={translate('FindMatches')}
+              iconName={icons.SEARCH}
+              isSpinning={isFindingMatches}
+              isDisabled={isFindingMatches || !matchableIds.length}
+              onPress={handleFindMatchesPress}
             />
 
             <PageToolbarButton

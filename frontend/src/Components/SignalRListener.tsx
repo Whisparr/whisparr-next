@@ -18,6 +18,10 @@ import { NOTIFICATIONS_PATH } from 'Settings/Notifications/useNotifications';
 import { QUALITY_DEFINITIONS_PATH } from 'Settings/Quality/Definition/useQualityDefinitions';
 import { TAG_DETAILS_QUERY_KEY } from 'Tags/useTagDetails';
 import { TAGS_QUERY_KEY } from 'Tags/useTags';
+import {
+  UNMAPPED_FILES_PATH,
+  UnmappedFile,
+} from 'UnmappedFiles/useUnmappedFiles';
 import SignalRLogger from 'Utilities/SignalRLogger';
 
 type SignalRAction = 'sync' | 'created' | 'updated' | 'deleted';
@@ -34,6 +38,8 @@ interface ForeignResource {
   id: number;
   foreignId?: string;
 }
+
+type UnmappedFileUpdate = Partial<UnmappedFile> & Pick<UnmappedFile, 'id'>;
 
 interface SignalRBody {
   action?: SignalRAction;
@@ -324,6 +330,41 @@ function updatePagedItem(queryKey: string, updatedItem: MovieResource) {
   );
 }
 
+// Patches one row across every cached page of the unmapped files list as a match
+// job finishes it, so a page of pills fills in without a refetch per file. The
+// server omits a null `match`, so the update's own value (or its absence) wins
+// over the cached one; `exists` stays as cached unless the update carries it.
+function updateUnmappedFileQueryCache(update: UnmappedFileUpdate) {
+  queryClient.setQueriesData(
+    { queryKey: [UNMAPPED_FILES_PATH] },
+    (oldData: PagedQueryResponse<UnmappedFile> | undefined) => {
+      if (!oldData?.records) {
+        return oldData;
+      }
+
+      const index = oldData.records.findIndex(
+        (record) => record.id === update.id
+      );
+
+      if (index === -1) {
+        return oldData;
+      }
+
+      const records = [...oldData.records];
+      const current = records[index];
+
+      records[index] = {
+        ...current,
+        ...update,
+        exists: update.exists ?? current.exists,
+        match: update.match,
+      };
+
+      return { ...oldData, records };
+    }
+  );
+}
+
 // The calendar is a plain list keyed by its fetched range. Patch the movie in
 // place across every cached range rather than refetching -- matching the redux
 // `updateOnly` behaviour this replaces, which never added unseen movies.
@@ -567,6 +608,16 @@ function SignalRListener() {
     if (name === 'version') {
       if (body.version) {
         setVersion({ version: body.version });
+      }
+
+      return;
+    }
+
+    if (name === 'unmappedfile') {
+      if (body.action === 'updated' && body.resource) {
+        updateUnmappedFileQueryCache(
+          body.resource as unknown as UnmappedFileUpdate
+        );
       }
 
       return;

@@ -8,6 +8,20 @@
   margin-left: 8px;
 }
 
+.match {
+  margin-top: 4px;
+  color: var(--helpTextColor);
+  font-size: 12px;
+}
+
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  margin-top: 4px;
+}
+
 .actions {
   composes: cell from 'Components/Table/Cells/TableRowCell.module.css';
 

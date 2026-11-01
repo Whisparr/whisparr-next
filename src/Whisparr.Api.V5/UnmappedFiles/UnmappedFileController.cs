@@ -46,15 +46,7 @@ namespace Whisparr.Api.V5.UnmappedFiles
                 pagingSpec.FilterExpressions.Add(f => f.Path.Contains(term));
             }
 
-            return pagingSpec.ApplyToPage(_unmappedFileService.Paged, f => new UnmappedFileResource
-            {
-                Id = f.Id,
-                RootFolderId = f.RootFolderId,
-                Path = f.Path,
-                Name = f.Name,
-                Dismissed = f.Dismissed,
-                Exists = _diskProvider.FileExists(f.Path)
-            });
+            return pagingSpec.ApplyToPage(_unmappedFileService.Paged, f => f.ToResource(_diskProvider.FileExists(f.Path)));
         }
 
         [HttpGet("{id:int}/suggestions")]

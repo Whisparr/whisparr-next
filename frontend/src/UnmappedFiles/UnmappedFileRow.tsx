@@ -12,10 +12,10 @@ import { UnmappedFile } from './useUnmappedFiles';
 import styles from './UnmappedFileRow.module.css';
 
 interface UnmappedFileRowProps {
-  readonly file: UnmappedFile;
-  readonly isSelected: boolean;
-  readonly onSelectedChange: (options: SelectStateInputProps) => void;
-  readonly onDismissPress: (id: number, dismissed: boolean) => void;
+  file: UnmappedFile;
+  isSelected: boolean;
+  onSelectedChange: (options: SelectStateInputProps) => void;
+  onDismissPress: (id: number, dismissed: boolean) => void;
 }
 
 function UnmappedFileRow({
@@ -23,7 +23,7 @@ function UnmappedFileRow({
   isSelected,
   onSelectedChange,
   onDismissPress,
-}: UnmappedFileRowProps) {
+}: Readonly<UnmappedFileRowProps>) {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
   const handleLinkPress = useCallback(() => {
@@ -54,6 +54,22 @@ function UnmappedFileRow({
             {translate('Missing')}
           </Label>
         )}
+
+        {file.match ? (
+          <div className={styles.match}>
+            <div>{file.match.title}</div>
+
+            <div className={styles.labels}>
+              {file.match.hashMatch ? (
+                <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
+              ) : null}
+
+              <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
+
+              <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
+            </div>
+          </div>
+        ) : null}
       </TableRowCell>
 
       <TableRowCell className={styles.actions}>

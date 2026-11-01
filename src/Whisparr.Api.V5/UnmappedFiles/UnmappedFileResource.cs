@@ -13,6 +13,18 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public string Name { get; set; }
         public bool Exists { get; set; }
         public bool Dismissed { get; set; }
+
+        // Only set when the stored top suggestion matches on both studio and date
+        public UnmappedFileMatchResource Match { get; set; }
+    }
+
+    public class UnmappedFileMatchResource
+    {
+        public string ForeignId { get; set; }
+        public string Title { get; set; }
+        public string StudioTitle { get; set; }
+        public DateTime? ReleaseDate { get; set; }
+        public bool HashMatch { get; set; }
     }
 
     public class UnmappedFileSuggestionResource
@@ -52,6 +64,32 @@ namespace Whisparr.Api.V5.UnmappedFiles
 
     public static class UnmappedFileResourceMapper
     {
+        // The one place a stored match is gated, shared by the paged list and the SignalR update
+        public static UnmappedFileResource ToResource(this ImportFile model, bool exists)
+        {
+            var match = model.TopMatch != null && model.TopMatch.IsStrong() ? model.TopMatch : null;
+
+            return new UnmappedFileResource
+            {
+                Id = model.Id,
+                RootFolderId = model.RootFolderId,
+                Path = model.Path,
+                Name = model.Name,
+                Dismissed = model.Dismissed,
+                Exists = exists,
+                Match = match == null
+                    ? null
+                    : new UnmappedFileMatchResource
+                    {
+                        ForeignId = match.ForeignId,
+                        Title = match.Title,
+                        StudioTitle = match.StudioTitle,
+                        ReleaseDate = match.ReleaseDate,
+                        HashMatch = match.HashMatch
+                    }
+            };
+        }
+
         public static UnmappedFileSuggestionResource ToResource(this UnmappedFileSuggestion model, Movie existing)
         {
             return new UnmappedFileSuggestionResource

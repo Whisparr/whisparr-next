@@ -191,6 +191,60 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_round_trip_top_match_and_touch_only_its_columns()
+        {
+            var file = GivenStoredFile();
+            var checkedAt = new DateTime(2026, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+            // Other columns written after this copy of the row was loaded must survive the save
+            var other = Subject.Get(file.Id);
+            other.OsHash = "0123456789abcdef";
+            other.Dismissed = true;
+            other.Candidates = new List<FingerprintCandidate> { new() { SceneId = "scene-a" } };
+            other.CandidatesCheckedAt = checkedAt;
+            Subject.SaveOsHashes(new List<ImportFile> { other });
+            Subject.SaveDismissed(new List<ImportFile> { other });
+            Subject.SaveCandidates(new List<ImportFile> { other });
+
+            file.TopMatch = new UnmappedFileMatch
+            {
+                ForeignId = "scene-b",
+                Title = "Title",
+                StudioTitle = "Studio",
+                ReleaseDate = new DateTime(2024, 3, 5, 0, 0, 0, DateTimeKind.Utc),
+                HashMatch = true,
+                SameDate = true,
+                SameStudio = true
+            };
+            file.TopMatchCheckedAt = checkedAt;
+            Subject.SaveTopMatch(new List<ImportFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.TopMatchCheckedAt.Should().Be(checkedAt);
+            stored.TopMatch.Should().BeEquivalentTo(file.TopMatch);
+            stored.OsHash.Should().Be("0123456789abcdef");
+            stored.Dismissed.Should().BeTrue();
+            stored.Candidates.Should().ContainSingle().Which.SceneId.Should().Be("scene-a");
+            stored.CandidatesCheckedAt.Should().Be(checkedAt);
+        }
+
+        [Test]
+        public void should_store_a_null_top_match_with_a_checked_time()
+        {
+            var file = GivenStoredFile();
+            file.TopMatch = new UnmappedFileMatch { ForeignId = "scene-b" };
+            file.TopMatchCheckedAt = DateTime.UtcNow;
+            Subject.SaveTopMatch(new List<ImportFile> { file });
+
+            file.TopMatch = null;
+            Subject.SaveTopMatch(new List<ImportFile> { file });
+
+            var stored = Subject.Get(file.Id);
+            stored.TopMatch.Should().BeNull();
+            stored.TopMatchCheckedAt.Should().NotBeNull();
+        }
+
+        [Test]
         public void should_get_only_hashed_unchecked_files_up_to_limit()
         {
             var items = Enumerable.Range(1, 6)
