@@ -40,7 +40,7 @@ import MigrationReport from 'System/MigrationReport/MigrationReport';
 import Status from 'System/Status/Status';
 import Tasks from 'System/Tasks/Tasks';
 import Updates from 'System/Updates/Updates';
-import UnmappedFilesTableConnector from 'UnmappedFiles/UnmappedFilesTableConnector';
+import UnmappedFiles from 'UnmappedFiles/UnmappedFiles';
 import CutoffUnmet from 'Wanted/CutoffUnmet/CutoffUnmet';
 import Missing from 'Wanted/Missing/Missing';
 
@@ -84,7 +84,7 @@ function AppRoutes() {
 
       <Route path="/studio/:studioForeignId" element={<StudioDetails />} />
 
-      <Route path="/unmapped" element={<UnmappedFilesTableConnector />} />
+      <Route path="/unmapped" element={<UnmappedFiles />} />
 
       {/*
         Calendar

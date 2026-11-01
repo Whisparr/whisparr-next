@@ -227,7 +227,7 @@ namespace NzbDrone.Core.RootFolders
         {
             var rootFolder = _rootFolderRepository.Get(id);
 
-            rootFolder.ImportFiles = _importFileRepository.FindByRootFolderId(rootFolder.Id);
+            rootFolder.ImportFiles = _importFileRepository.FindActiveByRootFolderId(rootFolder.Id);
 
             return rootFolder;
         }
@@ -246,7 +246,7 @@ namespace NzbDrone.Core.RootFolders
                     rootFolder.Accessible = true;
                     rootFolder.FreeSpace = _diskProvider.GetAvailableSpace(rootFolder.Path);
                     rootFolder.TotalSpace = _diskProvider.GetTotalSize(rootFolder.Path);
-                    rootFolder.ImportFiles = _importFileRepository.FindByRootFolderId(rootFolder.Id);
+                    rootFolder.ImportFiles = _importFileRepository.FindActiveByRootFolderId(rootFolder.Id);
                 }
             }).Wait(timeout ? 5000 : -1);
         }
@@ -307,7 +307,7 @@ namespace NzbDrone.Core.RootFolders
             var toAdd = newUnmappedFiles.Where(n => !existingUnmappedFiles.Any(e => e.Path.PathEquals(n.Path))).ToList();
             var toRemove = existingUnmappedFiles
                 .Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path)))
-                .Where(e => importFolder.IsParentPath(e.Path) || CanForgetOutsideImportFolder(e))
+                .Where(e => importFolder.IsParentPath(e.Path) || CanForgetOutsideImportFolder(e, rootFolder))
                 .ToList();
 
             _logger.ProgressInfo("Scanning Adding {0} new files to the database in {1}", toAdd.Count, importFolder);
@@ -331,9 +331,10 @@ namespace NzbDrone.Core.RootFolders
 
         // A migration parks files where they already live, and only the import folder is scanned, so missing from the
         // scan says nothing about them. A running migration still needs even a dead row to find the file by.
-        private bool CanForgetOutsideImportFolder(ImportFile file)
+        // Every file of an unreachable root folder looks gone, so that says nothing either.
+        private bool CanForgetOutsideImportFolder(ImportFile file, RootFolder rootFolder)
         {
-            return !_legacyMigrationService.IsIncomplete() && !_diskProvider.FileExists(file.Path);
+            return !_legacyMigrationService.IsIncomplete() && _diskProvider.FolderExists(rootFolder.Path) && !_diskProvider.FileExists(file.Path);
         }
 
         private string GetImportFolder(string folder)

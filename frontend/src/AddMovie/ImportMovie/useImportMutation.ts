@@ -2,6 +2,7 @@ import useApiMutation from 'Helpers/Hooks/useApiMutation';
 import useQueryClient from 'Helpers/Hooks/useQueryClient';
 import { useRefreshRootFolder } from 'RootFolder/useRootFolders';
 import { ImportItem, MovieLookupResult } from './ImportMovieTypes';
+import { IMPORT_LOOKUP_QUERY_KEY } from './useImportLookupQueue';
 
 interface ImportMovieBody extends MovieLookupResult {
   path: string;
@@ -51,6 +52,8 @@ function useImportMutation(rootFolderId: number) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['/movie/paged'] });
         queryClient.invalidateQueries({ queryKey: ['/movie/stats'] });
+        // Stored results still say these aren't in the library
+        queryClient.removeQueries({ queryKey: [IMPORT_LOOKUP_QUERY_KEY] });
         refreshRootFolder({ id: rootFolderId });
       },
     },

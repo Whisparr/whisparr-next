@@ -131,13 +131,22 @@ export function importReducer(
   switch (action.type) {
     case 'INIT_ITEMS': {
       const sliced = action.files.slice(0, IMPORT_ITEM_LIMIT);
+      const existing = new Map(state.items.map((item) => [item.id, item]));
+
       return {
-        isLookingUp: false,
+        ...state,
         items: sliced.map((f) => {
+          // A refresh of the file list leaves a known row's lookup and choices alone
+          const known = existing.get(f.path);
+
+          if (known) {
+            return known;
+          }
+
           const hashCandidate = getHashMatchCandidate(f);
 
           return {
-            id: f.name,
+            id: f.path,
             path: f.path,
             relativePath: f.relativePath,
             term: hashCandidate?.lookupTerm ?? f.name,
