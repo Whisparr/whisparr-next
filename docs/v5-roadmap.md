@@ -246,7 +246,18 @@ merged forward into `v5`.
 - **Measured locally** on Brazzers Exxtra (4,037 scenes, `limit=1000`):
   - cold: 5 pages, 19 × 202, 100 s;
   - warm: 0.3 s, all 200s, 4,037/4,037 unique.
-- **Later:** JAV comes to v5 as its own feature across the v5 client and v5 Skyhook.
+- **JAV (Skyhook side built, PR pending):** JAV is its own lane, separate from scenes.
+  - **Routes:** `tpdb/jav/{uuid}`, `tpdb/jav/search?q=`, `tpdb/jav/changed`, and
+    `tpdb/site|performer/{uuid}/jav/full` with the `scenes/full` paging contract. Items
+    carry `ItemType: "Jav"` and `Code` (the release code, e.g. `TKFJIN-148`).
+  - **Code search:** a query shaped like a code (`abp123`, `ABP 123`, `ABP-123`) tries an
+    exact code match first, then falls back to free-text search.
+  - **Has JAV:** `tpdb/site|performer/{uuid}/jav/count` returns `{HasJav, Total}` for one
+    TPDB call, cached 24 h. It is meant for a "monitor JAV" toggle on detail pages.
+  - **Loops:** a JAV change feed and stale refresh, off unless `Caching:Loops:TpdbJav` is
+    set. They stay off until TPDB agrees to JAV traffic from v5.
+  - **Client side still to come:** the JAV index, release search, the monitor-JAV toggle,
+    code-based release matching and the v2 JAV migration gap.
 
 **Fingerprints in the cache:**
 - Fetch scene hashes during normal hydration and the refresh loops.
