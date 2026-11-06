@@ -1,3 +1,4 @@
+import classNames from 'classnames';
 import React, { ReactNode } from 'react';
 import Link, { LinkProps } from 'Components/Link/Link';
 import TableRowCell from './TableRowCell';
@@ -21,7 +22,9 @@ function TableRowCellButton(props: Readonly<TableRowCellButtonProps>) {
   } = props;
 
   return (
-    <TableRowCell className={className}>
+    <TableRowCell
+      className={classNames(className, after ? styles.hasAfter : null)}
+    >
       <Link
         className={styles.button}
         title={title}
