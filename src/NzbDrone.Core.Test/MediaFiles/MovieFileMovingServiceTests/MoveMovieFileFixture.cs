@@ -163,6 +163,33 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieFileMovingServiceTests
         }
 
         [Test]
+        public void upgrade_into_folder_that_differs_from_folder_format_keeps_existing_folder()
+        {
+            var legacyFolder = @"C:\Test\Movies\Adult Time Originals\Pure Taboo\Second Parents [77a7]".AsOsAgnostic();
+            var destination = System.IO.Path.Combine(legacyFolder, "File Name.mp4");
+
+            _movie.MovieFileId = 1;
+            _movie.Path = legacyFolder;
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                  .Setup(s => s.BuildPath(It.IsAny<Movie>(), false))
+                  .Returns(@"C:\Test\Movies\Pure Taboo\Second Parents".AsOsAgnostic());
+
+            Mocker.GetMock<IBuildFileNames>()
+                  .Setup(s => s.BuildFilePath(It.IsAny<Movie>(), It.IsAny<string>(), It.IsAny<string>()))
+                  .Returns(destination);
+
+            Mocker.GetMock<IImportScript>()
+                  .Setup(s => s.TryImport(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<LocalMovie>(), It.IsAny<MovieFile>(), It.IsAny<TransferMode>()))
+                  .Returns(ScriptImportDecision.DeferMove);
+
+            Subject.CopyMovieFile(_movieFile, _localMovie);
+
+            _movieFile.RelativePath.Should().Be("File Name.mp4");
+            _movie.Path.Should().Be(legacyFolder);
+        }
+
+        [Test]
         public void should_not_notify_if_movie_folder_already_exists()
         {
             Mocker.GetMock<IDiskProvider>()
