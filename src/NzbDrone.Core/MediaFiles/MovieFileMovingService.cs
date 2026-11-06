@@ -142,7 +142,8 @@ namespace NzbDrone.Core.MediaFiles
                 throw new SameFilenameException("File not moved, source and destination are the same", movieFilePath);
             }
 
-            var destinationPath = _buildMoviePaths.BuildPath(movie, false);
+            // Only a folder rename moves the file out of movie.Path; imports keep the existing folder.
+            var destinationPath = renameFolder ? _buildMoviePaths.BuildPath(movie, false) : movie.Path;
             if (string.IsNullOrEmpty(destinationPath))
             {
                 destinationPath = movie.Path;
