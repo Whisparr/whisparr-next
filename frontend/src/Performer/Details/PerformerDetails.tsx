@@ -1,4 +1,5 @@
 import find from 'lodash/find';
+import moment from 'moment';
 import React, { useCallback, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Flag from 'react-world-flags';
@@ -194,11 +195,14 @@ function PerformerDetails() {
   const fullName = performer.fullName;
   const rootFolderPath = performer.rootFolderPath;
   const gender = performer.gender;
-  const age = performer.age;
-  const birthDate =
-    performer.birthDate === undefined
-      ? ''
-      : formatDate(performer.birthDate, shortDateFormat);
+  // The stored age only comes from StashDB and goes stale, so derive it from
+  // the birth date (a UTC midnight) whenever there is one.
+  const age = performer.birthDate
+    ? moment().diff(moment.utc(performer.birthDate).local(true), 'years')
+    : performer.age;
+  const birthDate = performer.birthDate
+    ? formatDate(performer.birthDate, shortDateFormat)
+    : '';
   const ethnicity = performer.ethnicity;
   const country = performer.country;
   const flagIconCode = country?.toLowerCase();
@@ -231,7 +235,9 @@ function PerformerDetails() {
   const endYear = careerEnd && Number.isFinite(careerEnd) ? careerEnd : '';
   const runningYears = `${startYear}-${endYear}`;
   const fanartUrl = getFanartUrl(Array.isArray(images) ? images : []);
-  const formatedAge = birthDate === '' ? age : `${birthDate} | ${age}`;
+  const formatedAge = [birthDate, age]
+    .filter((part) => part != null && part !== '')
+    .join(' | ');
 
   const moviesByYear = years.map((year) => ({
     year,
