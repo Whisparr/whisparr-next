@@ -382,6 +382,12 @@ Every existing `ItemType` branch gets a JAV decision. The rule: **JAV is a movie
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `FullyQualifiedName~LegacyMigration`. PASS.
 - [ ] **Step 5: Commit.** `git commit -m "New: Migrate v2 JAV studios"`
+- [ ] **Step 6: Wizard warning before the source is locked.**
+  - `LegacyInstall.JavStudios` (int). `LegacyInstallDetector.InspectV2` (~387) fills it from `SELECT COUNT(*) FROM "Series" WHERE "SeriesType" = 1`; it's 0 for Eros installs.
+  - Carry it through `SetupStatusResource` (beside `HasMixedMovies`) and `SetupInstall.javStudios` in `frontend/src/Setup/useSetupStatus.ts`.
+  - In `SetupSourceForm.tsx`, under the scene-source select, when `choice.sceneSource === 'stashdb' && install.javStudios > 0`, show a warning span `translate('SetupJavNeedsTpdb', { count: install.javStudios })`. en.json: `"SetupJavNeedsTpdb": "{count} JAV studios won't migrate under StashDB; their files are parked"`.
+  - Test: in `LegacyInstallDetectorFixture`, `v2_counts_jav_series` (two series, one with `SeriesType = 1`, gives `JavStudios == 1`).
+  - Commit: `git commit -m "New: Warn about JAV studios when choosing StashDB in setup"`
 
 ### Task 12: Frontend: JAV section, index and Add JAV
 
