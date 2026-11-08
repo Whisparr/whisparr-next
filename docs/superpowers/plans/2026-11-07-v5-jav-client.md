@@ -364,18 +364,21 @@ Every existing `ItemType` branch gets a JAV decision. The rule: **JAV is a movie
 - Consumes: `TpdbIdKind.Jav`, `GetStudioJavPage`, `ImportScenes`, and the stub rule from Task 4.
 - Behaviour, under TPDB with `series.IsJav`:
   - The site resolves as today.
-  - Episode ids resolve with `TpdbIdKind.Jav`.
-  - The catalog walk uses `GetStudioJavPage`.
+  - v2 flags a series JAV when its site's types *include* JAV, and stores no per-episode type. The replica has 161 sites with both kinds, against 11,270 that are JAV-only. TPDB keeps Scene and JAV in one table, so numeric ids never collide.
+  - Episode ids resolve with `TpdbIdKind.Jav` first. The misses are retried with `TpdbIdKind.Scene`. Ids that resolve as scenes take the existing scene path: scene stub, the `scenes/full` walk, scene-file linking.
+  - The catalog walk uses `GetStudioJavPage`, plus the scene walk when any episode resolved as a scene.
   - Stubs get `ItemType.Jav`. Missing ids are added with the JAV stub.
   - Files link as today.
-  - `ApplyV2Settings` sets `JavMonitored = series.Monitored` and leaves `Monitored` false. It also sets `HasJav = true`, since v2 knew the studio was JAV.
+  - `ApplyV2Settings` sets `JavMonitored = series.Monitored`, and `Monitored = series.Monitored` only when any episode resolved as a scene (otherwise false). It also sets `HasJav = true`, since v2 knew the studio was JAV.
 - Behaviour, under StashDB with `series.IsJav`: write one `NeedsAttention` row in the `Studios` area with detail `$"JAV needs the TPDB scene source; {wanted} wanted, {files.Count} files parked"`, where `wanted` counts monitored episodes with no file. Then call `ParkAndFinish(series, episodes, files, "JAV needs the TPDB scene source", progress)`.
-- **Assumption to verify:** v2 JAV series store the TPDB site's numeric id in `TvdbId`, as other series do. Verify against gykes' mixed-install backup before the PR. If it's wrong, record a ruling and adjust `ResolveSite` for JAV.
+- **Verified 2026-11-07:** v2 `SeriesTypes.Jav = 1`, set from the v3 site `Types`. `TvdbId` is the TPDB numeric site id (v3 `ReplicaMapper` gives `ForeignId = site.Id`). Episode `TvdbId` is the TPDB numeric scene id.
+- **Check during Step 4:** whether `resolve` kind `jav` reports a Scene-type id as unknown (that is what the fallback relies on). If it returns a uuid instead, record a ruling.
 
 - [ ] **Step 1: Failing tests.**
   - `tpdb_jav_series_resolves_with_jav_kind_and_walks_jav_pages`
   - `tpdb_jav_series_sets_jav_monitored_not_scene_monitored`
   - `tpdb_jav_file_links_to_jav_release`
+  - `tpdb_mixed_jav_series_resolves_scene_misses_as_scenes`: two episodes, one JAV and one that `jav` reports unknown and `scene` resolves. Expect one JAV row and one scene row, with `Monitored` and `JavMonitored` both taken from the series.
   - `stash_jav_series_parks_all_files_and_reports_one_row` (Review Focus 5)
   - `non_jav_series_unchanged`: a regression check on one existing case.
 - [ ] **Step 2: Run them.** `--filter "FullyQualifiedName~LegacyMigration"`. FAIL.

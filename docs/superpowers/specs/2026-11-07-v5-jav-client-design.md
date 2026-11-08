@@ -65,6 +65,7 @@ v2 marks JAV studios with `Series.SeriesType = 1`. Today the snapshot stages it 
 - **TPDB scene source:**
   - A JAV series imports as a studio with `JavMonitored` taken from the series and `Monitored` off.
   - Its episodes resolve through `resolve` kind `jav`, and the catalog walks `site/{uuid}/jav/full`.
+  - v2 marks a series JAV when the site has *any* JAV (161 TPDB sites have both kinds), and doesn't store each episode's type. So ids that kind `jav` misses are retried as `scene`. Those become ordinary scenes, and the studio is also scene-monitored.
   - Files link to the resolved release, exactly as the TPDB scene runner does. Episodes with no file keep their v2 monitored state.
 - **StashDB scene source:** v2 is TPDB-backed, so this case only arises when the user picks StashDB as the v5 scene source during migration, i.e. switches source. JAV can't be carried over across that switch.
   - The wizard's scene-source step warns before the choice is locked when the v2 snapshot holds JAV series ("N JAV studios won't migrate under StashDB").
