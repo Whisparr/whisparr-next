@@ -11,6 +11,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 
@@ -99,6 +100,73 @@ namespace NzbDrone.Core.Test.RootFolderTests
             results.Should().HaveCount(2);
             results[0].Movie.ForeignId.Should().Be("hash");
             results[0].HashMatch.Should().BeTrue();
+        }
+
+        private void GivenJavFile(bool available)
+        {
+            var path = "/media/jav/ABP-123.mp4";
+
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.Get(8)).Returns(new ImportFile { Id = 8, RootFolderId = 1, Path = path, Name = "ABP-123.mp4" });
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(available);
+        }
+
+        private void GivenTypedSearch(string term, ItemType itemType, params Movie[] results)
+        {
+            Mocker.GetMock<ISearchForNewMovie>()
+                .Setup(s => s.SearchForNewEntity(term, itemType))
+                .Returns(results.Cast<object>().ToList());
+        }
+
+        [Test]
+        public void jav_code_file_suggests_jav_first()
+        {
+            GivenJavFile(true);
+            GivenTypedSearch("ABP-123", ItemType.Jav, Scene("jav", "Unrelated"));
+            GivenTypedSearch("ABP-123", ItemType.Scene, Scene("scene", "ABP-123", "2024-03-05"), Scene("jav", "Unrelated"));
+
+            var results = Subject.Suggest(8, null, ItemType.Scene).Results;
+
+            results.Select(r => r.Movie.ForeignId).Should().Equal("jav", "scene");
+        }
+
+        [Test]
+        public void jav_unavailable_suggests_scenes_only()
+        {
+            GivenJavFile(false);
+            GivenTypedSearch("ABP-123", ItemType.Scene, Scene("scene", "ABP-123"));
+
+            var results = Subject.Suggest(8, null, ItemType.Scene).Results;
+
+            results.Select(r => r.Movie.ForeignId).Should().Equal("scene");
+            Mocker.GetMock<ISearchForNewMovie>().Verify(s => s.SearchForNewEntity(It.IsAny<string>(), ItemType.Jav), Times.Never());
+        }
+
+        [Test]
+        public void jav_search_failure_keeps_scene_results()
+        {
+            GivenJavFile(true);
+            Mocker.GetMock<ISearchForNewMovie>().Setup(s => s.SearchForNewEntity("ABP-123", ItemType.Jav)).Throws(new Exception("down"));
+            GivenTypedSearch("ABP-123", ItemType.Scene, Scene("scene", "ABP-123"));
+
+            Subject.Suggest(8, null, ItemType.Scene).Results.Select(r => r.Movie.ForeignId).Should().Equal("scene");
+        }
+
+        [Test]
+        public void explicit_jav_suggest_searches_jav_when_available()
+        {
+            GivenJavFile(true);
+            GivenTypedSearch("typed", ItemType.Jav, Scene("jav", "Typed"));
+
+            Subject.Suggest(8, "typed", ItemType.Jav).Results.Select(r => r.Movie.ForeignId).Should().Equal("jav");
+        }
+
+        [Test]
+        public void explicit_jav_suggest_is_empty_when_unavailable()
+        {
+            GivenJavFile(false);
+
+            Subject.Suggest(8, "typed", ItemType.Jav).Results.Should().BeEmpty();
+            Mocker.GetMock<ISearchForNewMovie>().Verify(s => s.SearchForNewEntity(It.IsAny<string>(), It.IsAny<ItemType?>()), Times.Never());
         }
 
         [Test]
