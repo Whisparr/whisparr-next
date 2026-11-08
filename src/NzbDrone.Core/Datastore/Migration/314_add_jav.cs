@@ -26,6 +26,9 @@ namespace NzbDrone.Core.Datastore.Migration
                 .AddColumn("StandardJavFormat").AsString().Nullable()
                 .AddColumn("JavFolderFormat").AsString().Nullable();
 
+            // An existing install keeps its rename choice for JAV instead of starting renaming
+            Execute.Sql("UPDATE \"NamingConfig\" SET \"RenameJav\" = \"RenameScenes\"");
+
             Update.Table("NamingConfig").Set(new
             {
                 StandardJavFormat = "{Scene Code} - {Scene CleanTitle} {[Quality Title]}",

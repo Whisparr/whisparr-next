@@ -145,16 +145,18 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             context.V5.Execute("DELETE FROM \"NamingConfig\"", transaction: context.Transaction);
 
             context.V5.Execute(
-                "INSERT INTO \"NamingConfig\" (\"RenameMovies\", \"RenameScenes\", \"ReplaceIllegalCharacters\", \"ColonReplacementFormat\", \"StandardMovieFormat\", \"StandardSceneFormat\", \"MovieFolderFormat\", \"SceneFolderFormat\", \"JavFolderFormat\", \"SceneImportFolderFormat\", \"MaxFolderPathLength\", \"MaxFilePathLength\") " +
-                "VALUES (@RenameMovies, @RenameScenes, @ReplaceIllegalCharacters, @ColonReplacementFormat, @StandardMovieFormat, @StandardSceneFormat, @MovieFolderFormat, @SceneFolderFormat, @JavFolderFormat, @SceneImportFolderFormat, @MaxFolderPathLength, @MaxFilePathLength)",
+                "INSERT INTO \"NamingConfig\" (\"RenameMovies\", \"RenameScenes\", \"RenameJav\", \"ReplaceIllegalCharacters\", \"ColonReplacementFormat\", \"StandardMovieFormat\", \"StandardSceneFormat\", \"StandardJavFormat\", \"MovieFolderFormat\", \"SceneFolderFormat\", \"JavFolderFormat\", \"SceneImportFolderFormat\", \"MaxFolderPathLength\", \"MaxFilePathLength\") " +
+                "VALUES (@RenameMovies, @RenameScenes, @RenameJav, @ReplaceIllegalCharacters, @ColonReplacementFormat, @StandardMovieFormat, @StandardSceneFormat, @StandardJavFormat, @MovieFolderFormat, @SceneFolderFormat, @JavFolderFormat, @SceneImportFolderFormat, @MaxFolderPathLength, @MaxFilePathLength)",
                 new
                 {
                     RenameMovies = false,
                     RenameScenes = false,
+                    RenameJav = false,
                     ReplaceIllegalCharacters = replaceIllegal,
                     ColonReplacementFormat = colon,
                     defaults.StandardMovieFormat,
                     StandardSceneFormat = standard,
+                    defaults.StandardJavFormat,
                     defaults.MovieFolderFormat,
                     SceneFolderFormat = folder,
 

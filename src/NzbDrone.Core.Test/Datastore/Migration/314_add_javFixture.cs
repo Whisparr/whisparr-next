@@ -71,7 +71,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration
             performer.TotalJavCount.Should().Be(0);
 
             var naming = db.Query<Naming314>("SELECT \"RenameJav\", \"StandardJavFormat\", \"JavFolderFormat\" FROM \"NamingConfig\"").Single();
-            naming.RenameJav.Should().BeTrue();
+            naming.RenameJav.Should().BeFalse("it copies RenameScenes, which the install had off");
             naming.StandardJavFormat.Should().Be("{Scene Code} - {Scene CleanTitle} {[Quality Title]}");
             naming.JavFolderFormat.Should().Be(OsInfo.IsWindows ? "jav\\{Studio CleanTitle}\\{Scene Code}" : "jav/{Studio CleanTitle}/{Scene Code}");
         }
