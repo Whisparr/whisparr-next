@@ -32,6 +32,9 @@ namespace NzbDrone.Core.Movies.Studios
         public bool MoviesMonitored { get; set; }
         public bool JavMonitored { get; set; }
         public bool HasJav { get; set; }
+
+        /// <summary>What Skyhook reported for HasJav; null when its body predates the field. Not stored.</summary>
+        public bool? HasJavReported { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public StudioStatus Status { get; set; }
         public DateTime? AfterDate { get; set; }

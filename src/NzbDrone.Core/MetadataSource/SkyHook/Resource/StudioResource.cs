@@ -12,5 +12,6 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Resource
         public StudioStatus Status { get; set; }
         public List<ImageResource> Images { get; set; }
         public ExternalIdResource ForeignIds { get; set; }
+        public bool? HasJav { get; set; }
     }
 }

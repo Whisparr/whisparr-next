@@ -49,6 +49,9 @@ namespace NzbDrone.Core.Movies.Performers
         public bool MoviesMonitored { get; set; }
         public bool JavMonitored { get; set; }
         public bool HasJav { get; set; }
+
+        /// <summary>What Skyhook reported for HasJav; null when its body predates the field. Not stored.</summary>
+        public bool? HasJavReported { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public int QualityProfileId { get; set; }
         public bool SearchOnAdd { get; set; }
