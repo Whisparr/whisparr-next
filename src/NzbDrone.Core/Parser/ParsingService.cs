@@ -142,18 +142,17 @@ namespace NzbDrone.Core.Parser
             var searchingForJav = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Jav;
             var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene || searchingForJav;
 
-            // A file import named by an unhyphenated JAV code ('abp123.mp4') never parses as a scene
+            // A file import named by an unhyphenated JAV code ('abp123.mp4') never parses as a scene.
+            // Only the exact code lookup runs here: scene title matching must not pre-empt the movie path.
             if (!sceneLookup && searchCriteria == null && _javAvailability.IsAvailable() &&
-                JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out _))
+                JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out var javCode))
             {
-                result = GetSceneMovie(parsedMovieInfo, null);
+                var jav = _movieService.FindByJavCode(javCode);
 
-                if (result?.Movie != null)
+                if (jav != null)
                 {
-                    return result;
+                    return new FindMovieResult(jav, MovieMatchType.Title);
                 }
-
-                result = null;
             }
 
             if (sceneLookup)

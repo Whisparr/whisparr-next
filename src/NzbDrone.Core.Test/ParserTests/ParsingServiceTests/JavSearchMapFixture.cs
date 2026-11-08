@@ -63,9 +63,10 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
             var parsed = CodelessParse();
 
             Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
-            Mocker.GetMock<IMovieService>().Setup(s => s.FindScene(parsed, false, null)).Returns(jav);
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByJavCode("ABP-123")).Returns(jav);
 
             Subject.Map(parsed, "", 0).Movie.Should().Be(jav);
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()), Times.Never());
         }
 
         [Test]
@@ -88,7 +89,10 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
             Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
 
             Subject.Map(parsed, "", 0).Movie.Should().BeNull();
-            Mocker.GetMock<IMovieService>().Verify(s => s.FindScene(parsed, false, null), Times.Once());
+
+            // A miss must not run scene title/studio matching ahead of the movie path.
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindByJavCode("ABP-123"), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()), Times.Never());
             Mocker.GetMock<IMovieService>().Verify(s => s.FindByTitle(It.IsAny<List<string>>(), It.IsAny<int?>(), It.IsAny<List<string>>(), It.IsAny<List<Movie>>()), Times.AtLeastOnce());
         }
 
@@ -101,6 +105,7 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
 
             Subject.Map(parsed, "", 0);
 
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindByJavCode(It.IsAny<string>()), Times.Never());
             Mocker.GetMock<IMovieService>().Verify(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()), Times.Never());
         }
 
