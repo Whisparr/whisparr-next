@@ -237,15 +237,16 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
         }
 
         [Test]
-        public void should_return_only_scene_foreign_ids()
+        public void should_return_only_scene_and_jav_foreign_ids()
         {
             var profile = GivenProfile();
             var scene = GivenTitledMovie(profile.Id, "A Scene", ItemType.Scene);
+            var jav = GivenTitledMovie(profile.Id, "A Jav", ItemType.Jav);
             GivenTitledMovie(profile.Id, "A Movie", ItemType.Movie);
 
-            var sceneForeignId = Db.All<MovieMetadata>().Single(m => m.Id == scene.MovieMetadataId).ForeignId;
+            var ids = Db.All<MovieMetadata>().Where(m => m.Id == scene.MovieMetadataId || m.Id == jav.MovieMetadataId).Select(m => m.ForeignId);
 
-            Subject.AllSceneForeignIds().Should().Equal(sceneForeignId);
+            Subject.AllSceneForeignIds().Should().BeEquivalentTo(ids);
         }
 
         [Test]

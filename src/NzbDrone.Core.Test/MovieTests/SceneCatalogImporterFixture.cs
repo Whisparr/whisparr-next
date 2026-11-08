@@ -123,6 +123,18 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_skip_owned_jav_items()
+        {
+            // AllSceneForeignIds covers owned JAV too, so the JAV lane skips what the library already holds.
+            _sceneForeignIds.Add("owned-jav");
+
+            GivenPages(Page(ScenePageStatus.Complete, 2, Item("owned-jav", "pj"), Item("new-jav", "pn")));
+
+            Import().Should().Be(1);
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.Is<List<Movie>>(m => Ids(m).SequenceEqual(new[] { "new-jav" })), true, true), Times.Once());
+        }
+
+        [Test]
         public void should_skip_scenes_already_in_library_when_source_is_tpdb()
         {
             var tpdbId = "3f2b1c9e-0000-4000-8000-000000000001";

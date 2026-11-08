@@ -451,8 +451,8 @@ namespace NzbDrone.Core.Movies
             using (var conn = _database.OpenConnection())
             {
                 return conn.Query<string>(
-                    "SELECT \"MovieMetadata\".\"ForeignId\" FROM \"MovieMetadata\" JOIN \"Movies\" ON (\"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\") WHERE \"MovieMetadata\".\"ItemType\" = @ItemType",
-                    new { ItemType = (int)ItemType.Scene }).ToList();
+                    "SELECT \"MovieMetadata\".\"ForeignId\" FROM \"MovieMetadata\" JOIN \"Movies\" ON (\"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\") WHERE \"MovieMetadata\".\"ItemType\" IN (@Scene, @Jav)",
+                    new { Scene = (int)ItemType.Scene, Jav = (int)ItemType.Jav }).ToList();
             }
         }
 
