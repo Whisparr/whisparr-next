@@ -47,6 +47,8 @@ namespace NzbDrone.Core.Movies.Performers
         public DateTime Added { get; set; }
         public bool Monitored { get; set; }
         public bool MoviesMonitored { get; set; }
+        public bool JavMonitored { get; set; }
+        public bool HasJav { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public int QualityProfileId { get; set; }
         public bool SearchOnAdd { get; set; }
@@ -61,6 +63,10 @@ namespace NzbDrone.Core.Movies.Performers
 
         /// <summary> Number of movies in Whisparr with this performer</summary>
         public int TotalMovieCount { get; set; }
+
+        /// <summary>Computed JAV stats, not stored.</summary>
+        public int JavCount { get; set; }
+        public int TotalJavCount { get; set; }
 
         /// <summary>Total size in bytes of all files on disk associated with this performer</summary>
         public long SizeOnDisk { get; set; }

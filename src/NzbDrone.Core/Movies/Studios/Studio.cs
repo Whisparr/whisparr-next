@@ -30,6 +30,8 @@ namespace NzbDrone.Core.Movies.Studios
         public DateTime Added { get; set; }
         public bool Monitored { get; set; }
         public bool MoviesMonitored { get; set; }
+        public bool JavMonitored { get; set; }
+        public bool HasJav { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public StudioStatus Status { get; set; }
         public DateTime? AfterDate { get; set; }
@@ -41,6 +43,8 @@ namespace NzbDrone.Core.Movies.Studios
         public int SceneCount { get; set; }
         public int TotalMovieCount { get; set; }
         public int TotalSceneCount { get; set; }
+        public int JavCount { get; set; }
+        public int TotalJavCount { get; set; }
         public long SizeOnDisk { get; set; }
 
         public void ApplyChanges(Studio otherStudio)

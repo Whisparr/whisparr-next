@@ -7,6 +7,7 @@ namespace NzbDrone.Core.ImportLists.ImportExclusions
         Studio,
         Performer,
         Tag,
-        Collection
+        Collection,
+        Jav
     }
 }

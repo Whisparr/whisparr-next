@@ -14,7 +14,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     {
         Scene,
         Site,
-        Performer
+        Performer,
+        Jav
     }
 
     public class TpdbResolveResult

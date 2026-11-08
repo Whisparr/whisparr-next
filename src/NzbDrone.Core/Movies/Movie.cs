@@ -109,6 +109,14 @@ namespace NzbDrone.Core.Movies
                     metadata.MetadataSource is Movies.MetadataSource.Stash or Movies.MetadataSource.TpdbScene);
         }
 
+        public bool IsJavLookup()
+        {
+            var metadata = MovieMetadata?.Value;
+
+            return metadata != null &&
+                   (metadata.ItemType == ItemType.Jav || metadata.MetadataSource == Movies.MetadataSource.TpdbJav);
+        }
+
         public DateTime? GetReleaseDate()
         {
             return MovieMetadata.Value.ReleaseDateUtc;

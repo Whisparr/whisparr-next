@@ -94,7 +94,8 @@ namespace NzbDrone.Core.Movies
         Movie,
         Scene,
         Studio,
-        Performer
+        Performer,
+        Jav
     }
 
     public enum MetadataSource
@@ -104,6 +105,7 @@ namespace NzbDrone.Core.Movies
         TpdbMovie,
 
         // Appended so stored values (an int column) keep their numbers.
-        TpdbScene
+        TpdbScene,
+        TpdbJav
     }
 }
