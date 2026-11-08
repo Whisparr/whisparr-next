@@ -7,6 +7,7 @@ using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Organizer;
 using Whisparr.Http;
 using Whisparr.Http.REST;
@@ -28,6 +29,7 @@ namespace Whisparr.Api.V5.Movies
         private readonly IConfigService _configService;
         private readonly IImportListExclusionService _importListExclusionService;
         private readonly IMovieService _movieService;
+        private readonly IJavAvailability _javAvailability;
 
         /// <summary>
         /// Creates a new instance of <see cref="MovieLookupController"/>.
@@ -40,6 +42,7 @@ namespace Whisparr.Api.V5.Movies
         /// <param name="configService">Application configuration service.</param>
         /// <param name="importListExclusionService">Service for import list exclusions.</param>
         /// <param name="movieService">Service to work with raw Movie objects</param>
+        /// <param name="javAvailability">Whether JAV is available under the configured metadata sources.</param>
         public MovieLookupController(ISearchForNewMovie searchProxy,
                                  IProvideMovieInfo movieInfo,
                                  IBuildFileNames fileNameBuilder,
@@ -47,8 +50,10 @@ namespace Whisparr.Api.V5.Movies
                                  IMapCoversToLocal coverMapper,
                                  IConfigService configService,
                                  IImportListExclusionService importListExclusionService,
-                                 IMovieService movieService)
+                                 IMovieService movieService,
+                                 IJavAvailability javAvailability)
         {
+            _javAvailability = javAvailability;
             _movieInfo = movieInfo;
             _searchProxy = searchProxy;
             _fileNameBuilder = fileNameBuilder;
@@ -113,6 +118,11 @@ namespace Whisparr.Api.V5.Movies
         [Produces("application/json")]
         public IEnumerable<MovieResource> Search([FromQuery] string term, [FromQuery] ItemType? itemType = null)
         {
+            if (itemType == ItemType.Jav && !_javAvailability.IsAvailable())
+            {
+                return Enumerable.Empty<MovieResource>();
+            }
+
             var searchResults = new List<Movie>();
 
             var results = _searchProxy.SearchForNewEntity(term, itemType);
