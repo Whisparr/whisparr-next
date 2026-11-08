@@ -14,6 +14,8 @@ namespace NzbDrone.Core.Organizer
         string GetMovieFolderSample(NamingConfig nameSpec);
         SampleResult GetSceneSample(NamingConfig nameSpec);
         string GetSceneFolderSample(NamingConfig nameSpec);
+        SampleResult GetJavSample(NamingConfig nameSpec);
+        string GetJavFolderSample(NamingConfig nameSpec);
         string GetSceneImportFolderSample(string path);
    }
 
@@ -24,6 +26,8 @@ namespace NzbDrone.Core.Organizer
         private static MovieFile _movieFile;
         private static Movie _movie;
         private static Movie _scene;
+        private static Movie _jav;
+        private static MovieMetadata _javMetadata;
         private static MovieMetadata _movieMetadata;
         private static MovieMetadata _sceneMetadata;
         private static List<CustomFormat> _customFormats;
@@ -94,6 +98,22 @@ namespace NzbDrone.Core.Organizer
                 MovieMetadataId = 1
             };
 
+            _javMetadata = new MovieMetadata
+            {
+                Title = "Perfect Satisfaction",
+                Code = "ABP-123",
+                StudioTitle = "Absolutely Perfect",
+                ItemType = ItemType.Jav
+            };
+
+            _jav = new Movie
+            {
+                MovieFile = _movieFile,
+                MovieFileId = 1,
+                MovieMetadata = _javMetadata,
+                MovieMetadataId = 1
+            };
+
             _customFormats = new List<CustomFormat>
             {
                 new CustomFormat
@@ -141,6 +161,19 @@ namespace NzbDrone.Core.Organizer
             return _buildFileNames.GetMovieFolder(_scene, nameSpec);
         }
 
+        public SampleResult GetJavSample(NamingConfig nameSpec)
+        {
+            return new SampleResult
+            {
+                FileName = BuildSample(_jav, _movieFile, nameSpec),
+            };
+        }
+
+        public string GetJavFolderSample(NamingConfig nameSpec)
+        {
+            return _buildFileNames.GetMovieFolder(_jav, nameSpec);
+        }
+
         public string GetSceneImportFolderSample(string path)
         {
             if (path.IsNotNullOrWhiteSpace())
@@ -156,7 +189,7 @@ namespace NzbDrone.Core.Organizer
             try
             {
                 var sample = false;
-                if (movie.MovieMetadata.Value.ItemType == ItemType.Scene)
+                if (movie.MovieMetadata.Value.ItemType != ItemType.Movie)
                 {
                     sample = true;
                 }

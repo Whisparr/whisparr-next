@@ -13,6 +13,9 @@ namespace Whisparr.Api.V5.Config
         public string MovieFolderFormat { get; set; }
         public string StandardSceneFormat { get; set; }
         public string SceneFolderFormat { get; set; }
+        public bool RenameJav { get; set; }
+        public string StandardJavFormat { get; set; }
+        public string JavFolderFormat { get; set; }
         public string SceneImportFolderFormat { get; set; }
         public int MaxFolderPathLength { get; set; }
         public int MaxFilePathLength { get; set; }

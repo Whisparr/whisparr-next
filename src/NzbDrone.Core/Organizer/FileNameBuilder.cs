@@ -196,7 +196,8 @@ namespace NzbDrone.Core.Organizer
 
             if (
                 ((itemType == ItemType.Movie && !namingConfig.RenameMovies) ||
-                (itemType == ItemType.Scene && !namingConfig.RenameScenes))
+                (itemType == ItemType.Scene && !namingConfig.RenameScenes) ||
+                (itemType == ItemType.Jav && !namingConfig.RenameJav))
                 && !sample)
             {
                 return GetOriginalTitle(movieFile, false);
@@ -207,7 +208,12 @@ namespace NzbDrone.Core.Organizer
                 throw new NamingFormatException("Standard movie format cannot be empty");
             }
 
-            var pattern = itemType == ItemType.Movie ? namingConfig.StandardMovieFormat : namingConfig.StandardSceneFormat;
+            var pattern = itemType switch
+            {
+                ItemType.Movie => namingConfig.StandardMovieFormat,
+                ItemType.Jav => namingConfig.StandardJavFormat,
+                _ => namingConfig.StandardSceneFormat
+            };
             var tokenHandlers = new Dictionary<string, Func<TokenMatch, string>>(FileNameBuilderTokenEqualityComparer.Instance);
             var multipleTokens = TitleRegex.Matches(pattern).Count > 1;
 
@@ -289,7 +295,12 @@ namespace NzbDrone.Core.Organizer
 
             var itemType = movie.MovieMetadata.Value.ItemType;
 
-            var pattern = itemType == ItemType.Movie ? namingConfig.MovieFolderFormat : namingConfig.SceneFolderFormat;
+            var pattern = itemType switch
+            {
+                ItemType.Movie => namingConfig.MovieFolderFormat,
+                ItemType.Jav => namingConfig.JavFolderFormat,
+                _ => namingConfig.SceneFolderFormat
+            };
             var tokenHandlers = new Dictionary<string, Func<TokenMatch, string>>(FileNameBuilderTokenEqualityComparer.Instance);
 
             if (itemType == ItemType.Movie)
