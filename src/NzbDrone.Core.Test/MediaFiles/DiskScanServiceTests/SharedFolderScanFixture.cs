@@ -69,6 +69,18 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
         private string InFolder(string name) => Path.Combine(_folder, name);
 
+        // Replaces the blanket "everything is shared" mock with the real layout decision
+        private void GivenRealLayoutWithFlatJav()
+        {
+            Mocker.GetMock<INamingConfigService>()
+                  .Setup(s => s.GetConfig())
+                  .Returns(new NamingConfig { SceneFolderFormat = "scenes/{Studio Title}/{Scene Title}", JavFolderFormat = "{Studio Title}" });
+            Mocker.GetMock<IMovieRepository>()
+                  .Setup(s => s.AllMoviePathEntries())
+                  .Returns(new List<MoviePathEntry>());
+            Mocker.SetConstant<ISceneFolderLayout>(Mocker.Resolve<SceneFolderLayout>());
+        }
+
         private void GivenFiles(params string[] files)
         {
             Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(It.IsAny<string>(), true)).Returns(files);
@@ -202,6 +214,8 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             j1.MovieMetadata.Value.ItemType = ItemType.Jav;
             j2.MovieMetadata.Value.ItemType = ItemType.Jav;
 
+            GivenRealLayoutWithFlatJav();
+
             var j1File = new MovieFile { Id = 1, MovieId = j1.Id, RelativePath = "j1.mp4" };
             var j2File = new MovieFile { Id = 2, MovieId = j2.Id, RelativePath = "j2.mp4" };
 
@@ -230,6 +244,8 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         {
             var j1 = GivenScene(201, _folder);
             j1.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            GivenRealLayoutWithFlatJav();
 
             var j1File = InFolder("j1.mp4");
             var j2File = InFolder("j2.mp4");
