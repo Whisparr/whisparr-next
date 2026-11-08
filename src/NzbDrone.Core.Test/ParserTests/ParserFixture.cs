@@ -276,5 +276,14 @@ namespace NzbDrone.Core.Test.ParserTests
         {
             Parser.Parser.NormalizeImdbId(imdbid).Should().BeEquivalentTo(normalized);
         }
+
+        [TestCase("ABP-123.mp4", "ABP-123")]
+        [TestCase("[FHD] ABP-123.mkv", "ABP-123")]
+        [TestCase("abp-123 Momo Sakai 1080p.mp4", "abp-123")]
+        [TestCase("[ABP-123] Perfect Satisfaction.mkv", "ABP-123")]
+        public void should_parse_jav_code(string title, string code)
+        {
+            Parser.Parser.ParseMovieTitle(title)?.Code.Should().Be(code);
+        }
     }
 }

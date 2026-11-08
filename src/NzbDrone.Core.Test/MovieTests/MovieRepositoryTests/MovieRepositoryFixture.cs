@@ -249,6 +249,24 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
         }
 
         [Test]
+        public void find_by_jav_code_ignores_scene_with_same_code()
+        {
+            var profile = GivenProfile();
+            var scene = GivenTitledMovie(profile.Id, "A Scene", ItemType.Scene);
+            var jav = GivenTitledMovie(profile.Id, "A Jav", ItemType.Jav);
+
+            foreach (var id in new[] { scene.MovieMetadataId, jav.MovieMetadataId })
+            {
+                var metadata = Db.All<MovieMetadata>().Single(m => m.Id == id);
+                metadata.Code = "ABP-123";
+                Db.Update(metadata);
+            }
+
+            Subject.FindByJavCode("ABP-123").Id.Should().Be(jav.Id);
+            Subject.FindByJavCode("ABP-124").Should().BeNull();
+        }
+
+        [Test]
         public void should_get_only_monitored_movies_between_dates()
         {
             var profile = GivenProfile();

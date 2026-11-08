@@ -135,7 +135,8 @@ namespace NzbDrone.Core.Parser
         {
             FindMovieResult result = null;
             var searchingForScene = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Scene;
-            var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene;
+            var searchingForJav = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Jav;
+            var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene || searchingForJav;
 
             if (sceneLookup)
             {
@@ -148,7 +149,7 @@ namespace NzbDrone.Core.Parser
             }
 
             // A dateless "Studio - Title" parse may just as well be a movie named "Title - Subtitle", so fall back to a movie lookup
-            var datelessMovieFallback = result == null && parsedMovieInfo.IsDatelessScene && !searchingForScene;
+            var datelessMovieFallback = result == null && parsedMovieInfo.IsDatelessScene && !searchingForScene && !searchingForJav;
 
             if (datelessMovieFallback || !sceneLookup)
             {

@@ -34,6 +34,7 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
                 null, // IBuildMoviePaths
                 null, // IAutoTaggingService
                 null, // ICacheManager
+                null, // IJavAvailability
                 NzbDroneLogger.GetLogger(typeof(MovieService)));
 
             // Mirror the production default (ConfigService.GetValueInt(..., 80)) so these positives prove the fix works for unconfigured users.

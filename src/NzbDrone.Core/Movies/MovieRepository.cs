@@ -19,6 +19,7 @@ namespace NzbDrone.Core.Movies
         IEnumerable<Movie> FindByIds(List<int> ids);
         Movie FindByImdbId(string imdbid);
         Movie FindByForeignId(string foreignId);
+        Movie FindByJavCode(string code);
         List<Movie> FindByForeignIds(List<string> foreignIds);
         Movie FindByTpdbId(string tpdbid);
         List<Movie> FindByTpdbId(List<string> tpdbids);
@@ -277,6 +278,11 @@ namespace NzbDrone.Core.Movies
         public Movie FindByForeignId(string foreignId)
         {
             return Query(x => x.MovieMetadata.Value.ForeignId == foreignId).FirstOrDefault();
+        }
+
+        public Movie FindByJavCode(string code)
+        {
+            return Query(x => x.MovieMetadata.Value.ItemType == ItemType.Jav && x.MovieMetadata.Value.Code == code).FirstOrDefault();
         }
 
         public List<Movie> GetMoviesByFileId(int fileId)

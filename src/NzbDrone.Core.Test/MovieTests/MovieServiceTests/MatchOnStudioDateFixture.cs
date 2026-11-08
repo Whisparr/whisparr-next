@@ -29,6 +29,7 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
                 null, // IBuildMoviePaths
                 null, // IAutoTaggingService
                 null, // ICacheManager
+                null, // IJavAvailability
                 NzbDrone.Common.Instrumentation.NzbDroneLogger.GetLogger(typeof(MovieService))); // Logger
         }
 
