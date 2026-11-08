@@ -810,6 +810,19 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void file_whose_v2_tpdb_id_no_longer_resolves_is_parked_as_not_found()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 5906477, null, fileId: 5);
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "TPDB release not found"), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "No TPDB scene link in v2"), Times.Never());
+        }
+
+        [Test]
         public void file_of_a_resolved_release_that_was_not_added_is_not_parked_as_having_no_link()
         {
             var series = GivenJavSeries(1, 11, "site-uuid");

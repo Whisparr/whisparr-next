@@ -541,8 +541,21 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
 
         private bool IsSharedFolder(string folder)
         {
-            // The folder has no item type yet, so either flat layout makes it shared
-            return _sceneFolderLayout.IsFlat(ItemType.Scene) || _sceneFolderLayout.IsFlat(ItemType.Jav) || _sceneFolderLayout.GetItemsInFolder(folder).Count > 1;
+            var items = _sceneFolderLayout.GetItemsInFolder(folder);
+
+            if (items.Count > 1)
+            {
+                return true;
+            }
+
+            // A folder that holds one item is judged by that item's own type, so a movie folder is never "flat"
+            if (items.Count == 1)
+            {
+                return _sceneFolderLayout.IsFlat(items[0].ItemType);
+            }
+
+            // Nothing is there yet, so either flat layout makes it shared
+            return _sceneFolderLayout.IsFlat(ItemType.Scene) || _sceneFolderLayout.IsFlat(ItemType.Jav);
         }
 
         private bool SceneSource(Movie movie, string folder)

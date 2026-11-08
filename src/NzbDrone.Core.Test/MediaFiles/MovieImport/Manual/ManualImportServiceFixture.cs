@@ -135,6 +135,24 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
             Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(It.IsAny<string>()), Times.Never());
         }
 
+        [Test]
+        public void movie_folder_still_resolves_by_path_when_only_the_jav_layout_is_flat()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            var movie = new Movie { Id = 1, Path = Folder };
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Jav)).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(Folder))
+                  .Returns(new List<MoviePathEntry> { new() { Id = 1, Path = Folder, ItemType = ItemType.Movie } });
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByPath(Folder)).Returns(movie);
+
+            Subject.GetMediaFiles(Folder, null, null, true);
+
+            Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(Folder), Times.Once());
+        }
+
         private static readonly string Folder = @"C:\Test\Unknown".AsOsAgnostic();
 
         private List<string> GivenUnknownFiles(params string[] names)

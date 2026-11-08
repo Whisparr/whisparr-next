@@ -228,7 +228,12 @@ namespace NzbDrone.Core.LegacyMigration
                 if (movie == null)
                 {
                     // A linked episode with no row means the add failed or the catalog walk gave up
-                    var reason = target == null ? "No TPDB scene link in v2" : "Release could not be added to the library";
+                    var reason = "Release could not be added to the library";
+
+                    if (target == null)
+                    {
+                        reason = fileEpisodes.Any(e => e.TpdbSceneId > 0) ? "TPDB release not found" : "No TPDB scene link in v2";
+                    }
 
                     _fileLinker.Park(file.Path, series.QualityProfileId, FileArea, reason);
                 }

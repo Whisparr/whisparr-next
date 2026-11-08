@@ -240,6 +240,31 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void unmapped_cleanup_in_a_per_release_folder_ignores_a_sibling_folder_with_the_same_prefix()
+        {
+            var abp12 = GivenScene(201, Path.Combine(_folder, "ABP-12"));
+            abp12.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            var siblingFile = Path.Combine(_folder, "ABP-123", "x.mp4");
+            var siblingRow = new MovieFile { Id = 2, MovieId = 0, OriginalFilePath = siblingFile };
+            var ownRow = new MovieFile { Id = 3, MovieId = 0, OriginalFilePath = Path.Combine(_folder, "ABP-12", "y.mp4") };
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(abp12)).Returns(false);
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(s => s.GetImportDecisions(It.IsAny<List<string>>(), abp12, false))
+                  .Returns(new List<ImportDecision>());
+            GivenFiles();
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Setup(s => s.GetUnmappedFiles())
+                  .Returns(new List<MovieFile> { siblingRow, ownRow });
+
+            Subject.Scan(abp12);
+
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(siblingRow), Times.Never());
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(ownRow), Times.Once());
+        }
+
+        [Test]
         public void unmapped_cleanup_for_a_flat_jav_folder_only_removes_rows_for_owned_files()
         {
             var j1 = GivenScene(201, _folder);

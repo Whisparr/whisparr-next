@@ -270,7 +270,7 @@ namespace NzbDrone.Core.MediaFiles
                         {
                             var owned = shared
                                 ? importedPaths.Contains(unmappedFile.OriginalFilePath, PathEqualityComparer.Instance)
-                                : unmappedFile.OriginalFilePath.Contains(movie.Path);
+                                : unmappedFile.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(unmappedFile.OriginalFilePath);
 
                             if (owned)
                             {
