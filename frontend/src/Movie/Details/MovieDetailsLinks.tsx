@@ -61,7 +61,7 @@ function MovieDetailsLinks({
     }
 
     // A TPDB scene's `tpdbId` is its own key, not a movie id — never link it as /movies/.
-    if (tpdbId && itemType !== 'scene') {
+    if (tpdbId && itemType !== 'scene' && itemType !== 'jav') {
       validLinks.push({
         name: translate('TPDb'),
         url: `https://theporndb.net/movies/${tpdbId}`,

@@ -53,7 +53,9 @@ function DeleteMovieModalContent({
       addImportExclusion,
     });
 
-    navigate(movie.itemType === 'movie' ? '/movies' : '/scenes');
+    const listPaths = { movie: '/movies', scene: '/scenes', jav: '/jav' };
+
+    navigate(listPaths[movie.itemType]);
   }, [movie, addImportExclusion, deleteFiles, navigate, deleteMovie]);
 
   const handleDeleteOptionChange = useCallback(

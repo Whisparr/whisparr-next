@@ -17,6 +17,7 @@ import usePrevious from 'Helpers/Hooks/usePrevious';
 import { icons } from 'Helpers/Props';
 import { VERTICAL } from 'Helpers/Props/scrollDirections';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import dimensions from 'Styles/Variables/dimensions';
 import useMigrationReport from 'System/MigrationReport/useMigrationReport';
 import HealthStatus from 'System/Status/Health/HealthStatus';
@@ -85,6 +86,18 @@ let LINKS: SidebarItem[] = [
       {
         title: () => translate('Collections'),
         to: '/collections',
+      },
+    ],
+  },
+
+  {
+    iconName: icons.DISC,
+    title: () => translate('Jav'),
+    to: '/jav',
+    children: [
+      {
+        title: () => translate('AddNew'),
+        to: '/add/new/jav',
       },
     ],
   },
@@ -273,7 +286,10 @@ interface PageSidebarProps {
   isSidebarVisible: boolean;
 }
 
-function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
+function PageSidebar({
+  isSidebarVisible,
+  isSmallScreen,
+}: Readonly<PageSidebarProps>) {
   const location = useLocation();
   const sidebarRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
@@ -302,7 +318,11 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
 
   const { hasReport: hasMigrationReport } = useMigrationReport();
 
-  const visibleLinks = LINKS.map((link) =>
+  const javAvailable = useJavAvailable();
+
+  const visibleLinks = LINKS.filter(
+    (link) => javAvailable || link.iconName !== icons.DISC
+  ).map((link) =>
     !hasMigrationReport && link.children
       ? {
           ...link,

@@ -14,7 +14,10 @@ export interface MovieIndexQueryParams {
   sortDirection: SortDirection;
 }
 
-export function useMovieIndexQuery(params: MovieIndexQueryParams) {
+export function useMovieIndexQuery(
+  params: MovieIndexQueryParams,
+  itemType: 'movie' | 'jav' = 'movie'
+) {
   const selectedFilterKey = useMovieIndexOption('selectedFilterKey');
 
   const customFilters = useCustomFiltersList('movieIndex');
@@ -40,11 +43,7 @@ export function useMovieIndexQuery(params: MovieIndexQueryParams) {
 
   const queryBody = {
     ...params,
-    filters: [
-      // Always filter for movies only
-      { key: 'itemType', type: 'equal', value: 'movie' },
-      ...filters,
-    ],
+    filters: [{ key: 'itemType', type: 'equal', value: itemType }, ...filters],
   };
 
   return useApiQuery<PagingResource<Movie>>({

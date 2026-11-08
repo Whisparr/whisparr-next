@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 import Blocklist from 'Activity/Blocklist/Blocklist';
 import History from 'Activity/History/History';
 import Queue from 'Activity/Queue/Queue';
+import AddNewJav from 'AddMovie/AddNewMovie/AddNewJav';
 import AddNewMovie from 'AddMovie/AddNewMovie/AddNewMovie';
 import AddNewScene from 'AddMovie/AddNewMovie/AddNewScene';
 import ImportMovies from 'AddMovie/ImportMovie/ImportMovies';
@@ -55,6 +56,8 @@ function AppRoutes() {
 
       <Route path="/movies" element={<MovieIndex />} />
 
+      <Route path="/jav" element={<MovieIndex itemType="jav" />} />
+
       <Route path="/collections" element={<Collection />} />
 
       <Route path="/scenes" element={<SceneIndex />} />
@@ -68,6 +71,8 @@ function AppRoutes() {
       <Route path="/add/new/movie" element={<AddNewMovie />} />
 
       <Route path="/add/new/scene" element={<AddNewScene />} />
+
+      <Route path="/add/new/jav" element={<AddNewJav />} />
 
       <Route path="/add/new/studio" element={<AddNewStudio />} />
 

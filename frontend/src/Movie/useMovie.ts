@@ -72,7 +72,10 @@ export function useAllMovies() {
   const movies = useMemo(
     () =>
       (data ?? EMPTY_MOVIES).filter(
-        (movie) => movie.itemType === 'movie' || movie.itemType === 'scene'
+        (movie) =>
+          movie.itemType === 'movie' ||
+          movie.itemType === 'scene' ||
+          movie.itemType === 'jav'
       ),
     [data]
   );

@@ -38,7 +38,9 @@ import MovieIndexTableOptions from './Table/MovieIndexTableOptions';
 import { useMovieIndex } from './useMovieIndex';
 import styles from './MovieIndex.module.css';
 
-function MovieIndex() {
+function MovieIndex({
+  itemType = 'movie',
+}: Readonly<{ itemType?: 'movie' | 'jav' }>) {
   const {
     items,
     totalItems,
@@ -65,7 +67,7 @@ function MovieIndex() {
     handleViewSelect,
     handleTableOptionChange,
     handleSelectModePress,
-  } = useMovieIndex();
+  } = useMovieIndex(itemType);
 
   const isRssSyncExecuting = useCommandExecuting(RSS_SYNC);
   const isSmallScreen = useAppDimension('isSmallScreen');
@@ -113,7 +115,7 @@ function MovieIndex() {
 
   return (
     <SelectProvider items={items}>
-      <PageContent title={translate('Movies')}>
+      <PageContent title={translate(itemType === 'jav' ? 'Jav' : 'Movies')}>
         <PageToolbar>
           <PageToolbarSection>
             <MovieIndexRefreshMovieButton
@@ -247,6 +249,7 @@ function MovieIndex() {
               {view === 'posters' ? (
                 <>
                   <MovieIndexPosters
+                    itemType={itemType}
                     items={items}
                     sortKey={sortKey}
                     scrollerRef={scrollerRef}
@@ -271,12 +274,12 @@ function MovieIndex() {
                 </>
               ) : null}
 
-              <MovieIndexFooter />
+              <MovieIndexFooter itemType={itemType} />
             </div>
           ) : null}
 
           {!isLoading && !isError && items.length === 0 ? (
-            <NoMovie totalItems={totalItems} />
+            <NoMovie totalItems={totalItems} itemType={itemType} />
           ) : null}
         </PageContentBody>
 

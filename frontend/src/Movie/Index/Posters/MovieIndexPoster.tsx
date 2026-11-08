@@ -235,6 +235,7 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
 
         <Link className={styles.link} style={elementStyle} {...linkProps}>
           <MoviePoster
+            className={movie.itemType === 'jav' ? styles.javPoster : undefined}
             safeForWorkMode={safeForWorkMode}
             style={elementStyle}
             images={images}

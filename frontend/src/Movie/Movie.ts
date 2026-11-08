@@ -72,7 +72,7 @@ interface Movie extends ModelBase {
   stashId: string;
   code: string;
   certification: string;
-  itemType: string;
+  itemType: 'movie' | 'scene' | 'jav';
   added: string;
   addOptions: MovieAddOptions;
   alternateTitles: AlternativeTitle[];

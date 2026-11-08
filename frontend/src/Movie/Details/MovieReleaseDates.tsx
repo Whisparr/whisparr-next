@@ -28,7 +28,7 @@ function MovieReleaseDates({
 
   if (itemType === 'movie' && foreignId.startsWith('tpdb:')) {
     url = `https://theporndb.net/movies/${foreignId}`;
-  } else if (itemType !== 'movie') {
+  } else if (itemType === 'scene') {
     // A scene's foreign id comes from the locked scene source.
     url = sceneSourceLink('scene', foreignId, sceneSource ?? 'stashDb').url;
   }

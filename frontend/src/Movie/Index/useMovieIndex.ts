@@ -18,7 +18,7 @@ import {
 } from './movieIndexOptionsStore';
 import { useMovieIndexQuery } from './useMovieIndexQuery';
 
-export function useMovieIndex() {
+export function useMovieIndex(itemType: 'movie' | 'jav' = 'movie') {
   const {
     sortKey,
     sortDirection,
@@ -47,12 +47,15 @@ export function useMovieIndex() {
 
   const pageSize = getPageSize();
 
-  const { data, isPending, isError } = useMovieIndexQuery({
-    page,
-    pageSize,
-    sortKey,
-    sortDirection,
-  });
+  const { data, isPending, isError } = useMovieIndexQuery(
+    {
+      page,
+      pageSize,
+      sortKey,
+      sortDirection,
+    },
+    itemType
+  );
 
   const totalRecords = data?.totalRecords ?? 0;
   const totalPages = Math.max(Math.ceil(totalRecords / pageSize), 1);

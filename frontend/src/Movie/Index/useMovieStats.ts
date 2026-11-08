@@ -7,9 +7,9 @@ export interface MovieStats {
   totalFileSize: number;
 }
 
-export function useMovieStats() {
+export function useMovieStats(itemType: 'movie' | 'jav' = 'movie') {
   return useApiQuery<MovieStats>({
     path: '/movie/stats',
-    queryParams: { itemType: 'movie' },
+    queryParams: { itemType },
   });
 }

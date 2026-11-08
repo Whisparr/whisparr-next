@@ -23,6 +23,7 @@ const ADDITIONAL_COLUMN_COUNT: Record<string, number> = {
 };
 
 interface MovieIndexPostersProps {
+  itemType?: 'movie' | 'jav';
   items: Movie[];
   sortKey: string;
   scrollerRef: RefObject<HTMLElement | null>;
@@ -33,7 +34,14 @@ interface MovieIndexPostersProps {
 export default function MovieIndexPosters(
   props: Readonly<MovieIndexPostersProps>
 ) {
-  const { items, sortKey, scrollerRef, isSelectMode, isSmallScreen } = props;
+  const {
+    itemType = 'movie',
+    items,
+    sortKey,
+    scrollerRef,
+    isSelectMode,
+    isSmallScreen,
+  } = props;
   const posterOptions = useMovieIndexOption('posterOptions');
   const [measureRef, bounds] = useMeasure();
   const [width, setWidth] = useState(0);
@@ -52,7 +60,9 @@ export default function MovieIndexPosters(
 
   const padding = isSmallScreen ? columnPaddingSmallScreen : columnPadding;
   const posterWidth = columnWidth - padding * 2;
-  const posterHeight = Math.ceil((250 / 170) * posterWidth);
+  const posterHeight = Math.ceil(
+    (itemType === 'jav' ? 4 / 3 : 250 / 170) * posterWidth
+  );
 
   useEffect(() => {
     const current = scrollerRef.current;

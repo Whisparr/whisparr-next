@@ -1,3 +1,4 @@
+import classNames from 'classnames';
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import TextTruncate from 'react-text-truncate';
@@ -178,6 +179,9 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
     isSearching,
   } = { ...props, ...movie };
 
+  const isScene = itemType === 'scene';
+  const isJav = itemType === 'jav';
+
   const movieId = movie.id;
   const { sizeOnDisk } = statistics as MovieStatistics;
   const hasFile = !!movie.movieFileId || sizeOnDisk > 0;
@@ -267,9 +271,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
         </PageToolbarSection>
       </PageToolbar>
       <PageContentBody innerClassName={styles.innerContentBody}>
-        <div
-          className={itemType === 'movie' ? styles.header : styles.sceneHeader}
-        >
+        <div className={isScene ? styles.sceneHeader : styles.header}>
           <div
             className={styles.backdrop}
             style={
@@ -284,11 +286,13 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
             <MovieImage
               safeForWorkMode={safeForWorkMode}
               className={
-                itemType === 'movie' ? styles.poster : styles.screenshot
+                isScene
+                  ? styles.screenshot
+                  : classNames(styles.poster, isJav && styles.javPoster)
               }
-              coverType={itemType === 'movie' ? 'poster' : 'screenshot'}
+              coverType={isScene ? 'screenshot' : 'poster'}
               images={images}
-              size={itemType === 'movie' ? 500 : 180}
+              size={isScene ? 180 : 500}
               lazy={true}
               placeholder={posterPlaceholder}
               title={title}
@@ -303,11 +307,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
                         isDisabled={false}
                         monitored={monitored}
                         moviesMonitored={monitored}
-                        type={
-                          movie.itemType === 'movie'
-                            ? 'movieMonitor'
-                            : 'sceneMonitor'
-                        }
+                        type={isScene ? 'sceneMonitor' : 'movieMonitor'}
                         isSaving={isSaving}
                         size={40}
                         onPress={handleMonitoredPress}
@@ -317,7 +317,10 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
                       className={styles.title}
                       style={{ width: marqueeWidth }}
                     >
-                      <Marquee className="marquee" text={title} />
+                      <Marquee
+                        className="marquee"
+                        text={isJav && code ? `${code} - ${title}` : title}
+                      />
                     </div>
                   </div>
                 </div>
