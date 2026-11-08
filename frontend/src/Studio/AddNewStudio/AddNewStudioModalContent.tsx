@@ -38,6 +38,7 @@ function AddNewStudioModalContent(
     isWindows,
     safeForWorkMode,
     settings,
+    showJav,
     onInputChange,
     onAddStudioPress,
   } = useAddNewStudioModalContent(studio);
@@ -111,6 +112,19 @@ function AddNewStudioModalContent(
                   onChange={onInputChange}
                 />
               </FormGroup>
+
+              {showJav ? (
+                <FormGroup>
+                  <FormLabel>{translate('MonitorJav')}</FormLabel>
+                  <FormInputGroup
+                    type={inputTypes.CHECK}
+                    name="javMonitored"
+                    {...settings.javMonitored}
+                    errors={settings.javMonitored?.errors}
+                    onChange={onInputChange}
+                  />
+                </FormGroup>
+              ) : null}
 
               <FormGroup>
                 <FormLabel>{translate('WhisparrMonitorNewItems')}</FormLabel>

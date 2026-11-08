@@ -5,6 +5,7 @@ import { useSafeForWorkMode } from 'App/safeForWorkStore';
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
 import useInitialTermParam from 'Helpers/Hooks/useInitialTermParam';
+import useLookupHasJav from 'Helpers/Hooks/useLookupHasJav';
 import selectSettings from 'Helpers/selectSettings';
 import Performer from 'Performer/Performer';
 import { useSystemStatusData } from 'System/Status/useSystemStatus';
@@ -139,6 +140,7 @@ export function useAddNewPerformerModalContent(
   const systemStatus = useSystemStatusData();
   const safeForWorkMode = useSafeForWorkMode();
   const defaults = useAddPerformerDefaults();
+  const showJav = useLookupHasJav('performer', performer.foreignId);
 
   const addPerformer = useApiMutation<Performer, Performer>({
     method: 'POST',
@@ -168,10 +170,13 @@ export function useAddNewPerformerModalContent(
 
   const onAddPerformerPress = useCallback(() => {
     addPerformer.mutate({
-      ...getNewPerformer(performer, defaults),
+      ...getNewPerformer(performer, {
+        ...defaults,
+        javMonitored: showJav && defaults.javMonitored === true,
+      }),
       id: 0,
     });
-  }, [addPerformer, performer, defaults]);
+  }, [addPerformer, performer, defaults, showJav]);
 
   useEffect(() => {
     if (addPerformer.isSuccess) {
@@ -186,6 +191,7 @@ export function useAddNewPerformerModalContent(
     isWindows: systemStatus.isWindows,
     safeForWorkMode,
     settings,
+    showJav,
     validationErrors,
     validationWarnings,
     onInputChange,
