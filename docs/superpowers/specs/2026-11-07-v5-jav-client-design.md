@@ -51,7 +51,12 @@ All routes are under `tpdb/`. JAV has no StashDB route.
 - JAV gets its own naming settings: `RenameJav`, `StandardJavFormat` and `JavFolderFormat`.
   - Defaults: folder `jav/{Studio CleanTitle}/{Scene Code}`, file `{Scene Code} - {Scene CleanTitle} {[Quality Title]}`.
   - Studio and scene tokens are available, as for scenes.
-- File and folder handling (one release per folder, no flat layout, the import and rescan rules) behaves like a movie.
+- File and folder handling follows the scene layout model.
+  - `JavFolderFormat` decides whether the layout is flat or one folder per release, using the same rule as `SceneFolderFormat`.
+  - The default ends in `{Scene Code}`, so each release gets its own folder.
+  - A flat format keeps JAV in shared studio folders.
+  - JAV and scenes may share a folder, because v2 kept both in one studio folder.
+  - The v2 migration keeps v2's layout: each JAV release keeps its v2 studio folder, and no file moves.
 
 ## Search and import
 
