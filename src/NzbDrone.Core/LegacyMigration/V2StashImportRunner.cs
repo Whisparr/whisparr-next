@@ -65,6 +65,17 @@ namespace NzbDrone.Core.LegacyMigration
 
         protected override void Import(LegacyV2Series series, List<LegacyV2Episode> episodes, List<LegacyV2EpisodeFile> files, ILegacyImportProgress progress)
         {
+            if (series.IsJav)
+            {
+                const string javReason = "JAV needs the TPDB scene source";
+                var wanted = episodes.Count(e => e.Monitored && e.LegacyEpisodeFileId == 0);
+
+                _migrationService.Report(LegacyReportCategory.NeedsAttention, StudioArea, series.Title, $"{javReason}; {wanted} wanted, {files.Count} files parked");
+                ParkAndFinish(series, episodes, files, javReason, progress);
+
+                return;
+            }
+
             var siteUuid = ResolveSite(series);
             var mapped = _idMapper.MapStudio(SceneMetadataType.Tpdb, siteUuid, series.Title);
 

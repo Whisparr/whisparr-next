@@ -201,9 +201,19 @@ namespace NzbDrone.Core.LegacyMigration
             pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(series.Attempts, series.LastAttemptAt));
         }
 
+        // Legacy ids of JAV series where at least one episode resolved as a scene
+        protected readonly HashSet<int> JavSeriesWithScenes = new();
+
         protected void ApplyV2Settings(LegacyV2Series series, Studio studio)
         {
-            studio.Monitored = series.Monitored;
+            studio.Monitored = series.Monitored && (!series.IsJav || JavSeriesWithScenes.Contains(series.LegacyId));
+
+            if (series.IsJav)
+            {
+                studio.JavMonitored = series.Monitored;
+                studio.HasJav = true;
+            }
+
             studio.WhisparrMonitorNewItems = series.MonitorNewItems == 0;
             studio.SearchOnAdd = false;
             _studioService.Update(studio);

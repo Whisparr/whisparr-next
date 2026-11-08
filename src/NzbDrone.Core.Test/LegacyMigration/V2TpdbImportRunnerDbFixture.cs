@@ -114,6 +114,9 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ITpdbIdResolver>()
                   .Setup(r => r.Resolve(TpdbIdKind.Scene, It.IsAny<IReadOnlyCollection<int>>()))
                   .Returns(new TpdbResolveResult { Ids = new Dictionary<int, string> { [101] = "scene-101" } });
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                  .Returns(new SceneCatalogImportResult(0, 0));
             Mocker.GetMock<IStudioService>()
                   .Setup(s => s.FindByForeignId(It.IsAny<string>()))
                   .Returns<string>(id => studios.GetValueOrDefault(id));

@@ -67,7 +67,14 @@ namespace NzbDrone.Core.LegacyMigration
 
             CreatedStudioIds[series.LegacyId] = siteUuid;
 
-            var sceneUuids = ResolveScenes(episodes);
+            var (sceneUuids, javIds) = ResolveScenes(episodes, series.IsJav);
+            var javUuids = javIds.Select(id => sceneUuids[id]).ToHashSet();
+
+            if (sceneUuids.Count > javIds.Count)
+            {
+                JavSeriesWithScenes.Add(series.LegacyId);
+            }
+
             var episodeByUuid = new Dictionary<string, LegacyV2Episode>();
 
             foreach (var episode in episodes.Where(e => sceneUuids.ContainsKey(e.TpdbSceneId)))
@@ -90,7 +97,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             Movie BuildStub(string uuid)
             {
-                return new Movie
+                var stub = new Movie
                 {
                     ForeignId = uuid,
                     Path = series.Path,
@@ -100,9 +107,35 @@ namespace NzbDrone.Core.LegacyMigration
                     AddOptions = new AddMovieOptions { SearchForMovie = false, AddMethod = AddMovieMethod.Studio },
                     Monitored = episodeByUuid.TryGetValue(uuid, out var episode) ? episode.Monitored : series.MonitorNewItems == 0
                 };
+
+                if (javUuids.Contains(uuid))
+                {
+                    stub.MovieMetadata.Value.ItemType = ItemType.Jav;
+                }
+
+                return stub;
             }
 
-            var imported = _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true);
+            Movie BuildJavStub(string uuid)
+            {
+                var stub = BuildStub(uuid);
+                stub.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+                return stub;
+            }
+
+            var gaveUp = 0;
+
+            // A JAV-only series has no scene catalog to walk
+            if (!series.IsJav || JavSeriesWithScenes.Contains(series.LegacyId))
+            {
+                gaveUp += _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true).GaveUp;
+            }
+
+            if (series.IsJav)
+            {
+                gaveUp += _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioJavPage(siteUuid, cursor), BuildJavStub, () => true).GaveUp;
+            }
 
             var missing = episodeByUuid.Keys.Where(uuid => _movieService.FindByForeignId(uuid) == null).ToList();
 
@@ -123,9 +156,9 @@ namespace NzbDrone.Core.LegacyMigration
 
             // Linked files are done and stay so. Finishing now would leave scenes of the pages given up on to the first
             // refresh, which adds them with the studio's monitoring settings
-            if (imported.GaveUp > 0)
+            if (gaveUp > 0)
             {
-                throw new CatalogIncompleteException(series.Title, imported.GaveUp);
+                throw new CatalogIncompleteException(series.Title, gaveUp);
             }
 
             ApplyV2Settings(series, _studioService.FindByForeignId(siteUuid) ?? studio);
@@ -134,16 +167,39 @@ namespace NzbDrone.Core.LegacyMigration
             MarkSeriesDone(series, episodes, progress);
         }
 
-        private Dictionary<int, string> ResolveScenes(List<LegacyV2Episode> episodes)
+        // A JAV series tries JAV ids first and retries the misses as scenes: TPDB ids never collide across the two
+        private (Dictionary<int, string> Ids, HashSet<int> JavIds) ResolveScenes(List<LegacyV2Episode> episodes, bool isJav)
         {
             var ids = episodes.Where(e => e.TpdbSceneId > 0).Select(e => e.TpdbSceneId).Distinct().ToList();
+            var resolved = new Dictionary<int, string>();
+            var javIds = new HashSet<int>();
 
             if (ids.Count == 0)
             {
-                return new Dictionary<int, string>();
+                return (resolved, javIds);
             }
 
-            var result = _idResolver.Resolve(TpdbIdKind.Scene, ids);
+            if (isJav)
+            {
+                resolved = Resolve(TpdbIdKind.Jav, ids);
+                javIds = resolved.Keys.ToHashSet();
+                ids = ids.Where(id => !javIds.Contains(id)).ToList();
+            }
+
+            if (ids.Count > 0)
+            {
+                foreach (var (id, uuid) in Resolve(TpdbIdKind.Scene, ids))
+                {
+                    resolved[id] = uuid;
+                }
+            }
+
+            return (resolved, javIds);
+        }
+
+        private Dictionary<int, string> Resolve(TpdbIdKind kind, List<int> ids)
+        {
+            var result = _idResolver.Resolve(kind, ids);
 
             if (result.Throttled)
             {
@@ -155,7 +211,7 @@ namespace NzbDrone.Core.LegacyMigration
                 throw new ResolvePendingException("scenes");
             }
 
-            return result.Ids;
+            return new Dictionary<int, string>(result.Ids);
         }
 
         private void LinkFile(LegacyV2Series series, LegacyV2EpisodeFile file, List<LegacyV2Episode> episodes, Dictionary<int, string> sceneUuids, ILegacyImportProgress progress)
