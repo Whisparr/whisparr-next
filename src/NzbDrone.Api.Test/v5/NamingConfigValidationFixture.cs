@@ -29,6 +29,8 @@ namespace NzbDrone.Api.Test.v5
                 MovieFolderFormat = defaults.MovieFolderFormat,
                 StandardSceneFormat = standardSceneFormat ?? defaults.StandardSceneFormat,
                 SceneFolderFormat = sceneFolderFormat,
+                StandardJavFormat = defaults.StandardJavFormat,
+                JavFolderFormat = defaults.JavFolderFormat,
                 SceneImportFolderFormat = defaults.SceneImportFolderFormat
             };
         }
