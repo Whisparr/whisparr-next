@@ -32,7 +32,7 @@
 2. **Skyhook JAV switch off** (JAV routes answer 503 + `Retry-After`): sync treats it as a throttle and gives up per the walker rules. Refresh of an existing JAV release must not mark it deleted. The test is in Task 3.
 3. **`HasJav: null`** (unknown) on a studio refresh keeps the stored value instead of resetting it to false, and the toggle doesn't flicker off. The test is in Task 2.
 4. **A file named with only a code** (`abp123.mp4`, `[FHD] ABP-123.mkv`) matches by code even when a scene or movie title contains the same characters. The test is in Task 7.
-5. **A v2 JAV series under a StashDB-locked v5** parks every file with a reason and reports one row. Nothing is silently dropped. The test is in Task 11.
+5. **A v2 JAV series when the user switched to StashDB in the wizard** (v2 itself is TPDB-backed) parks every file with a reason and reports one row. Nothing is silently dropped. The test is in Task 11.
 
 ---
 

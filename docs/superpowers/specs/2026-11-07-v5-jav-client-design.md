@@ -66,7 +66,8 @@ v2 marks JAV studios with `Series.SeriesType = 1`. Today the snapshot stages it 
   - A JAV series imports as a studio with `JavMonitored` taken from the series and `Monitored` off.
   - Its episodes resolve through `resolve` kind `jav`, and the catalog walks `site/{uuid}/jav/full`.
   - Files link to the resolved release, exactly as the TPDB scene runner does. Episodes with no file keep their v2 monitored state.
-- **StashDB scene source:** JAV can't be carried over.
+- **StashDB scene source:** v2 is TPDB-backed, so this case only arises when the user picks StashDB as the v5 scene source during migration, i.e. switches source. JAV can't be carried over across that switch.
+  - The wizard's scene-source step warns before the choice is locked when the v2 snapshot holds JAV series ("N JAV studios won't migrate under StashDB").
   - Each JAV series writes one `NeedsAttention` report row: "JAV needs the TPDB scene source; N wanted, M files parked".
   - Its files are parked with that reason. Nothing is dropped silently.
 
@@ -74,6 +75,6 @@ v2 marks JAV studios with `Series.SeriesType = 1`. Today the snapshot stages it 
 
 - Folder import ("Import JAV" from an existing tree).
 - Import lists for JAV.
-- FC2-PPV multi-part codes, which Skyhook's code search doesn't match either.
+- An exact-code fast path for FC2-PPV multi-part codes. Skyhook's `JavCode` doesn't match them, so they go through free-text search. That's slower, but nothing is missed.
 - Custom formats keyed on JAV.
-- Per-release JAV fingerprints.
+- JAV fingerprint matching. TPDB has `GET /jav/hash/{hash}`, but Skyhook's fingerprint lookup only resolves scenes. Wiring it up is a later Skyhook change, followed by the client.
