@@ -10,6 +10,7 @@ using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Profiles.Qualities;
@@ -73,6 +74,20 @@ namespace NzbDrone.Core.IndexerSearch
                 }
 
                 decisions = await Dispatch(indexer => indexer.Fetch(movieSearchSpec), movieSearchSpec);
+            }
+            else if (movie.MovieMetadata.Value.ItemType == ItemType.Jav)
+            {
+                // JAV releases are found by code; title, date and studio expansion don't apply.
+                var javSearchSpec = Get<SceneSearchCriteria>(movie, userInvokedSearch, interactiveSearch);
+                var javCode = movie.MovieMetadata.Value.Code;
+
+                javSearchSpec.SceneTitles = javCode.IsNotNullOrWhiteSpace()
+                    ? new[] { javCode, JavCode.SearchVariant(javCode) }.Distinct().ToList()
+                    : new List<string> { movie.MovieMetadata.Value.Title };
+                javSearchSpec.ReleaseDate = null;
+                javSearchSpec.SiteTitle = null;
+
+                decisions = await Dispatch(indexer => indexer.Fetch(javSearchSpec), javSearchSpec);
             }
             else
             {
