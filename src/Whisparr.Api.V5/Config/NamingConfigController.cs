@@ -35,8 +35,8 @@ namespace Whisparr.Api.V5.Config
             SharedValidator.RuleFor(c => c.SceneFolderFormat).ValidMainSceneFolderFormat();
             SharedValidator.RuleFor(c => c.SceneFolderFormat).NotCollidingWithMainFolders(c => c.MovieFolderFormat, c => c.SceneImportFolderFormat);
             SharedValidator.RuleFor(c => c.StandardSceneFormat).FlatSceneFolderKeepsFileNamesUnique(c => c.SceneFolderFormat).AsWarning();
-            SharedValidator.RuleFor(c => c.StandardJavFormat).ValidMainSceneFolderFormat();
-            SharedValidator.RuleFor(c => c.JavFolderFormat).ValidMainSceneFolderFormat();
+            SharedValidator.RuleFor(c => c.StandardJavFormat).ValidJavFormat();
+            SharedValidator.RuleFor(c => c.JavFolderFormat).ValidJavFormat();
             SharedValidator.RuleFor(c => c.SceneImportFolderFormat).ValidSceneImportFolderFormat();
         }
 

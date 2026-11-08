@@ -63,6 +63,38 @@ namespace NzbDrone.Api.Test.v5
                 .Which.CustomState.Should().Be(NzbDroneValidationState.Warning);
         }
 
+        [TestCase("jav/{Studio CleanTitle}")]
+        [TestCase("")]
+        public void should_reject_jav_folder_format_without_code_or_title(string format)
+        {
+            var resource = Resource(NamingConfig.Default.SceneFolderFormat);
+            resource.JavFolderFormat = format;
+
+            _validator.Validate(resource).Errors.Should().NotBeEmpty();
+        }
+
+        [TestCase("{Scene Code} - {Scene CleanTitle}")]
+        [TestCase("jav/{Studio CleanTitle}/{Scene.Code}")]
+        [TestCase("jav/{Scene Title}")]
+        public void should_accept_jav_formats_with_code_or_title(string format)
+        {
+            var resource = Resource(NamingConfig.Default.SceneFolderFormat);
+            resource.JavFolderFormat = format;
+            resource.StandardJavFormat = format;
+
+            _validator.Validate(resource).Errors.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_reject_jav_file_format_without_code_or_title()
+        {
+            var resource = Resource(NamingConfig.Default.SceneFolderFormat);
+            resource.StandardJavFormat = "{Quality Title}";
+
+            _validator.Validate(resource).Errors.Should().ContainSingle()
+                .Which.ErrorMessage.Should().Be("Must contain the JAV code or title, ex. {Scene Code}");
+        }
+
         private class ExposedController : NamingConfigController
         {
             public ExposedController(INamingConfigService namingConfigService, IFilenameSampleService filenameSampleService, IFilenameValidationService filenameValidationService)

@@ -16,6 +16,8 @@ namespace NzbDrone.Core.Organizer
         // Matches the token as the name builder reads it: optional prefix, any separator, any case.
         private static readonly Regex UniqueFileNameTokenRegex = new(@"\{[- ._\[(]*(Release[- ._]+Date|Scene[- ._]+ForeignId)", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
 
+        private static readonly Regex JavCodeTokenRegex = new(@"\{Scene[- ._]Code\}", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
         public static IRuleBuilderOptions<T, string> ValidMovieFolderFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
         {
             ruleBuilder.NotEmpty();
@@ -54,6 +56,16 @@ namespace NzbDrone.Core.Organizer
         {
             ruleBuilder.NotEmpty();
             return ruleBuilder.SetValidator(new IllegalCharactersValidator<T>());
+        }
+
+        // JAV keeps one release per folder, so the format needs a per-release token: the code or a scene title.
+        public static IRuleBuilderOptions<T, string> ValidJavFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
+        {
+            ruleBuilder.NotEmpty();
+            ruleBuilder.SetValidator(new IllegalCharactersValidator<T>());
+
+            return ruleBuilder.Must(value => value != null && (JavCodeTokenRegex.IsMatch(value) || FileNameBuilder.SceneTitleRegex.IsMatch(value)))
+                              .WithMessage("Must contain the JAV code or title, ex. {Scene Code}");
         }
 
         public static IRuleBuilderOptions<T, string> NotCollidingWithMainFolders<T>(this IRuleBuilder<T, string> ruleBuilder, Func<T, string> movieFolderFormat, Func<T, string> sceneImportFolderFormat)
