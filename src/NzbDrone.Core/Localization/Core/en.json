@@ -1967,6 +1967,7 @@
   "RemoveCompletedDownloads": "Remove Completed Downloads",
   "RemoveCompletedDownloadsHelpText": "Remove imported downloads from download client history",
   "RemovedFromTaskQueue": "Removed from task queue",
+  "RemovedJavCheckMessage": "JAV: {jav} removed from TPDb",
   "RemovedMovieCheckMultipleMessage": "Movies: {movies} were removed from TMDb/TPDb",
   "RemovedMovieCheckSceneMultipleMessage": "Scenes: {scenes} were removed from StashDB/TPDb",
   "RemovedMovieCheckSceneSingleMessage": "Scene: {scene} was removed from StashDB/TPDb",

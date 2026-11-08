@@ -32,6 +32,8 @@ namespace NzbDrone.Core.HealthCheck.Checks
             var movies = deletedItems.Where(i => i.MovieMetadata.Value.ItemType == ItemType.Movie).ToList();
             var scenes = deletedItems.Where(i => i.MovieMetadata.Value.ItemType == ItemType.Scene).ToList();
 
+            var javs = deletedItems.Where(i => i.MovieMetadata.Value.ItemType == ItemType.Jav).ToList();
+
             var messages = new List<string>();
 
             if (!movies.Empty())
@@ -64,8 +66,18 @@ namespace NzbDrone.Core.HealthCheck.Checks
                     }));
             }
 
+            if (!javs.Empty())
+            {
+                var javText = javs.Select(s => $"[{s.Title}](/movie/{s.Id}) ({s.MovieMetadata.Value.Code ?? s.ForeignId})").Join(", ");
+
+                messages.Add(_localizationService.GetLocalizedString("RemovedJavCheckMessage", new Dictionary<string, object>
+                {
+                    { "jav", javText }
+                }));
+            }
+
             // The wiki only documents removal from TMDb; there is no section for StashDB or TPDB scenes yet.
-            var wikiFragment = scenes.Empty() ? "#movie-was-removed-from-tmdb" : null;
+            var wikiFragment = scenes.Empty() && javs.Empty() ? "#movie-was-removed-from-tmdb" : null;
 
             return new HealthCheck(GetType(), HealthCheckResult.Error, HealthCheckReason.RemovedMovie, messages.Join("; "), wikiFragment);
         }

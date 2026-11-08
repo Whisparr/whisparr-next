@@ -179,6 +179,21 @@ public class StatisticsRepositoryFixture : DbTest<StatisticsRepository, Movie>
     }
 
     [Test]
+    public void statistics_counts_jav_bucket()
+    {
+        GivenMovie(itemType: ItemType.Movie);
+        GivenMovie(itemType: ItemType.Scene);
+        GivenMovie(itemType: ItemType.Jav);
+        GivenMovie(itemType: ItemType.Jav);
+
+        var stats = Subject.GetLibraryStatistics();
+
+        stats.MovieItemCount.Should().Be(1);
+        stats.SceneItemCount.Should().Be(1);
+        stats.JavItemCount.Should().Be(2);
+    }
+
+    [Test]
     public void should_count_downloaded_missing_and_unreleased_movies()
     {
         var downloaded = GivenMovie();

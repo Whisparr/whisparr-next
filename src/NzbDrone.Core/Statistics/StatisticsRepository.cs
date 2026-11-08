@@ -66,6 +66,7 @@ public class StatisticsRepository : IStatisticsRepository
             DeletedMovieCount = movieCounts.DeletedMovieCount,
             MovieItemCount = movieCounts.MovieItemCount,
             SceneItemCount = movieCounts.SceneItemCount,
+            JavItemCount = movieCounts.JavItemCount,
             MovieFileCount = movieFileCounts.MovieFileCount,
             SizeOnDisk = movieFileCounts.SizeOnDisk,
             QualityProfileStatistics = MapQualityProfileStatistics(qualityProfileCounts, qualityProfileFileCounts),
@@ -211,6 +212,7 @@ public class StatisticsRepository : IStatisticsRepository
         parameters.Add("deleted", (int)MovieStatusType.Deleted, null);
         parameters.Add("movieItem", (int)ItemType.Movie, null);
         parameters.Add("sceneItem", (int)ItemType.Scene, null);
+        parameters.Add("javItem", (int)ItemType.Jav, null);
 
         var trueIndicator = TrueIndicator;
 
@@ -227,7 +229,8 @@ public class StatisticsRepository : IStatisticsRepository
                          COALESCE(SUM(CASE WHEN ""MovieMetadata"".""Status"" = @released THEN 1 ELSE 0 END), 0) AS ReleasedMovieCount,
                          COALESCE(SUM(CASE WHEN ""MovieMetadata"".""Status"" = @deleted THEN 1 ELSE 0 END), 0) AS DeletedMovieCount,
                          COALESCE(SUM(CASE WHEN ""MovieMetadata"".""ItemType"" = @movieItem THEN 1 ELSE 0 END), 0) AS MovieItemCount,
-                         COALESCE(SUM(CASE WHEN ""MovieMetadata"".""ItemType"" = @sceneItem THEN 1 ELSE 0 END), 0) AS SceneItemCount",
+                         COALESCE(SUM(CASE WHEN ""MovieMetadata"".""ItemType"" = @sceneItem THEN 1 ELSE 0 END), 0) AS SceneItemCount,
+                         COALESCE(SUM(CASE WHEN ""MovieMetadata"".""ItemType"" = @javItem THEN 1 ELSE 0 END), 0) AS JavItemCount",
                 parameters)
             .Join<Movie, MovieMetadata>((m, mm) => m.MovieMetadataId == mm.Id);
 
@@ -540,6 +543,7 @@ public class StatisticsRepository : IStatisticsRepository
         public int DeletedMovieCount { get; set; }
         public int MovieItemCount { get; set; }
         public int SceneItemCount { get; set; }
+        public int JavItemCount { get; set; }
     }
 
     private class MovieFileCounts

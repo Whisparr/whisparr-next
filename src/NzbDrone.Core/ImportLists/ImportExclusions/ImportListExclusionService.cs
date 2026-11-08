@@ -143,7 +143,7 @@ namespace NzbDrone.Core.ImportLists.ImportExclusions
                 return ImportExclusionType.Movie;
             }
 
-            return ImportExclusionType.Scene;
+            return itemType == ItemType.Jav ? ImportExclusionType.Jav : ImportExclusionType.Scene;
         }
     }
 }

@@ -16,6 +16,7 @@ public class LibraryStatistics
     public int DeletedMovieCount { get; set; }
     public int MovieItemCount { get; set; }
     public int SceneItemCount { get; set; }
+    public int JavItemCount { get; set; }
     public int MovieFileCount { get; set; }
     public long SizeOnDisk { get; set; }
     public List<QualityProfileStatistics> QualityProfileStatistics { get; set; }

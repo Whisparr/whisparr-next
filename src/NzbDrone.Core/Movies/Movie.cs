@@ -133,6 +133,13 @@ namespace NzbDrone.Core.Movies
                     result += string.Format("{0} - {1} - {2}", MovieMetadata.Value.StudioTitle.NullSafe(), MovieMetadata.Value.ReleaseDate.NullSafe(), MovieMetadata.Value.Title.NullSafe());
                 }
             }
+            else if (MovieMetadata.Value.ItemType == ItemType.Jav)
+            {
+                if (MovieMetadata.Value.Title != null)
+                {
+                    result += string.Format("{0} - {1}", MovieMetadata.Value.Code.NullSafe(), MovieMetadata.Value.Title.NullSafe());
+                }
+            }
             else
             {
                 if (MovieMetadata.Value.Title != null)

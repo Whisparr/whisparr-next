@@ -85,6 +85,14 @@ namespace NzbDrone.Core.Test.NotificationTests.WebhookTests
             payloadMovie.ItemType.Should().Be("Scene");
         }
 
+        [Test]
+        public void webhook_item_type_jav()
+        {
+            var movie = GivenMovie(new MovieMetadata { Title = "Test Jav", ItemType = ItemType.Jav });
+
+            AddedMovie(movie).ItemType.Should().Be("Jav");
+        }
+
         // A null release date used to dereference Nullable<DateTime>.Value and throw, taking down
         // every notification for the item rather than just omitting the date.
         [Test]

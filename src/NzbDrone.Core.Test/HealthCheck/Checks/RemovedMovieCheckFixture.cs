@@ -20,7 +20,8 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             { "RemovedMovieCheckSingleMessage", "Movie: {movie} was removed from TMDb/TPDb" },
             { "RemovedMovieCheckMultipleMessage", "Movies: {movies} were removed from TMDb/TPDb" },
             { "RemovedMovieCheckSceneSingleMessage", "Scene: {scene} was removed from StashDB/TPDb" },
-            { "RemovedMovieCheckSceneMultipleMessage", "Scenes: {scenes} were removed from StashDB/TPDb" }
+            { "RemovedMovieCheckSceneMultipleMessage", "Scenes: {scenes} were removed from StashDB/TPDb" },
+            { "RemovedJavCheckMessage", "JAV: {jav} removed from TPDb" }
         };
 
         [SetUp]
@@ -97,6 +98,21 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
             Mocker.GetMock<IMovieService>()
                 .Setup(v => v.GetAllMovies())
                 .Returns(movie);
+        }
+
+        [Test]
+        public void removed_check_lists_jav_separately()
+        {
+            GivenDeletedItems(
+                CreateDeletedItem(10, "Some Movie", "tmdb-10", ItemType.Movie),
+                CreateDeletedItem(11, "Some Jav", "jav-11", ItemType.Jav));
+
+            var result = Subject.Check();
+
+            result.ShouldBeError();
+            result.Message.Should().Contain("Movie: [Some Movie](/movie/10) (tmdbid tmdb-10) was removed from TMDb/TPDb");
+            result.Message.Should().Contain("JAV: [Some Jav](/movie/11) (jav-11) removed from TPDb");
+            result.Message.Should().NotContain("Some Jav](/movie/11) (tmdbid");
         }
 
         [Test]
