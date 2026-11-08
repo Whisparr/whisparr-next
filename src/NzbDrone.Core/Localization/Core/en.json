@@ -1149,6 +1149,7 @@
   "InvalidMovieInfoLanguageLanguage": "Your Movie Info Language is set to an invalid value, correct it and save your settings",
   "InvalidUILanguage": "Your UI is set to an invalid language, correct it and save your settings",
   "Jav": "JAV",
+  "JavCount": "JAV Count",
   "JavFolderFormat": "JAV Folder Format",
   "JavRequiresTpdbSceneSource": "JAV needs the TPDB scene metadata source",
   "JavSearchPlaceholder": "Code or title, e.g. ABP-123",
