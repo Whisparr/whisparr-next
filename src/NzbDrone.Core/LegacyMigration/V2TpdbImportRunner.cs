@@ -55,6 +55,9 @@ namespace NzbDrone.Core.LegacyMigration
 
         protected override void Import(LegacyV2Series series, List<LegacyV2Episode> episodes, List<LegacyV2EpisodeFile> files, ILegacyImportProgress progress)
         {
+            // The runner outlives a run, so a retry starts from what it learns this time
+            JavOnlySeries.Remove(series.LegacyId);
+
             var siteUuid = ResolveSite(series);
 
             if (siteUuid == null)
@@ -70,9 +73,9 @@ namespace NzbDrone.Core.LegacyMigration
             var (sceneUuids, javIds) = ResolveScenes(episodes, series.IsJav);
             var javUuids = javIds.Select(id => sceneUuids[id]).ToHashSet();
 
-            if (sceneUuids.Count > javIds.Count)
+            if (series.IsJav && sceneUuids.Count == javIds.Count)
             {
-                JavSeriesWithScenes.Add(series.LegacyId);
+                JavOnlySeries.Add(series.LegacyId);
             }
 
             var episodeByUuid = new Dictionary<string, LegacyV2Episode>();
@@ -127,7 +130,7 @@ namespace NzbDrone.Core.LegacyMigration
             var gaveUp = 0;
 
             // A JAV-only series has no scene catalog to walk
-            if (!series.IsJav || JavSeriesWithScenes.Contains(series.LegacyId))
+            if (!JavOnlySeries.Contains(series.LegacyId))
             {
                 gaveUp += _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true).GaveUp;
             }
@@ -224,7 +227,10 @@ namespace NzbDrone.Core.LegacyMigration
 
                 if (movie == null)
                 {
-                    _fileLinker.Park(file.Path, series.QualityProfileId, FileArea, "No TPDB scene link in v2");
+                    // A linked episode with no row means the add failed or the catalog walk gave up
+                    var reason = target == null ? "No TPDB scene link in v2" : "Release could not be added to the library";
+
+                    _fileLinker.Park(file.Path, series.QualityProfileId, FileArea, reason);
                 }
                 else
                 {

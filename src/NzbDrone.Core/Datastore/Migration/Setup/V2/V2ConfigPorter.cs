@@ -145,8 +145,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             context.V5.Execute("DELETE FROM \"NamingConfig\"", transaction: context.Transaction);
 
             context.V5.Execute(
-                "INSERT INTO \"NamingConfig\" (\"RenameMovies\", \"RenameScenes\", \"ReplaceIllegalCharacters\", \"ColonReplacementFormat\", \"StandardMovieFormat\", \"StandardSceneFormat\", \"MovieFolderFormat\", \"SceneFolderFormat\", \"SceneImportFolderFormat\", \"MaxFolderPathLength\", \"MaxFilePathLength\") " +
-                "VALUES (@RenameMovies, @RenameScenes, @ReplaceIllegalCharacters, @ColonReplacementFormat, @StandardMovieFormat, @StandardSceneFormat, @MovieFolderFormat, @SceneFolderFormat, @SceneImportFolderFormat, @MaxFolderPathLength, @MaxFilePathLength)",
+                "INSERT INTO \"NamingConfig\" (\"RenameMovies\", \"RenameScenes\", \"ReplaceIllegalCharacters\", \"ColonReplacementFormat\", \"StandardMovieFormat\", \"StandardSceneFormat\", \"MovieFolderFormat\", \"SceneFolderFormat\", \"JavFolderFormat\", \"SceneImportFolderFormat\", \"MaxFolderPathLength\", \"MaxFilePathLength\") " +
+                "VALUES (@RenameMovies, @RenameScenes, @ReplaceIllegalCharacters, @ColonReplacementFormat, @StandardMovieFormat, @StandardSceneFormat, @MovieFolderFormat, @SceneFolderFormat, @JavFolderFormat, @SceneImportFolderFormat, @MaxFolderPathLength, @MaxFilePathLength)",
                 new
                 {
                     RenameMovies = false,
@@ -157,6 +157,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
                     StandardSceneFormat = standard,
                     defaults.MovieFolderFormat,
                     SceneFolderFormat = folder,
+
+                    // v2 used the series folder format for JAV studios too
+                    JavFolderFormat = folder,
                     defaults.SceneImportFolderFormat,
                     defaults.MaxFolderPathLength,
                     defaults.MaxFilePathLength

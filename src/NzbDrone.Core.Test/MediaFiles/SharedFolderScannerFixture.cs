@@ -109,6 +109,30 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void imports_a_file_for_a_jav_sibling_in_the_same_flat_folder()
+        {
+            var jav = Scene(4, _folder);
+            jav.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(_folder))
+                  .Returns(new List<MoviePathEntry>
+                  {
+                      new() { Id = 1, Path = _folder, ItemType = ItemType.Scene },
+                      new() { Id = 4, Path = _folder, ItemType = ItemType.Jav }
+                  });
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<Movie> { _s1, jav });
+
+            GivenNameIdentifies(F("jav.mp4"), jav);
+
+            var decisions = Subject.IdentifyOwned(_s1, new List<string> { F("jav.mp4") });
+
+            decisions.Should().ContainSingle().Which.LocalMovie.Movie.Id.Should().Be(4);
+        }
+
+        [Test]
         public void identifies_by_hash_when_the_name_does_not()
         {
             GivenHashIdentifies(_s2);

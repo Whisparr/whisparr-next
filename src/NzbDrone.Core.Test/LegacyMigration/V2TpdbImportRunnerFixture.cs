@@ -792,6 +792,42 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void mixed_jav_series_given_up_before_resolving_keeps_its_v2_monitoring()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid", monitored: true);
+            GivenEpisode(1, series, 5906477, null);
+            GivenEpisode(2, series, 159959, "scene-1");
+            _javScenes[5906477] = "jav-1";
+            _studios["site-uuid"] = new Studio { ForeignId = "site-uuid", Monitored = false };
+            _scenePending = true;
+            series.WaitingSince = _now.AddHours(-24).AddMinutes(-1);
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            _studios["site-uuid"].Monitored.Should().BeTrue();
+            _studios["site-uuid"].JavMonitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void file_of_a_resolved_release_that_was_not_added_is_not_parked_as_having_no_link()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 5906477, null, fileId: 5);
+            _javScenes[5906477] = "jav-1";
+
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                  .Returns(new List<Movie>());
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "Release could not be added to the library"), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "No TPDB scene link in v2"), Times.Never());
+        }
+
+        [Test]
         public void resolve_pending_right_at_24_hours_keeps_waiting()
         {
             var series = GivenSeries(1, 11, "site-uuid");

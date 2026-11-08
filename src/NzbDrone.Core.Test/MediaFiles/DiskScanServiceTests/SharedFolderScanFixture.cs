@@ -195,6 +195,64 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void rescan_of_flat_jav_folder_keeps_each_file_linked_to_its_own_row()
+        {
+            var j1 = GivenScene(201, _folder);
+            var j2 = GivenScene(202, _folder);
+            j1.MovieMetadata.Value.ItemType = ItemType.Jav;
+            j2.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            var j1File = new MovieFile { Id = 1, MovieId = j1.Id, RelativePath = "j1.mp4" };
+            var j2File = new MovieFile { Id = 2, MovieId = j2.Id, RelativePath = "j2.mp4" };
+
+            GivenFiles(InFolder("j1.mp4"), InFolder("j2.mp4"));
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(j1.Id)).Returns(new List<MovieFile> { j1File });
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(j2.Id)).Returns(new List<MovieFile> { j2File });
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(It.IsAny<Movie>(), It.IsAny<List<string>>()))
+                  .Returns(new List<ImportDecision>());
+
+            Subject.Scan(j1);
+            Subject.Scan(j2);
+
+            _imported.Should().BeEmpty();
+
+            // Each scan offers only the sibling's file, which the scanner drops as tracked by another row
+            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(j1, It.Is<List<string>>(l => l.Single() == InFolder("j2.mp4"))), Times.Once());
+            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(j2, It.Is<List<string>>(l => l.Single() == InFolder("j1.mp4"))), Times.Once());
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
+        }
+
+        [Test]
+        public void unmapped_cleanup_for_a_flat_jav_folder_only_removes_rows_for_owned_files()
+        {
+            var j1 = GivenScene(201, _folder);
+            j1.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            var j1File = InFolder("j1.mp4");
+            var j2File = InFolder("j2.mp4");
+            var ownRow = new MovieFile { Id = 1, MovieId = 0, OriginalFilePath = j1File };
+            var siblingRow = new MovieFile { Id = 2, MovieId = 0, OriginalFilePath = j2File };
+
+            GivenFiles(j1File, j2File);
+
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Setup(s => s.GetUnmappedFiles())
+                  .Returns(new List<MovieFile> { ownRow, siblingRow });
+
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(j1, It.IsAny<List<string>>()))
+                  .Returns(new List<ImportDecision> { DecisionFor(j1, j1File) });
+
+            Subject.Scan(j1);
+
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(ownRow), Times.Once());
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(siblingRow), Times.Never());
+        }
+
+        [Test]
         public void relink_in_shared_folder_only_considers_unowned_files()
         {
             var s1Missing = new MovieFile { Id = 1, MovieId = _s1.Id, RelativePath = "s1.mp4", OsHash = "same" };
