@@ -372,7 +372,7 @@ Every existing `ItemType` branch gets a JAV decision. The rule: **JAV is a movie
   - `ApplyV2Settings` sets `JavMonitored = series.Monitored`, and `Monitored = series.Monitored` only when any episode resolved as a scene (otherwise false). It also sets `HasJav = true`, since v2 knew the studio was JAV.
 - Behaviour, under StashDB with `series.IsJav`: write one `NeedsAttention` row in the `Studios` area with detail `$"JAV needs the TPDB scene source; {wanted} wanted, {files.Count} files parked"`, where `wanted` counts monitored episodes with no file. Then call `ParkAndFinish(series, episodes, files, "JAV needs the TPDB scene source", progress)`.
 - **Verified 2026-11-07:** v2 `SeriesTypes.Jav = 1`, set from the v3 site `Types`. `TvdbId` is the TPDB numeric site id (v3 `ReplicaMapper` gives `ForeignId = site.Id`). Episode `TvdbId` is the TPDB numeric scene id.
-- **Check during Step 4:** whether `resolve` kind `jav` reports a Scene-type id as unknown (that is what the fallback relies on). If it returns a uuid instead, record a ruling.
+- **Verified 2026-11-07 against live Skyhook v5:** `resolve` kind `jav` omits a Scene-type id, and kind `scene` omits a JAV id. Either way the id is reported unknown, so the fallback holds. Test ids: JAV 5906477, Scene 159959.
 
 - [ ] **Step 1: Failing tests.**
   - `tpdb_jav_series_resolves_with_jav_kind_and_walks_jav_pages`
