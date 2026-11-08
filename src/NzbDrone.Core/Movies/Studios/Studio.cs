@@ -58,6 +58,7 @@ namespace NzbDrone.Core.Movies.Studios
             SearchOnAdd = otherStudio.SearchOnAdd;
             Monitored = otherStudio.Monitored;
             MoviesMonitored = otherStudio.MoviesMonitored;
+            JavMonitored = otherStudio.JavMonitored;
             WhisparrMonitorNewItems = otherStudio.WhisparrMonitorNewItems;
             Status = otherStudio.Status;
             AfterDate = otherStudio.AfterDate;

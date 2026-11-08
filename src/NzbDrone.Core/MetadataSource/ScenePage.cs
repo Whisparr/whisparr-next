@@ -20,6 +20,9 @@ namespace NzbDrone.Core.MetadataSource
         // What the legacy migration matches an old scene by; null when the source gave none
         public string Title { get; set; }
         public DateTime? ReleaseDate { get; set; }
+
+        // The normalised JAV code; null outside the JAV lane
+        public string Code { get; set; }
     }
 
     public class ScenePage

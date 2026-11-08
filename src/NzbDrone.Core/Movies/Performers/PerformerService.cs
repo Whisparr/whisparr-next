@@ -267,6 +267,10 @@ namespace NzbDrone.Core.Movies.Performers
                 .Sum(stat => stat.MovieFileCount);
             message.Performer.TotalMovieCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Movie);
             message.Performer.TotalSceneCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Scene);
+            message.Performer.JavCount = movieStats
+                .Where(stat => movies.Any(m => m.Id == stat.MovieId && m.MovieMetadata.Value.ItemType == ItemType.Jav))
+                .Sum(stat => stat.MovieFileCount);
+            message.Performer.TotalJavCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Jav);
             message.Performer.SizeOnDisk = movieStats.Sum(x => x.SizeOnDisk);
             var updatedPerformer = _performerRepo.Update(message.Performer);
         }

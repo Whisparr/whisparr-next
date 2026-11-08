@@ -12,6 +12,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios.Commands;
 
 namespace NzbDrone.Core.Movies.Studios
@@ -24,6 +25,7 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly IAddMovieService _addMovieService;
         private readonly ISceneCatalogImporter _sceneCatalogImporter;
         private readonly IConfigService _configService;
+        private readonly IJavAvailability _javAvailability;
         private readonly IDiskScanService _diskScanService;
         private readonly IEventAggregator _eventAggregator;
         private readonly IImportListExclusionService _importListExclusionService;
@@ -36,6 +38,7 @@ namespace NzbDrone.Core.Movies.Studios
                                         IAddMovieService addMovieService,
                                         ISceneCatalogImporter sceneCatalogImporter,
                                         IConfigService configService,
+                                        IJavAvailability javAvailability,
                                         IDiskScanService diskScanService,
                                         IEventAggregator eventAggregator,
                                         IImportListExclusionService importListExclusionService,
@@ -47,6 +50,7 @@ namespace NzbDrone.Core.Movies.Studios
             _addMovieService = addMovieService;
             _sceneCatalogImporter = sceneCatalogImporter;
             _configService = configService;
+            _javAvailability = javAvailability;
             _diskScanService = diskScanService;
             _eventAggregator = eventAggregator;
             _importListExclusionService = importListExclusionService;
@@ -91,6 +95,14 @@ namespace NzbDrone.Core.Movies.Studios
             studio.Aliases = studioInfo.Aliases;
             studio.Status = studioInfo.Status;
 
+            // A null answer keeps the stored value; the next refresh tries again.
+            var hasJav = studioInfo.HasJavReported ?? (_javAvailability.IsAvailable() ? _movieInfo.GetStudioHasJav(studio.ForeignId) : null);
+
+            if (hasJav.HasValue)
+            {
+                studio.HasJav = hasJav.Value;
+            }
+
             _studioService.Update(studio);
 
             // Aliases
@@ -102,7 +114,7 @@ namespace NzbDrone.Core.Movies.Studios
 
         private void SyncStudioItems(Studio studio, bool syncMovies)
         {
-            if (!studio.Monitored && !studio.MoviesMonitored)
+            if (!studio.Monitored && !studio.MoviesMonitored && !studio.JavMonitored)
             {
                 return;
             }
@@ -115,25 +127,42 @@ namespace NzbDrone.Core.Movies.Studios
             // and without a search on add.
             var monitorNewItems = _configService.WhisparrMonitorNewItems && studio.WhisparrMonitorNewItems;
 
+            Movie BuildStub(string stashId) => new()
+            {
+                ForeignId = stashId,
+                QualityProfileId = studio.QualityProfileId,
+                RootFolderPath = studio.RootFolderPath,
+                AddOptions = new AddMovieOptions
+                {
+                    SearchForMovie = studio.SearchOnAdd && monitorNewItems,
+                    AddMethod = AddMovieMethod.Studio
+                },
+                Monitored = monitorNewItems,
+                Tags = studio.Tags
+            };
+
             if (studio.Monitored)
             {
                 _sceneCatalogImporter.ImportScenes(
                     studio.Title,
                     cursor => _movieInfo.GetStudioScenePage(studio.ForeignId, cursor),
-                    stashId => new Movie
-                    {
-                        ForeignId = stashId,
-                        QualityProfileId = studio.QualityProfileId,
-                        RootFolderPath = studio.RootFolderPath,
-                        AddOptions = new AddMovieOptions
-                        {
-                            SearchForMovie = studio.SearchOnAdd && monitorNewItems,
-                            AddMethod = AddMovieMethod.Studio
-                        },
-                        Monitored = monitorNewItems,
-                        Tags = studio.Tags
-                    },
+                    BuildStub,
                     () => _studioService.FindByForeignId(studio.ForeignId) is { Monitored: true });
+            }
+
+            if (studio.JavMonitored && studio.HasJav && _javAvailability.IsAvailable())
+            {
+                _sceneCatalogImporter.ImportScenes(
+                    studio.Title,
+                    cursor => _movieInfo.GetStudioJavPage(studio.ForeignId, cursor),
+                    stashId =>
+                    {
+                        var stub = BuildStub(stashId);
+                        stub.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+                        return stub;
+                    },
+                    () => _studioService.FindByForeignId(studio.ForeignId) is { JavMonitored: true });
             }
 
             if (studio.MoviesMonitored && syncMovies)

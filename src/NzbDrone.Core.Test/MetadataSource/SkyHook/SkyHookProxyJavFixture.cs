@@ -78,6 +78,30 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void jav_page_items_are_normalised_but_scene_page_items_are_not()
+        {
+            var item = new MovieResource
+            {
+                ForeignIds = new ExternalIdResource { TpdbId = JavId },
+                Code = "abp-123",
+                Title = "ABP-123 - Perfect Satisfaction"
+            };
+
+            Given<ScenePageResource>(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource> { item } }.ToJson());
+            Mocker.GetMock<IConfigService>().Setup(c => c.WhisparrSceneMetadataSource).Returns(SceneMetadataType.Tpdb);
+
+            var javItem = Subject.GetStudioJavPage(StudioId, null).Items.Should().ContainSingle().Subject;
+
+            javItem.Code.Should().Be("ABP-123");
+            javItem.Title.Should().Be("Perfect Satisfaction");
+
+            var sceneItem = Subject.GetStudioScenePage(StudioId, null).Items.Should().ContainSingle().Subject;
+
+            sceneItem.Code.Should().BeNull();
+            sceneItem.Title.Should().Be("ABP-123 - Perfect Satisfaction");
+        }
+
+        [Test]
         public void performer_jav_page_requests_tpdb_performer_jav_full()
         {
             Given<ScenePageResource>(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource>() }.ToJson());

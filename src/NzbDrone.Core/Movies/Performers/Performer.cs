@@ -88,6 +88,7 @@ namespace NzbDrone.Core.Movies.Performers
             SearchOnAdd = otherPerformer.SearchOnAdd;
             Monitored = otherPerformer.Monitored;
             MoviesMonitored = otherPerformer.MoviesMonitored;
+            JavMonitored = otherPerformer.JavMonitored;
             WhisparrMonitorNewItems = otherPerformer.WhisparrMonitorNewItems;
             AfterDate = otherPerformer.AfterDate;
             RootFolderPath = otherPerformer.RootFolderPath;
@@ -104,13 +105,14 @@ namespace NzbDrone.Core.Movies.Performers
                 Visibility = PerformerVisibility.Hidden;
                 Monitored = false;
                 MoviesMonitored = false;
+                JavMonitored = false;
 
                 return;
             }
 
             Visibility = visibility;
 
-            if (Monitored || MoviesMonitored)
+            if (Monitored || MoviesMonitored || JavMonitored)
             {
                 Visibility = PerformerVisibility.Visible;
             }

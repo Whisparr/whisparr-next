@@ -606,7 +606,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             switch (httpResponse.StatusCode)
             {
                 case HttpStatusCode.OK:
-                    return MapScenePage(httpResponse, ScenePageStatus.Complete, TimeSpan.Zero, sceneSource);
+                    return MapScenePage(httpResponse, ScenePageStatus.Complete, TimeSpan.Zero, sceneSource, lane == "jav");
                 case HttpStatusCode.Accepted when httpResponse.Resource is { Building: true }:
                     return new ScenePage
                     {
@@ -615,7 +615,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                         RetryAfter = ParseRetryAfter(httpResponse, TimeSpan.FromSeconds(5))
                     };
                 case HttpStatusCode.Accepted:
-                    return MapScenePage(httpResponse, ScenePageStatus.Pending, TimeSpan.FromSeconds(5), sceneSource);
+                    return MapScenePage(httpResponse, ScenePageStatus.Pending, TimeSpan.FromSeconds(5), sceneSource, lane == "jav");
                 case HttpStatusCode.ServiceUnavailable:
                     return new ScenePage
                     {
@@ -629,7 +629,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
         }
 
-        private ScenePage MapScenePage(HttpResponse<ScenePageResource> httpResponse, ScenePageStatus status, TimeSpan defaultRetryAfter, SceneMetadataType sceneSource)
+        private ScenePage MapScenePage(HttpResponse<ScenePageResource> httpResponse, ScenePageStatus status, TimeSpan defaultRetryAfter, SceneMetadataType sceneSource, bool isJav)
         {
             var resource = httpResponse.Resource;
             var items = new List<ScenePageItem>();
@@ -646,10 +646,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
                 _scenePrefetch.Set(sceneId, scene, PrefetchLifetime);
 
+                var (code, title) = isJav ? NormalizeJavCodeAndTitle(scene.Code, scene.Title) : (null, scene.Title);
+
                 items.Add(new ScenePageItem
                 {
                     SceneId = sceneId,
-                    Title = scene.Title,
+                    Code = code,
+                    Title = title,
                     ReleaseDate = scene.ReleaseDateUtc,
                     PerformerIds = (scene.Credits ?? new List<CastResource>())
                         .Select(c => SceneSourceIds.Key(sceneSource, c?.Performer?.ForeignIds))
