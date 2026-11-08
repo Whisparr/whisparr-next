@@ -13,6 +13,10 @@ namespace NzbDrone.Core.Test.MovieTests.Jav
         [TestCase("ABP_123", "ABP-123")]
         [TestCase("abp-123", "ABP-123")]
         [TestCase("300MIUM-1234", "300MIUM-1234")]
+        [TestCase("1234ABC-123", "1234ABC-123")]
+        [TestCase("abcdefgh-123", "ABCDEFGH-123")]
+        [TestCase("ABC-12345678", "ABC-12345678")]
+        [TestCase("  abp123 ", "ABP-123")]
         public void should_normalize_code(string text, string expected)
         {
             JavCode.TryNormalize(text, out var code).Should().BeTrue();

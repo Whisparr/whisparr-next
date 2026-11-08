@@ -64,7 +64,7 @@ namespace NzbDrone.Core.Movies.Performers
         /// <summary> Number of movies in Whisparr with this performer</summary>
         public int TotalMovieCount { get; set; }
 
-        /// <summary>Computed JAV stats, not stored.</summary>
+        /// <summary>JAV counts, like the scene counts.</summary>
         public int JavCount { get; set; }
         public int TotalJavCount { get; set; }
 

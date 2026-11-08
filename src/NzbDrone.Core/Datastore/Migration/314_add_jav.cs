@@ -11,11 +11,15 @@ namespace NzbDrone.Core.Datastore.Migration
         {
             Alter.Table("Studios")
                 .AddColumn("JavMonitored").AsBoolean().WithDefaultValue(false)
-                .AddColumn("HasJav").AsBoolean().WithDefaultValue(false);
+                .AddColumn("HasJav").AsBoolean().WithDefaultValue(false)
+                .AddColumn("JavCount").AsInt32().WithDefaultValue(0)
+                .AddColumn("TotalJavCount").AsInt32().WithDefaultValue(0);
 
             Alter.Table("Performers")
                 .AddColumn("JavMonitored").AsBoolean().WithDefaultValue(false)
-                .AddColumn("HasJav").AsBoolean().WithDefaultValue(false);
+                .AddColumn("HasJav").AsBoolean().WithDefaultValue(false)
+                .AddColumn("JavCount").AsInt32().WithDefaultValue(0)
+                .AddColumn("TotalJavCount").AsInt32().WithDefaultValue(0);
 
             Alter.Table("NamingConfig")
                 .AddColumn("RenameJav").AsBoolean().WithDefaultValue(true)
