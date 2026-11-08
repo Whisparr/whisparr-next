@@ -17,5 +17,6 @@ namespace Whisparr.Api.V5.LibrarySearch
         public LibrarySearchSectionResource<StudioResource> Studios { get; set; } = new();
         public LibrarySearchSectionResource<MovieResource> Scenes { get; set; } = new();
         public LibrarySearchSectionResource<MovieResource> Movies { get; set; } = new();
+        public LibrarySearchSectionResource<MovieResource> Jav { get; set; } = new();
     }
 }

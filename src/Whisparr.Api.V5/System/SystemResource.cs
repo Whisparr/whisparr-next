@@ -41,6 +41,7 @@ namespace Whisparr.Api.V5.System
         public string PackageUpdateMechanismMessage { get; set; }
         public int MovieCount { get; set; }
         public int SceneCount { get; set; }
+        public int JavCount { get; set; }
         public int PerformerCount { get; set; }
         public int StudioCount { get; set; }
     }

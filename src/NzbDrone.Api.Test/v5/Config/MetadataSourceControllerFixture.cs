@@ -49,6 +49,20 @@ namespace NzbDrone.Api.Test.v5.Config
             json.RootElement.GetProperty("locked").GetBoolean().Should().Be(locked);
         }
 
+        [TestCase(SceneMetadataType.Tpdb, true)]
+        [TestCase(SceneMetadataType.StashDb, false)]
+        public void metadata_source_reports_jav_available(SceneMetadataType scene, bool expected)
+        {
+            GivenSources(scene, MovieMetadataType.TPDB, false);
+
+            var resource = Subject.GetMetadataSources();
+
+            resource.JavAvailable.Should().Be(expected);
+
+            using var json = JsonDocument.Parse(STJson.ToJson(resource));
+            json.RootElement.GetProperty("javAvailable").GetBoolean().Should().Be(expected);
+        }
+
         [Test]
         public void should_deserialize_a_put_body()
         {

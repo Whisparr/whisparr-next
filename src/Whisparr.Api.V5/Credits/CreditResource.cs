@@ -82,6 +82,11 @@ namespace Whisparr.Api.V5.Credits
         public bool MoviesMonitored { get; set; }
 
         /// <summary>
+        /// Whether JAV for this performer is currently monitored.
+        /// </summary>
+        public bool JavMonitored { get; set; }
+
+        /// <summary>
         /// Whether the performer was added alongside a monitored one and is hidden; hidden performers have no images.
         /// </summary>
         public bool PerformerHidden { get; set; }
@@ -124,6 +129,7 @@ namespace Whisparr.Api.V5.Credits
                 Monitored = model.Performer?.Monitored == true,
                 CanMovieMonitor = canMovieMonitor,
                 MoviesMonitored = model.Performer?.MoviesMonitored == true,
+                JavMonitored = model.Performer?.JavMonitored == true,
                 PerformerHidden = performerHidden
             };
         }

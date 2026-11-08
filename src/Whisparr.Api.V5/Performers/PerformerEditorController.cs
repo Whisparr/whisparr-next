@@ -69,6 +69,11 @@ namespace Whisparr.Api.V5.Performers
                     performer.MoviesMonitored = resource.MoviesMonitored.Value;
                 }
 
+                if (resource.JavMonitored.HasValue)
+                {
+                    performer.JavMonitored = resource.JavMonitored.Value;
+                }
+
                 if (resource.WhisparrMonitorNewItems.HasValue)
                 {
                     performer.WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems.Value;

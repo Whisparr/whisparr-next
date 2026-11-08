@@ -1,5 +1,7 @@
 using FluentValidation;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Localization;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
@@ -8,8 +10,12 @@ namespace Whisparr.Api.V5.Studios
 {
     public class StudioEditorValidator : AbstractValidator<Studio>
     {
-        public StudioEditorValidator(RootFolderExistsValidator<Studio> rootFolderExistsValidator, QualityProfileExistsValidator<Studio> qualityProfileExistsValidator)
+        public StudioEditorValidator(RootFolderExistsValidator<Studio> rootFolderExistsValidator, QualityProfileExistsValidator<Studio> qualityProfileExistsValidator, IJavAvailability javAvailability, ILocalizationService localizationService)
         {
+            RuleFor(s => s.JavMonitored)
+                .Must(monitored => !monitored || javAvailability.IsAvailable())
+                .WithMessage(_ => localizationService.GetLocalizedString("JavRequiresTpdbSceneSource"));
+
             RuleFor(s => s.RootFolderPath).Cascade(CascadeMode.Stop)
                 .IsValidPath()
                 .SetValidator(rootFolderExistsValidator)

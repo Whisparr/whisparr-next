@@ -23,6 +23,7 @@ namespace Whisparr.Api.V5.Studios
         public List<MediaCover> Images { get; set; }
         public bool Monitored { get; set; }
         public bool MoviesMonitored { get; set; }
+        public bool JavMonitored { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public StudioStatus Status { get; set; }
 
@@ -45,6 +46,9 @@ namespace Whisparr.Api.V5.Studios
         public int TotalSceneCount { get; set; }
         public int MovieCount { get; set; }
         public int SceneCount { get; set; }
+        public bool HasJav { get; set; }
+        public int TotalJavCount { get; set; }
+        public int JavCount { get; set; }
         public List<int> Years { get; set; }
         public long SizeOnDisk { get; set; }
         public string RemotePoster { get; internal set; }
@@ -72,6 +76,7 @@ namespace Whisparr.Api.V5.Studios
                 Network = model.Network,
                 Monitored = model.Monitored,
                 MoviesMonitored = model.MoviesMonitored,
+                JavMonitored = model.JavMonitored,
                 WhisparrMonitorNewItems = model.WhisparrMonitorNewItems,
                 Status = model.Status,
                 AfterDate = model.AfterDate?.ToString("yyyy-MM-dd"),
@@ -88,6 +93,9 @@ namespace Whisparr.Api.V5.Studios
                 SizeOnDisk = model.SizeOnDisk,
                 HasMovies = model.TotalMovieCount > 0,
                 HasScenes = model.TotalSceneCount > 0,
+                HasJav = model.HasJav,
+                JavCount = model.JavCount,
+                TotalJavCount = model.TotalJavCount,
             };
         }
 
@@ -133,6 +141,7 @@ namespace Whisparr.Api.V5.Studios
                 Network = resource.Network,
                 Monitored = resource.Monitored,
                 MoviesMonitored = resource.MoviesMonitored,
+                JavMonitored = resource.JavMonitored,
                 WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems,
                 Status = resource.Status,
                 AfterDate = ParseAfterDate(resource.AfterDate),

@@ -57,6 +57,15 @@ namespace Whisparr.Api.V5.Performers.Helpers
                     case "moviesmonitored":
                         BooleanFilter.Apply(pageSpec, jsonElement, op, p => p.MoviesMonitored);
                         break;
+                    case "javmonitored":
+                        BooleanFilter.Apply(pageSpec, jsonElement, op, p => p.JavMonitored);
+                        break;
+                    case "javcount":
+                        NumericFilterInt.Apply(pageSpec, jsonElement, op, p => p.JavCount);
+                        break;
+                    case "totaljavcount":
+                        NumericFilterInt.Apply(pageSpec, jsonElement, op, p => p.TotalJavCount);
+                        break;
                     case "monitored":
                         BooleanFilter.Apply(pageSpec, jsonElement, op, p => p.Monitored);
                         break;

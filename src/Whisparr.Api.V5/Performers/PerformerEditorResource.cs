@@ -15,6 +15,9 @@ namespace Whisparr.Api.V5.Performers
         /// <summary>Whether the performers' movies are monitored.</summary>
         public bool? MoviesMonitored { get; set; }
 
+        /// <summary>Whether the performers' JAV is monitored.</summary>
+        public bool? JavMonitored { get; set; }
+
         /// <summary>Whether newly discovered works added by refreshing the performers are monitored.</summary>
         public bool? WhisparrMonitorNewItems { get; set; }
 
