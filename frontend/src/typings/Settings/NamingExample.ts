@@ -4,6 +4,8 @@ export default interface NamingExample {
   sceneExample: string;
   sceneFolderExample: string;
   sceneImportFolderExample: string;
+  javExample: string;
+  javFolderExample: string;
   maxFolderPathLengthExample: string;
   maxFilePathLengthExample: string;
 }

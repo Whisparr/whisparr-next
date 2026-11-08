@@ -20,6 +20,7 @@ import selectSettings from 'Helpers/selectSettings';
 import MovieHeadshot from 'Movie/MovieHeadshot';
 import Performer from 'Performer/Performer';
 import { useSavePerformer } from 'Performer/usePerformer';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import { InputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import styles from './EditPerformerModalContent.module.css';
@@ -34,6 +35,7 @@ function EditPerformerModalContent({
   onModalClose,
 }: Readonly<EditPerformerModalContentProps>) {
   const { isSmallScreen } = useAppDimensions();
+  const javAvailable = useJavAvailable();
   const safeForWorkMode = useSafeForWorkMode();
 
   const [visible, setVisible] = useState(performer.visibility !== 'hidden');
@@ -41,6 +43,7 @@ function EditPerformerModalContent({
   const [moviesMonitored, setMoviesMonitored] = useState(
     performer.moviesMonitored
   );
+  const [javMonitored, setJavMonitored] = useState(performer.javMonitored);
   const [whisparrMonitorNewItems, setWhisparrMonitorNewItems] = useState(
     performer.whisparrMonitorNewItems
   );
@@ -74,6 +77,10 @@ function EditPerformerModalContent({
       changes.moviesMonitored = moviesMonitored;
     }
 
+    if (javMonitored !== performer.javMonitored) {
+      changes.javMonitored = javMonitored;
+    }
+
     if (whisparrMonitorNewItems !== performer.whisparrMonitorNewItems) {
       changes.whisparrMonitorNewItems = whisparrMonitorNewItems;
     }
@@ -103,6 +110,7 @@ function EditPerformerModalContent({
     visible,
     monitored,
     moviesMonitored,
+    javMonitored,
     whisparrMonitorNewItems,
     qualityProfileId,
     rootFolderPath,
@@ -118,6 +126,7 @@ function EditPerformerModalContent({
         visible: performer.visibility !== 'hidden',
         monitored: performer.monitored,
         moviesMonitored: performer.moviesMonitored,
+        javMonitored: performer.javMonitored,
         whisparrMonitorNewItems: performer.whisparrMonitorNewItems,
         qualityProfileId: performer.qualityProfileId,
         rootFolderPath: performer.rootFolderPath,
@@ -174,6 +183,14 @@ function EditPerformerModalContent({
         break;
       case 'moviesMonitored':
         setMoviesMonitored(value as boolean);
+
+        if (value) {
+          setVisible(true);
+        }
+
+        break;
+      case 'javMonitored':
+        setJavMonitored(value as boolean);
 
         if (value) {
           setVisible(true);
@@ -283,6 +300,18 @@ function EditPerformerModalContent({
                     helpTextWarning={movieMonitorUnavailableMessage}
                     isDisabled={isMovieMonitorDisabled}
                     {...settings.moviesMonitored}
+                    onChange={handleInputChange}
+                  />
+                </FormGroup>
+              ) : null}
+
+              {javAvailable && performer.hasJav ? (
+                <FormGroup>
+                  <FormLabel>{translate('MonitorJav')}</FormLabel>
+                  <FormInputGroup
+                    type={inputTypes.CHECK}
+                    name="javMonitored"
+                    {...settings.javMonitored}
                     onChange={handleInputChange}
                   />
                 </FormGroup>

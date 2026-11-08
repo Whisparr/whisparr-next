@@ -45,6 +45,18 @@ export const PERFORMER_INDEX_FILTERS: Filter[] = [
     ],
   },
   {
+    key: 'monitoredjavonly',
+    label: () => translate('MonitoredJavOnly'),
+    filters: [
+      {
+        key: 'javMonitored',
+        value: true,
+        type: filterTypes.EQUAL,
+      },
+      VISIBLE_FILTER,
+    ],
+  },
+  {
     key: 'unmonitored',
     label: () => translate('Unmonitored'),
     filters: [

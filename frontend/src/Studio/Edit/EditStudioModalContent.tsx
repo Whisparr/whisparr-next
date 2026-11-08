@@ -16,6 +16,7 @@ import {
 } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import Studio from 'Studio/Studio';
 import StudioLogo from 'Studio/StudioLogo';
 import { useSaveStudio } from 'Studio/useStudio';
@@ -33,11 +34,13 @@ function EditStudioModalContent({
   onModalClose,
 }: Readonly<EditStudioModalContentProps>) {
   const { isSmallScreen } = useAppDimensions();
+  const javAvailable = useJavAvailable();
 
   const [monitored, setMonitored] = useState(studio.monitored);
   const [moviesMonitored, setMoviesMonitored] = useState(
     studio.moviesMonitored
   );
+  const [javMonitored, setJavMonitored] = useState(studio.javMonitored);
   const [whisparrMonitorNewItems, setWhisparrMonitorNewItems] = useState(
     studio.whisparrMonitorNewItems
   );
@@ -63,6 +66,10 @@ function EditStudioModalContent({
 
     if (moviesMonitored !== studio.moviesMonitored) {
       changes.moviesMonitored = moviesMonitored;
+    }
+
+    if (javMonitored !== studio.javMonitored) {
+      changes.javMonitored = javMonitored;
     }
 
     if (whisparrMonitorNewItems !== studio.whisparrMonitorNewItems) {
@@ -97,6 +104,7 @@ function EditStudioModalContent({
   }, [
     monitored,
     moviesMonitored,
+    javMonitored,
     whisparrMonitorNewItems,
     afterDate,
     qualityProfileId,
@@ -112,6 +120,7 @@ function EditStudioModalContent({
       {
         monitored: studio.monitored,
         moviesMonitored: studio.moviesMonitored,
+        javMonitored: studio.javMonitored,
         whisparrMonitorNewItems: studio.whisparrMonitorNewItems,
         afterDate: studio.afterDate ?? '',
         qualityProfileId: studio.qualityProfileId,
@@ -149,6 +158,9 @@ function EditStudioModalContent({
         break;
       case 'moviesMonitored':
         setMoviesMonitored(value as boolean);
+        break;
+      case 'javMonitored':
+        setJavMonitored(value as boolean);
         break;
       case 'whisparrMonitorNewItems':
         setWhisparrMonitorNewItems(value as boolean);
@@ -231,6 +243,18 @@ function EditStudioModalContent({
                     helpTextWarning={movieMonitorUnavailableMessage}
                     isDisabled={isMovieMonitorDisabled}
                     {...settings.moviesMonitored}
+                    onChange={handleInputChange}
+                  />
+                </FormGroup>
+              ) : null}
+
+              {javAvailable && studio.hasJav ? (
+                <FormGroup>
+                  <FormLabel>{translate('MonitorJav')}</FormLabel>
+                  <FormInputGroup
+                    type={inputTypes.CHECK}
+                    name="javMonitored"
+                    {...settings.javMonitored}
                     onChange={handleInputChange}
                   />
                 </FormGroup>

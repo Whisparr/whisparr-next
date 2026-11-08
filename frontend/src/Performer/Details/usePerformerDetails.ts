@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { queryClient } from 'App/queryClient';
 import * as commandNames from 'Commands/commandNames';
 import { useExecuteCommand } from 'Commands/useCommands';
+import {
+  getToggledMonitored,
+  type MonitorTogglePressValue,
+} from 'Components/MonitorToggleButton';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
 import Movie from 'Movie/Movie';
 import Performer from 'Performer/Performer';
@@ -88,6 +92,18 @@ export const usePerformerDetails = (foreignId: string) => {
     });
   }
 
+  function onJavTogglePress(value: MonitorTogglePressValue) {
+    if (!performer || !performerId)
+      throw new Error('Performer data not loaded');
+    monitorToggleMutation.mutate({
+      performerId,
+      foreignId: performer.foreignId,
+      monitored: performer.monitored,
+      moviesMonitored: performer.moviesMonitored,
+      javMonitored: getToggledMonitored(value),
+    });
+  }
+
   // TODO: Move to useApiQuery
   function searchMoviesByIds(movieIds: number[]) {
     if (!movieIds || movieIds.length === 0) return;
@@ -113,6 +129,7 @@ export const usePerformerDetails = (foreignId: string) => {
     onYearRefreshPress,
     onSearchPress,
     onMonitorTogglePress,
+    onJavTogglePress,
     searchMoviesByIds,
   };
 };

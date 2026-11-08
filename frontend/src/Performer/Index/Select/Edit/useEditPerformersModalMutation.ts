@@ -6,6 +6,7 @@ interface PerformerEditorPayload {
   performerIds: number[];
   monitored?: boolean;
   moviesMonitored?: boolean;
+  javMonitored?: boolean;
   whisparrMonitorNewItems?: boolean;
   visibility?: PerformerVisibility;
   qualityProfileId?: number;

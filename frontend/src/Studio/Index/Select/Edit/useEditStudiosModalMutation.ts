@@ -6,6 +6,7 @@ interface StudioEditorPayload {
   studioIds: number[];
   monitored?: boolean;
   moviesMonitored?: boolean;
+  javMonitored?: boolean;
   whisparrMonitorNewItems?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;

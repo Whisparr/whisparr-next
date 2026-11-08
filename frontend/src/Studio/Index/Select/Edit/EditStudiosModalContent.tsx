@@ -9,6 +9,7 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import { EnhancedSelectInputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import styles from './EditStudiosModalContent.module.css';
@@ -16,6 +17,7 @@ import styles from './EditStudiosModalContent.module.css';
 interface SavePayload {
   monitored?: boolean;
   moviesMonitored?: boolean;
+  javMonitored?: boolean;
   whisparrMonitorNewItems?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
@@ -107,12 +109,15 @@ function EditStudiosModalContent(
 ) {
   const { studioIds, onSavePress, onModalClose } = props;
   const movieMonitorHelpText = useMovieMonitorHelpText('studio');
+  const javAvailable = useJavAvailable();
 
   const [monitored, setMonitored] = useState<string | number>(NO_CHANGE);
 
   const [moviesMonitored, setMoviesMonitored] = useState<string | number>(
     NO_CHANGE
   );
+
+  const [javMonitored, setJavMonitored] = useState<string | number>(NO_CHANGE);
 
   const [whisparrMonitorNewItems, setWhisparrMonitorNewItems] = useState<
     string | number
@@ -144,6 +149,11 @@ function EditStudiosModalContent(
     if (moviesMonitored !== NO_CHANGE) {
       hasChanges = true;
       payload.moviesMonitored = moviesMonitored === 'monitored';
+    }
+
+    if (javMonitored !== NO_CHANGE) {
+      hasChanges = true;
+      payload.javMonitored = javMonitored === 'monitored';
     }
 
     if (whisparrMonitorNewItems !== NO_CHANGE) {
@@ -182,6 +192,7 @@ function EditStudiosModalContent(
   }, [
     monitored,
     moviesMonitored,
+    javMonitored,
     whisparrMonitorNewItems,
     qualityProfileId,
     rootFolderPath,
@@ -200,6 +211,9 @@ function EditStudiosModalContent(
           break;
         case 'moviesMonitored':
           setMoviesMonitored(value);
+          break;
+        case 'javMonitored':
+          setJavMonitored(value);
           break;
         case 'whisparrMonitorNewItems':
           setWhisparrMonitorNewItems(value);
@@ -262,6 +276,20 @@ function EditStudiosModalContent(
             onChange={onInputChange}
           />
         </FormGroup>
+
+        {javAvailable ? (
+          <FormGroup>
+            <FormLabel>{translate('MonitorJav')}</FormLabel>
+
+            <FormInputGroup
+              type={inputTypes.SELECT}
+              name="javMonitored"
+              value={javMonitored}
+              values={monitoredOptions}
+              onChange={onInputChange}
+            />
+          </FormGroup>
+        ) : null}
 
         <FormGroup>
           <FormLabel>{translate('WhisparrMonitorNewItems')}</FormLabel>

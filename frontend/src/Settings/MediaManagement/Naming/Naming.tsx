@@ -11,6 +11,7 @@ import useDebounce from 'Helpers/Hooks/useDebounce';
 import useModalOpenState from 'Helpers/Hooks/useModalOpenState';
 import useShowAdvancedSettings from 'Helpers/Hooks/useShowAdvancedSettings';
 import { inputTypes, kinds, sizes } from 'Helpers/Props';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import { InputChanged } from 'typings/inputs';
 import NamingConfig from 'typings/Settings/NamingConfig';
 import {
@@ -125,7 +126,9 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
     onChildStateChange({ isSaving, hasPendingChanges });
   }, [hasPendingChanges, isSaving, onChildStateChange]);
 
+  const javAvailable = useJavAvailable();
   const renameScenes = hasSettings && settings.renameScenes.value;
+  const renameJav = hasSettings && settings.renameJav.value;
   const renameMovies = hasSettings && settings.renameMovies.value;
   const replaceIllegalCharacters =
     hasSettings && settings.replaceIllegalCharacters.value;
@@ -154,8 +157,24 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
   const sceneFolderFormatErrors: { message: string }[] = [];
   const sceneImportFolderFormatHelpTexts: string[] = [];
   const sceneImportFolderFormatErrors: { message: string }[] = [];
+  const standardJavFormatHelpTexts: string[] = [];
+  const standardJavFormatErrors: { message: string }[] = [];
+  const javFolderFormatHelpTexts: string[] = [];
+  const javFolderFormatErrors: { message: string }[] = [];
 
   if (examplesPopulated) {
+    if (examples.javExample) {
+      standardJavFormatHelpTexts.push(`Example: ${examples.javExample}`);
+    } else {
+      standardJavFormatErrors.push({ message: translate('InvalidFormat') });
+    }
+
+    if (examples.javFolderExample) {
+      javFolderFormatHelpTexts.push(`Example: ${examples.javFolderExample}`);
+    } else {
+      javFolderFormatErrors.push({ message: translate('InvalidFormat') });
+    }
+
     if (examples.sceneExample) {
       standardSceneFormatHelpTexts.push(`Example: ${examples.sceneExample}`);
     } else {
@@ -248,6 +267,20 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
               {...settings.renameScenes}
             />
           </FormGroup>
+
+          {javAvailable ? (
+            <FormGroup size={sizes.MEDIUM}>
+              <FormLabel>{translate('RenameJav')}</FormLabel>
+
+              <FormInputGroup
+                type={inputTypes.CHECK}
+                name="renameJav"
+                helpText={translate('RenameJavHelpText')}
+                onChange={handleInputChange}
+                {...settings.renameJav}
+              />
+            </FormGroup>
+          ) : null}
 
           <FormGroup size={sizes.MEDIUM}>
             <FormLabel>{translate('ReplaceIllegalCharacters')}</FormLabel>
@@ -350,6 +383,46 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
                 errors={[
                   ...standardSceneFormatErrors,
                   ...settings.standardSceneFormat.errors,
+                ]}
+              />
+            </FormGroup>
+          ) : null}
+
+          {javAvailable && renameJav ? (
+            <FormGroup size={sizes.LARGE}>
+              <FormLabel>{translate('StandardJavFormat')}</FormLabel>
+              <FormInputGroup
+                inputClassName={styles.namingInput}
+                type={inputTypes.TEXT}
+                name="standardJavFormat"
+                onChange={handleInputChange}
+                {...settings.standardJavFormat}
+                helpTexts={standardJavFormatHelpTexts}
+                errors={[
+                  ...standardJavFormatErrors,
+                  ...settings.standardJavFormat.errors,
+                ]}
+              />
+            </FormGroup>
+          ) : null}
+
+          {javAvailable ? (
+            <FormGroup
+              advancedSettings={advancedSettings}
+              isAdvanced={true}
+              size={sizes.LARGE}
+            >
+              <FormLabel>{translate('JavFolderFormat')}</FormLabel>
+              <FormInputGroup
+                inputClassName={styles.namingInput}
+                type={inputTypes.TEXT}
+                name="javFolderFormat"
+                onChange={handleInputChange}
+                {...settings.javFolderFormat}
+                helpTexts={javFolderFormatHelpTexts}
+                errors={[
+                  ...javFolderFormatErrors,
+                  ...settings.javFolderFormat.errors,
                 ]}
               />
             </FormGroup>

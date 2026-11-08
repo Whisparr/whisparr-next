@@ -9,6 +9,7 @@ interface MonitorToggleButtonProps {
   className?: string;
   monitored: boolean;
   moviesMonitored?: boolean;
+  javMonitored?: boolean;
   type?: string;
   size?: number;
   isDisabled?: boolean;
@@ -21,7 +22,8 @@ interface MonitorToggleButtonProps {
 }
 
 // `onPress` is handed an object only when `type` selects one of the two-state
-// movie/scene toggles; every other caller gets a bare boolean.
+// movie/scene toggles; every other caller, `javMonitor` included, gets a bare
+// boolean.
 export type MonitorTogglePressValue =
   boolean | { monitored: boolean; moviesMonitored: boolean };
 
@@ -56,11 +58,12 @@ function getTooltip(
   );
 }
 
-function MonitorToggleButton(props: MonitorToggleButtonProps) {
+function MonitorToggleButton(props: Readonly<MonitorToggleButtonProps>) {
   const {
     className = styles.toggleButton,
     monitored,
     moviesMonitored = false,
+    javMonitored = false,
     type,
     isDisabled = false,
     tooltip,
@@ -83,7 +86,13 @@ function MonitorToggleButton(props: MonitorToggleButtonProps) {
       monitorType = undefined;
   }
 
-  const monitoredValue = monitorType === 'movie' ? moviesMonitored : monitored;
+  let monitoredValue = monitored;
+
+  if (monitorType === 'movie') {
+    monitoredValue = moviesMonitored;
+  } else if (type === 'javMonitor') {
+    monitoredValue = javMonitored;
+  }
 
   let iconName = icons.UNMONITORED;
 
@@ -110,11 +119,13 @@ function MonitorToggleButton(props: MonitorToggleButtonProps) {
         onPress({ monitored, moviesMonitored: !moviesMonitored }, { shiftKey });
       } else if (type === 'sceneMonitor') {
         onPress({ monitored: !monitored, moviesMonitored }, { shiftKey });
+      } else if (type === 'javMonitor') {
+        onPress(!javMonitored, { shiftKey });
       } else {
         onPress(!monitored, { shiftKey });
       }
     },
-    [monitored, moviesMonitored, type, onPress]
+    [monitored, moviesMonitored, javMonitored, type, onPress]
   );
 
   return (

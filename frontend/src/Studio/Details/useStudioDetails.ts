@@ -4,6 +4,10 @@ import { useSafeForWorkMode } from 'App/safeForWorkStore';
 import * as commandNames from 'Commands/commandNames';
 import useCommands, { useExecuteCommand } from 'Commands/useCommands';
 import type { IconName } from 'Components/Icon';
+import {
+  getToggledMonitored,
+  type MonitorTogglePressValue,
+} from 'Components/MonitorToggleButton';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
 import { icons } from 'Helpers/Props';
 import Movie from 'Movie/Movie';
@@ -48,6 +52,8 @@ export interface UseStudioDetailsReturn {
     value: boolean | { monitored: boolean; moviesMonitored: boolean },
     options: { shiftKey: boolean }
   ) => void;
+  /** Toggles the JAV monitored state of the studio */
+  onJavTogglePress: (value: MonitorTogglePressValue) => void;
   /** Triggers a refresh of the studio data */
   onRefreshPress: () => void;
   /** Triggers a search for the studio */
@@ -184,6 +190,23 @@ export const useStudioDetails = (foreignId: string): UseStudioDetailsReturn => {
     [studio, studioId, monitorToggleMutation]
   );
 
+  const onJavTogglePress = useCallback(
+    (value: MonitorTogglePressValue) => {
+      if (!studio || !studioId) {
+        throw new Error('Studio data not loaded');
+      }
+
+      monitorToggleMutation.mutate({
+        studioId,
+        foreignId: studio.foreignId,
+        monitored: studio.monitored,
+        moviesMonitored: studio.moviesMonitored,
+        javMonitored: getToggledMonitored(value),
+      });
+    },
+    [studio, studioId, monitorToggleMutation]
+  );
+
   // Handler: Refresh movies in a year
   const onYearRefreshPress = useCallback(
     (ids: number[]) => {
@@ -246,6 +269,7 @@ export const useStudioDetails = (foreignId: string): UseStudioDetailsReturn => {
     onRefreshPress,
     onSearchPress,
     onMonitorTogglePress,
+    onJavTogglePress,
     onYearRefreshPress,
     handleEditMoviePress,
     handleDeleteMoviePress,
