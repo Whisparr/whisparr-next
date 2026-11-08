@@ -385,6 +385,27 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void jav_changes_do_not_remove_scene_schedule_fallback()
+        {
+            var scenes = GivenNewScenes(1);
+            var scene = scenes[0];
+            scene.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(true);
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<int>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedTpdbMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<string>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedScenes(It.IsAny<System.DateTime>())).Returns(new HashSet<string>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedJav(It.IsAny<System.DateTime>())).Returns(new HashSet<string> { "some-jav" });
+            Mocker.GetMock<ICheckIfMovieShouldBeRefreshed>().Setup(s => s.ShouldRefresh(It.IsAny<MovieMetadata>())).Returns(true);
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieIdsOrderByLastInfoSync()).Returns(new List<int> { scene.Id });
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>())).Returns(scenes);
+
+            Subject.Execute(new RefreshMovieCommand { LastStartTime = System.DateTime.UtcNow.AddDays(-1) });
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(scene.MovieMetadata.Value.ForeignId), Times.Once());
+        }
+
+        [Test]
         public void should_refresh_tpdb_scene_through_get_scene_info()
         {
             var scenes = GivenNewScenes(1);

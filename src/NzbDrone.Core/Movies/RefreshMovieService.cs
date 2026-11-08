@@ -458,6 +458,7 @@ namespace NzbDrone.Core.Movies
             {
                 var updatedMovies = new HashSet<string>();
                 var updatedScenes = new HashSet<string>();
+                HashSet<string> updatedJav = [];
 
                 if (message.LastStartTime.HasValue && message.LastStartTime.Value.AddDays(14) > DateTime.UtcNow)
                 {
@@ -475,9 +476,7 @@ namespace NzbDrone.Core.Movies
 
                     if (_javAvailability.IsAvailable())
                     {
-                        // JAV ids join the scene set; copy so a shared result set isn't mutated.
-                        updatedScenes = new HashSet<string>(updatedScenes);
-                        updatedScenes.UnionWith(_movieInfo.GetChangedJav(message.LastStartTime.Value));
+                        updatedJav = _movieInfo.GetChangedJav(message.LastStartTime.Value);
                     }
                 }
 
@@ -490,7 +489,9 @@ namespace NzbDrone.Core.Movies
                     {
                         var movieLocal = movie;
                         var isScene = movie.MovieMetadata.Value.ItemType is ItemType.Scene or ItemType.Jav;
-                        var inChangedList = isScene ? updatedScenes.Contains(movie.ForeignId) : updatedMovies.Contains(movie.ForeignId);
+
+                        // JAV ids only add to what refreshes; the scene schedule fallback stays keyed to the scene feed alone.
+                        var inChangedList = isScene ? updatedScenes.Contains(movie.ForeignId) || updatedJav.Contains(movie.ForeignId) : updatedMovies.Contains(movie.ForeignId);
                         var noChangedList = isScene ? updatedScenes.Count == 0 : updatedMovies.Count == 0;
                         if ((
                             noChangedList

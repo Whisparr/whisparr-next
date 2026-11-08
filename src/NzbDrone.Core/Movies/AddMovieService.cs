@@ -215,7 +215,7 @@ namespace NzbDrone.Core.Movies
         {
             var movie = new Movie();
 
-            // Reject before the Skyhook round-trip; AddMovieValidator repeats the rule for other callers.
+            // Pre-check so no Skyhook call is made before the validator runs; AddMovieValidator repeats the rule for other callers.
             if (newMovie.IsJavLookup() && !_javAvailability.IsAvailable())
             {
                 throw new ValidationException(new List<ValidationFailure>
