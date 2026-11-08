@@ -8,10 +8,12 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook.Resource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Organizer;
@@ -85,6 +87,56 @@ namespace NzbDrone.Core.Test.MovieTests
             var series = Subject.AddMovie(newMovie);
 
             series.Path.Should().Be(Path.Combine(newMovie.RootFolderPath, _fakeMovie.Title));
+        }
+
+        private static Movie GivenJavMovie()
+        {
+            return new Movie
+            {
+                ForeignId = "jav-uuid",
+                RootFolderPath = @"C:\Test\Movies",
+                MovieMetadata = new NzbDrone.Core.Datastore.LazyLoaded<MovieMetadata>(new MovieMetadata
+                {
+                    ForeignId = "jav-uuid",
+                    ItemType = ItemType.Jav,
+                    MetadataSource = Core.Movies.MetadataSource.TpdbJav
+                })
+            };
+        }
+
+        [Test]
+        public void add_jav_uses_get_jav_info()
+        {
+            var newMovie = GivenJavMovie();
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(true);
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetJavInfo("jav-uuid"))
+                  .Returns(new System.Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(_fakeMovie, new Studio(), new List<Performer>(), new List<Credit>()));
+            GivenValidPath();
+
+            var movie = Subject.AddMovie(newMovie);
+
+            movie.Title.Should().Be(_fakeMovie.Title);
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetJavInfo("jav-uuid"), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void add_jav_rejected_when_scene_source_is_stashdb()
+        {
+            var newMovie = GivenJavMovie();
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(false);
+            Mocker.GetMock<ILocalizationService>()
+                  .Setup(s => s.GetLocalizedString("JavRequiresTpdbSceneSource"))
+                  .Returns("JAV needs the TPDB scene metadata source");
+
+            Subject.Invoking(s => s.AddMovie(newMovie))
+                   .Should().Throw<ValidationException>()
+                   .WithMessage("*JAV needs the TPDB scene metadata source*");
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetJavInfo(It.IsAny<string>()), Times.Never());
         }
 
         [Test]

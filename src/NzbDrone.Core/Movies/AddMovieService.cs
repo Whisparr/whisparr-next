@@ -11,9 +11,11 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies.Commands;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Organizer;
@@ -45,6 +47,8 @@ namespace NzbDrone.Core.Movies
         private readonly IConfigService _configService;
         private readonly IMetadataSourceService _metadataSourceService;
         private readonly ITagRepository _tagRepository;
+        private readonly IJavAvailability _javAvailability;
+        private readonly ILocalizationService _localizationService;
         private readonly Logger _logger;
 
         public AddMovieService(IMovieService movieService,
@@ -59,8 +63,12 @@ namespace NzbDrone.Core.Movies
                                 IConfigService configService,
                                 IMetadataSourceService metadataSourceService,
                                 ITagRepository tagRepository,
+                                IJavAvailability javAvailability,
+                                ILocalizationService localizationService,
                                 Logger logger)
         {
+            _javAvailability = javAvailability;
+            _localizationService = localizationService;
             _metadataSourceService = metadataSourceService;
             _movieService = movieService;
             _studioService = studioService;
@@ -207,6 +215,15 @@ namespace NzbDrone.Core.Movies
         {
             var movie = new Movie();
 
+            // Reject before the Skyhook round-trip; AddMovieValidator repeats the rule for other callers.
+            if (newMovie.IsJavLookup() && !_javAvailability.IsAvailable())
+            {
+                throw new ValidationException(new List<ValidationFailure>
+                                              {
+                                                 new ValidationFailure("ForeignId", _localizationService.GetLocalizedString("JavRequiresTpdbSceneSource"), newMovie.ForeignId)
+                                              });
+            }
+
             try
             {
                 movie.MovieMetadata = GetMetadata(newMovie);
@@ -231,6 +248,11 @@ namespace NzbDrone.Core.Movies
         {
             // A scene's TpdbId (TPDB scenes) is the scene UUID, not a TPDB movie id, so
             // scenes must be resolved by foreign id before the movie-id fallbacks below.
+            if (movie.IsJavLookup())
+            {
+                return _movieInfo.GetJavInfo(movie.ForeignId).Item1;
+            }
+
             if (movie.IsSceneLookup())
             {
                 return _movieInfo.GetSceneInfo(movie.ForeignId).Item1;
@@ -278,7 +300,12 @@ namespace NzbDrone.Core.Movies
             }
 
             // Check if previously excluded
-            var type = newMovie.MovieMetadata.Value.ItemType == ItemType.Scene ? ImportExclusionType.Scene : ImportExclusionType.Movie;
+            var type = newMovie.MovieMetadata.Value.ItemType switch
+            {
+                ItemType.Scene => ImportExclusionType.Scene,
+                ItemType.Jav => ImportExclusionType.Jav,
+                _ => ImportExclusionType.Movie
+            };
             if (!_importListExclusionService.IsExcluded(newMovie.ForeignId, type))
             {
                 var newExclusion = new ImportListExclusion { ForeignId = newMovie.ForeignId, Type = type, MovieTitle = newMovie.ToFormattedString() };

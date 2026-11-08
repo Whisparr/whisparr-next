@@ -1148,6 +1148,7 @@
   "InvalidFormat": "Invalid Format",
   "InvalidMovieInfoLanguageLanguage": "Your Movie Info Language is set to an invalid value, correct it and save your settings",
   "InvalidUILanguage": "Your UI is set to an invalid language, correct it and save your settings",
+  "JavRequiresTpdbSceneSource": "JAV needs the TPDB scene metadata source",
   "KeepAndUnmonitorMovie": "Keep and Unmonitor Movie",
   "KeyboardShortcuts": "Keyboard Shortcuts",
   "KeyboardShortcutsCloseModal": "Close Current Modal",

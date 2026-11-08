@@ -14,6 +14,7 @@ using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Movies.Credits;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.RootFolders;
@@ -293,6 +294,94 @@ namespace NzbDrone.Core.Test.MovieTests
                   .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        private List<Movie> GivenJav()
+        {
+            var javs = GivenNewScenes(1);
+            var metadata = javs[0].MovieMetadata.Value;
+
+            metadata.MetadataSource = Core.Movies.MetadataSource.TpdbJav;
+            metadata.ItemType = ItemType.Jav;
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(true);
+
+            return javs;
+        }
+
+        [Test]
+        public void refresh_tpdbjav_calls_get_jav_info()
+        {
+            var javs = GivenJav();
+            var metadata = javs[0].MovieMetadata.Value;
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetJavInfo(metadata.ForeignId))
+                  .Returns(new System.Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(metadata.JsonClone(), new Studio(), new List<Performer>(), new List<Credit>()));
+
+            Subject.RefreshNewScenes(javs);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetJavInfo(metadata.ForeignId), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetSceneInfo(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void refresh_jav_503_does_not_mark_removed()
+        {
+            var javs = GivenJav();
+            var metadata = javs[0].MovieMetadata.Value;
+            var response = new NzbDrone.Common.Http.HttpResponse(new NzbDrone.Common.Http.HttpRequest("http://localhost/x"), new NzbDrone.Common.Http.HttpHeader(), "", System.Net.HttpStatusCode.ServiceUnavailable);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetJavInfo(metadata.ForeignId))
+                  .Throws(new NzbDrone.Common.Http.HttpException(response));
+
+            Subject.RefreshNewScenes(javs);
+
+            Mocker.GetMock<IMovieMetadataService>()
+                  .Verify(v => v.Upsert(It.Is<MovieMetadata>(m => m.Status == MovieStatusType.Deleted)), Times.Never());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void refresh_jav_skips_with_warning_when_unavailable()
+        {
+            var javs = GivenJav();
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(false);
+
+            Subject.RefreshNewScenes(javs);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetJavInfo(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMovieMetadataService>()
+                  .Verify(v => v.Upsert(It.Is<MovieMetadata>(m => m.Status == MovieStatusType.Deleted)), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [TestCase(true, 1)]
+        [TestCase(false, 0)]
+        public void changed_feed_includes_jav_only_when_available(bool available, int expectedJavRefreshes)
+        {
+            var javs = GivenJav();
+            var metadata = javs[0].MovieMetadata.Value;
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(available);
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<int>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedTpdbMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<string>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedScenes(It.IsAny<System.DateTime>())).Returns(new HashSet<string> { "other-scene" });
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedJav(It.IsAny<System.DateTime>())).Returns(new HashSet<string> { metadata.ForeignId });
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetJavInfo(metadata.ForeignId))
+                  .Returns(new System.Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>>(metadata.JsonClone(), new Studio(), new List<Performer>(), new List<Credit>()));
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieIdsOrderByLastInfoSync()).Returns(new List<int> { javs[0].Id });
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>())).Returns(javs);
+
+            Subject.Execute(new RefreshMovieCommand { LastStartTime = System.DateTime.UtcNow.AddDays(-1) });
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetChangedJav(It.IsAny<System.DateTime>()), Times.Exactly(expectedJavRefreshes));
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetJavInfo(metadata.ForeignId), Times.Exactly(expectedJavRefreshes));
         }
 
         [Test]
