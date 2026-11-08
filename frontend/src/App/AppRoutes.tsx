@@ -1,5 +1,5 @@
 import React from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Blocklist from 'Activity/Blocklist/Blocklist';
 import History from 'Activity/History/History';
 import Queue from 'Activity/Queue/Queue';
@@ -24,6 +24,7 @@ import ImportListSettings from 'Settings/ImportLists/ImportListSettings';
 import IndexerSettings from 'Settings/Indexers/IndexerSettings';
 import MediaManagement from 'Settings/MediaManagement/MediaManagement';
 import MetadataSettings from 'Settings/Metadata/MetadataSettings';
+import { useJavUnavailable } from 'Settings/MetadataSource/useMetadataSources';
 import NotificationSettings from 'Settings/Notifications/NotificationSettings';
 import Profiles from 'Settings/Profiles/Profiles';
 import Quality from 'Settings/Quality/Quality';
@@ -45,6 +46,12 @@ import UnmappedFiles from 'UnmappedFiles/UnmappedFiles';
 import CutoffUnmet from 'Wanted/CutoffUnmet/CutoffUnmet';
 import Missing from 'Wanted/Missing/Missing';
 
+function JavRoute({ children }: Readonly<{ children: React.ReactElement }>) {
+  const javUnavailable = useJavUnavailable();
+
+  return javUnavailable ? <Navigate to="/" replace={true} /> : children;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -56,7 +63,14 @@ function AppRoutes() {
 
       <Route path="/movies" element={<MovieIndex key="movie" />} />
 
-      <Route path="/jav" element={<MovieIndex key="jav" itemType="jav" />} />
+      <Route
+        path="/jav"
+        element={
+          <JavRoute>
+            <MovieIndex key="jav" itemType="jav" />
+          </JavRoute>
+        }
+      />
 
       <Route path="/collections" element={<Collection />} />
 
@@ -72,7 +86,14 @@ function AppRoutes() {
 
       <Route path="/add/new/scene" element={<AddNewScene />} />
 
-      <Route path="/add/new/jav" element={<AddNewJav />} />
+      <Route
+        path="/add/new/jav"
+        element={
+          <JavRoute>
+            <AddNewJav />
+          </JavRoute>
+        }
+      />
 
       <Route path="/add/new/studio" element={<AddNewStudio />} />
 

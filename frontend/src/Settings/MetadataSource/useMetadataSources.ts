@@ -43,6 +43,13 @@ export function useJavAvailable() {
   return data?.javAvailable ?? false;
 }
 
+// True only once the sources have loaded and JAV is off, so a deep link isn't
+// bounced while `useJavAvailable()` is still false.
+export function useJavUnavailable() {
+  const { data, isFetched } = useMetadataSources();
+  return isFetched && !data?.javAvailable;
+}
+
 export function useChooseMetadataSources() {
   const queryClient = useQueryClient();
 
