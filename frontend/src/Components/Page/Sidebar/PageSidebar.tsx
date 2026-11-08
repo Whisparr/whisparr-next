@@ -16,6 +16,7 @@ import Scroller from 'Components/Scroller/Scroller';
 import usePrevious from 'Helpers/Hooks/usePrevious';
 import { icons } from 'Helpers/Props';
 import { VERTICAL } from 'Helpers/Props/scrollDirections';
+import { useMovie } from 'Movie/useMovie';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
 import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import dimensions from 'Styles/Variables/dimensions';
@@ -338,7 +339,19 @@ function PageSidebar({
 
   const pathname = location.pathname;
 
+  // JAV ids are TPDB UUIDs like scenes, so the URL alone can't tell them apart.
+  // useMovie shares the details page's query cache, so this adds no request.
+  const detailSlug = javAvailable
+    ? /^\/movie\/([^/]+)/.exec(pathname)?.[1]
+    : undefined;
+  const { data: detailMovie } = useMovie(detailSlug);
+  const isJavDetail = !!detailSlug && detailMovie?.itemType === 'jav';
+
   const activeParent = useMemo(() => {
+    if (isJavDetail) {
+      return '/jav';
+    }
+
     const uuidRegex =
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -390,7 +403,7 @@ function PageSidebar({
     }
 
     return LINKS[0].to;
-  }, [pathname]);
+  }, [pathname, isJavDetail]);
 
   const handleWindowClick = useCallback(
     (event: MouseEvent) => {
