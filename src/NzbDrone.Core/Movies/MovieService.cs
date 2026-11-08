@@ -739,7 +739,12 @@ namespace NzbDrone.Core.Movies
         /// <returns>The movie object if found; otherwise, null.</returns>
         public Movie FindScene(ParsedMovieInfo parsedMovieInfo, bool interactiveSearch = false, SearchCriteriaBase searchCriteria = null)
         {
-            if (JavCode.TryNormalize(parsedMovieInfo.Code, out var javCode) && _javAvailability.IsAvailable())
+            var javSearch = searchCriteria?.Movie?.MovieMetadata?.Value?.ItemType == ItemType.Jav;
+
+            // Scene and movie searches never map to a JAV row; file imports (no criteria) and JAV searches do
+            if ((searchCriteria == null || javSearch) &&
+                JavCode.TryNormalize(parsedMovieInfo.Code, out var javCode) &&
+                _javAvailability.IsAvailable())
             {
                 var jav = FindByJavCode(javCode);
 
@@ -750,7 +755,7 @@ namespace NzbDrone.Core.Movies
             }
 
             // A JAV search never title-matches scenes or movies
-            if (searchCriteria?.Movie?.MovieMetadata?.Value?.ItemType == ItemType.Jav)
+            if (javSearch)
             {
                 return null;
             }

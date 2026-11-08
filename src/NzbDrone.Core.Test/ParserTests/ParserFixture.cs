@@ -283,7 +283,10 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("[ABP-123] Perfect Satisfaction.mkv", "ABP-123")]
         public void should_parse_jav_code(string title, string code)
         {
-            Parser.Parser.ParseMovieTitle(title)?.Code.Should().Be(code);
+            var parsed = Parser.Parser.ParseMovieTitle(title);
+
+            parsed.Should().NotBeNull();
+            parsed.Code.Should().Be(code);
         }
     }
 }

@@ -3,6 +3,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Parser.Model;
 
@@ -32,7 +33,7 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
                 null, // IBuildMoviePaths
                 null, // IAutoTaggingService
                 null, // ICacheManager
-                null, // IJavAvailability
+                new Mock<IJavAvailability>().Object,
                 NzbDrone.Common.Instrumentation.NzbDroneLogger.GetLogger(typeof(MovieService)));
         }
 

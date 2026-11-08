@@ -67,6 +67,14 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
         }
 
         [Test]
+        public void scene_search_never_maps_to_jav_row()
+        {
+            Subject.FindScene(Parsed("ABP-123"), false, Criteria(ItemType.Scene)).Should().BeNull();
+
+            Mocker.GetMock<IMovieRepository>().Verify(r => r.FindByJavCode(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
         public void unavailable_skips_code_lookup()
         {
             Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(false);
