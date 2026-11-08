@@ -51,6 +51,19 @@ namespace NzbDrone.Core.Test.ValidationTests
             _validator.Validate(NewItem(ItemType.Scene)).IsValid.Should().BeTrue();
         }
 
+        [TestCase(ItemType.Jav, ItemType.Jav, true)]
+        [TestCase(ItemType.Jav, ItemType.Scene, true)]
+        [TestCase(ItemType.Scene, ItemType.Jav, true)]
+        [TestCase(ItemType.Jav, ItemType.Movie, false)]
+        [TestCase(ItemType.Movie, ItemType.Jav, false)]
+        [TestCase(ItemType.Movie, ItemType.Movie, false)]
+        public void should_only_allow_scene_layout_items_to_share_a_path(ItemType instance, ItemType existing, bool valid)
+        {
+            GivenExisting(existing);
+
+            _validator.Validate(NewItem(instance)).IsValid.Should().Be(valid);
+        }
+
         [Test]
         public void scene_may_not_share_path_with_a_movie()
         {

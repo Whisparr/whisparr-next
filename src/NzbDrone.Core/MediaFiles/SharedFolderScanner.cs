@@ -134,7 +134,7 @@ namespace NzbDrone.Core.MediaFiles
         private Dictionary<int, Movie> GetScenesInFolder(Movie movie)
         {
             var ids = _sceneFolderLayout.GetItemsInFolder(movie.Path)
-                                        .Where(e => e.ItemType == ItemType.Scene && e.Id != movie.Id)
+                                        .Where(e => e.ItemType.UsesSceneLayout() && e.Id != movie.Id)
                                         .Select(e => e.Id)
                                         .ToList();
 

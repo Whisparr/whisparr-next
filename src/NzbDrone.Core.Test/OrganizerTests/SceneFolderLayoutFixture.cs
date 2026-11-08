@@ -66,12 +66,84 @@ namespace NzbDrone.Core.Test.OrganizerTests
         [Test]
         public void is_flat_should_read_current_naming_config_after_it_is_saved()
         {
-            Subject.IsFlat().Should().BeFalse();
+            Subject.IsFlat(ItemType.Scene).Should().BeFalse();
 
             _namingConfig.SceneFolderFormat = FlatFormat;
             Subject.Handle(new NamingConfigSavedEvent());
 
-            Subject.IsFlat().Should().BeTrue();
+            Subject.IsFlat(ItemType.Scene).Should().BeTrue();
+        }
+
+        [Test]
+        public void jav_is_flat_when_jav_folder_format_is_flat()
+        {
+            _namingConfig.JavFolderFormat = "{Studio Title}";
+
+            Subject.IsFlat(ItemType.Jav).Should().BeTrue();
+        }
+
+        [Test]
+        public void jav_is_not_flat_when_jav_folder_format_ends_in_the_code()
+        {
+            _namingConfig.JavFolderFormat = "jav/{Studio CleanTitle}/{Scene Code}";
+
+            Subject.IsFlat(ItemType.Jav).Should().BeFalse();
+        }
+
+        [Test]
+        public void scene_flatness_ignores_jav_folder_format()
+        {
+            _namingConfig.SceneFolderFormat = PerSceneFormat;
+            _namingConfig.JavFolderFormat = "{Studio Title}";
+
+            Subject.IsFlat(ItemType.Scene).Should().BeFalse();
+        }
+
+        [Test]
+        public void jav_flatness_ignores_scene_folder_format()
+        {
+            _namingConfig.SceneFolderFormat = FlatFormat;
+            _namingConfig.JavFolderFormat = "jav/{Studio CleanTitle}/{Scene Code}";
+
+            Subject.IsFlat(ItemType.Jav).Should().BeFalse();
+        }
+
+        [Test]
+        public void naming_config_saved_clears_the_jav_flatness_too()
+        {
+            _namingConfig.JavFolderFormat = "jav/{Studio CleanTitle}/{Scene Code}";
+            Subject.IsFlat(ItemType.Jav).Should().BeFalse();
+
+            _namingConfig.JavFolderFormat = "{Studio Title}";
+            Subject.Handle(new NamingConfigSavedEvent());
+
+            Subject.IsFlat(ItemType.Jav).Should().BeTrue();
+        }
+
+        [Test]
+        public void is_shared_true_for_jav_when_jav_format_is_flat()
+        {
+            _namingConfig.JavFolderFormat = "{Studio Title}";
+
+            Subject.IsShared(GivenItem(1, "/media/jav/Studio", ItemType.Jav)).Should().BeTrue();
+        }
+
+        [Test]
+        public void is_shared_false_for_jav_alone_in_per_release_folder()
+        {
+            _namingConfig.JavFolderFormat = "jav/{Studio CleanTitle}/{Scene Code}";
+            GivenEntries(Entry(1, "/media/jav/Studio/A", ItemType.Jav), Entry(2, "/media/jav/Studio/B", ItemType.Jav));
+
+            Subject.IsShared(GivenItem(1, "/media/jav/Studio/A", ItemType.Jav)).Should().BeFalse();
+        }
+
+        [Test]
+        public void is_shared_true_for_jav_sharing_a_path_with_a_scene()
+        {
+            _namingConfig.JavFolderFormat = "jav/{Studio CleanTitle}/{Scene Code}";
+            GivenEntries(Entry(1, "/media/Studio", ItemType.Jav), Entry(2, "/media/Studio", ItemType.Scene));
+
+            Subject.IsShared(GivenItem(1, "/media/Studio", ItemType.Jav)).Should().BeTrue();
         }
 
         [Test]
@@ -79,8 +151,8 @@ namespace NzbDrone.Core.Test.OrganizerTests
         {
             GivenEntries(Entry(1, "/media/scenes/Studio/A", ItemType.Scene));
 
-            Subject.IsFlat();
-            Subject.IsFlat();
+            Subject.IsFlat(ItemType.Scene);
+            Subject.IsFlat(ItemType.Scene);
             Subject.IsShared(GivenItem(1, "/media/scenes/Studio/A", ItemType.Scene));
 
             Mocker.GetMock<INamingConfigService>().Verify(s => s.GetConfig(), Times.Once());

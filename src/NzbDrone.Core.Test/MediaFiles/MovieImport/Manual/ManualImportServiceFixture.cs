@@ -112,7 +112,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
         {
             GivenUnknownFiles("a.mp4");
 
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(false);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(false);
             Mocker.GetMock<ISceneFolderLayout>()
                   .Setup(s => s.GetItemsInFolder(Folder))
                   .Returns(new List<MoviePathEntry> { new() { Id = 1, Path = Folder }, new() { Id = 2, Path = Folder } });
@@ -129,7 +129,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
         {
             GivenUnknownFiles("a.mp4");
 
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(true);
 
             Subject.GetMediaFiles(Folder, null, null, true).Should().ContainSingle().Which.Movie.Should().BeNull();
             Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(It.IsAny<string>()), Times.Never());

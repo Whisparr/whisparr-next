@@ -57,6 +57,16 @@ namespace NzbDrone.Core.Test.ValidationTests
             _validator.Validate(NewItem(ItemType.Scene, "/lib/scenes/Shady Spa")).IsValid.Should().BeTrue();
         }
 
+        [TestCase(ItemType.Jav)]
+        [TestCase(ItemType.Scene)]
+        [TestCase(ItemType.Movie)]
+        public void jav_path_that_is_an_ancestor_of_anything_is_valid(ItemType existing)
+        {
+            GivenExisting(existing, "/lib/scenes/Shady Spa/Item");
+
+            _validator.Validate(NewItem(ItemType.Jav, "/lib/scenes/Shady Spa")).IsValid.Should().BeTrue();
+        }
+
         [Test]
         public void scene_added_after_movie_nested_in_studio_folder_is_valid()
         {

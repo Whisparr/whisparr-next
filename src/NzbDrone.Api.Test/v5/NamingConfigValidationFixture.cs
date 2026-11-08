@@ -64,11 +64,20 @@ namespace NzbDrone.Api.Test.v5
         }
 
         [TestCase("jav/{Studio CleanTitle}")]
-        [TestCase("")]
-        public void should_reject_jav_folder_format_without_code_or_title(string format)
+        [TestCase("{Studio Title}")]
+        public void should_accept_flat_jav_folder_format(string format)
         {
             var resource = Resource(NamingConfig.Default.SceneFolderFormat);
             resource.JavFolderFormat = format;
+
+            _validator.Validate(resource).Errors.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_reject_empty_jav_folder_format()
+        {
+            var resource = Resource(NamingConfig.Default.SceneFolderFormat);
+            resource.JavFolderFormat = "";
 
             _validator.Validate(resource).Errors.Should().NotBeEmpty();
         }

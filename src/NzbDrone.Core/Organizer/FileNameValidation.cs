@@ -58,7 +58,7 @@ namespace NzbDrone.Core.Organizer
             return ruleBuilder.SetValidator(new IllegalCharactersValidator<T>());
         }
 
-        // JAV keeps one release per folder, so the format needs a per-release token: the code or a scene title.
+        // The JAV file name needs a per-release token (the code or a scene title); the folder format may be flat.
         public static IRuleBuilderOptions<T, string> ValidJavFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
         {
             ruleBuilder.NotEmpty();

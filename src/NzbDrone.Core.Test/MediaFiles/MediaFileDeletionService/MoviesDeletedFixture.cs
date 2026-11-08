@@ -243,7 +243,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
 
             // The batch's own rows are gone by now
             Mocker.GetMock<IMovieService>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(true);
             Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
 
             if (captureThrows)
@@ -270,7 +270,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
             var scenes = GivenStudioScenes();
 
             Mocker.GetMock<IMovieService>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(false);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(false);
 
             Subject.HandleAsync(new MoviesDeletedEvent(scenes, true, false));
 
