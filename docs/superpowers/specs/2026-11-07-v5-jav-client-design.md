@@ -29,6 +29,8 @@ All routes are under `tpdb/`. JAV has no StashDB route.
 
 **Skyhook prerequisite:** the site and performer responses carry `HasJav` (`true`, `false` or `null`, where `null` means unknown or JAV off).
 - The client stores the last non-null value on the studio or performer at refresh time.
+- **Fallback:** Cloudflare can serve site and performer bodies cached before the field existed (no `HasJav`, for up to about 28 days). So when a refresh sees `null` and JAV is available, the client tries `site|performer/{uuid}/jav/count` once and uses its `HasJav`. If that also gives nothing, the stored value stays.
+- **Live since 2026-11-07** (Eros-Metadata #48).
 - That lands in Eros-Metadata first, from its own plan.
 
 ## Library

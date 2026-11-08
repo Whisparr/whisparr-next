@@ -24,7 +24,7 @@
 - **Translations:** new user-facing strings go in `src/NzbDrone.Core/Localization/Core/en.json` only (flat, PascalCase, alphabetical).
 - **Tests:** new backend code needs 80% coverage. Run every test project before the PR (Core, Api, Common, Host, Mono).
 - **Frontend checks:** `yarn typecheck`, `yarn lint` and `yarn build` must run clean from the repo root. Mark component props `Readonly<T>` on every touched file.
-- **Prerequisite:** the Skyhook `HasJav` field (Eros-Metadata plan `2026-11-07-skyhook-v5-has-jav.md`) must be deployed before the Task 13 live check and the Task 14 smoke test. Unit tests don't need it.
+- **Prerequisite:** the Skyhook `HasJav` field (Eros-Metadata plan `2026-11-07-skyhook-v5-has-jav.md`) is deployed (Eros-Metadata #48, 2026-11-07). Edge-cached bodies older than that lack the field, which is why Task 4 has the `jav/count` fallback.
 
 ## Review Focus
 
@@ -99,6 +99,7 @@
   - `ScenePage GetStudioJavPage(string uuid, string cursor)` and `ScenePage GetPerformerJavPage(string uuid, string cursor)`: `tpdb/site|performer/{uuid}/jav/full`, with the same status mapping and prefetch as scene pages. Generalise `GetScenePage(route, id, cursor)` with a `lane` segment (`"scenes"` or `"jav"`). For the JAV lane the route always gets the `tpdb/` prefix.
   - `HashSet<string> GetChangedJav(DateTime startTime)`: `tpdb/jav/changed`, with the same rounding and error rule as `GetChangedSceneSourceIds`.
   - `List<Movie> SearchForNewJav(string term)`: `tpdb/jav/search?q=`.
+  - `bool? GetStudioHasJav(string uuid)` and `bool? GetPerformerHasJav(string uuid)`: `GET tpdb/site|performer/{uuid}/jav/count`, whose body is `{HasJav, Total}`. They return `HasJav`, or `null` on any non-200 status or exception; they never throw. This is the fallback for edge-cached site and performer bodies that predate the `HasJav` field. Those carry no field for up to about 28 days.
   - `SearchForNewEntity(term, ItemType.Jav)` routes to `SearchForNewJav`. It skips the studio+date scene path, and a bare UUID or `tpdb:` id goes to `GetJavInfo`.
 - `MapMovie` for `ItemType.Jav`:
   - `ForeignId = TpdbId` and `MetadataSource = TpdbJav`.
@@ -114,6 +115,7 @@
   - `studio_jav_page_503_is_throttled`
   - `search_for_new_entity_jav_calls_jav_search_only`: no `scene/search` and no `movie/search` request.
   - `studio_info_maps_has_jav`: three cases, true, false and null, giving `HasJavReported`.
+  - `studio_has_jav_reads_jav_count`: a 200 `{"HasJav":true,"Total":688}` gives true. A 503 gives null, and so does a 404.
   - `deserializes_unknown_jav_item_type`: guards that `"Jav"` parses through the camel-case enum converter.
 - [ ] **Step 2: Run them.** `--filter "FullyQualifiedName~SkyHookProxyJavFixture"`. Expected: FAIL.
 - [ ] **Step 3: Implement** the Produces list.
@@ -164,6 +166,7 @@
 - Consumes: `GetStudioJavPage`, `GetPerformerJavPage`, `HasJavReported`, `ISceneCatalogImporter.ImportScenes(ownerTitle, fetchPage, buildStub, keepGoing)`.
 - Behaviour:
   - Refresh copies `HasJavReported` into `HasJav` when non-null.
+  - When `HasJavReported` is null and JAV is available, refresh tries `GetStudioHasJav`/`GetPerformerHasJav` once and copies a non-null answer into `HasJav`. A null answer keeps the stored value. There's no retry within the refresh, and the next refresh simply tries again.
   - Every "anything monitored?" check (`Monitored || MoviesMonitored`) gains `|| JavMonitored`.
   - When `JavMonitored && HasJav && IsAvailable()`, sync calls `ImportScenes(title, c => GetStudioJavPage(ForeignId, c), stub, keepGoing)`. The stub is the scene stub plus `MovieMetadata = new MovieMetadata { ItemType = ItemType.Jav }`. `keepGoing` re-reads the owner and requires `JavMonitored`.
   - The JAV walk runs after the scene walk. A JAV `CatalogIncompleteException`/GaveUp is logged like the scene one.
@@ -175,6 +178,9 @@
   - `jav_not_walked_when_unavailable`
   - `has_jav_null_keeps_stored_value`: the stored value is true, the refresh reports null, and it is still true.
   - `has_jav_false_overwrites`
+  - `has_jav_null_falls_back_to_count_once`: the refresh reports null and the count returns true, so `HasJav` is true and the count was called once.
+  - `has_jav_fallback_null_keeps_stored_value`: the report and the count are both null, so the stored value is unchanged.
+  - `has_jav_no_fallback_when_unavailable`: StashDB, so the count is never called.
   - `only_jav_monitored_still_syncs` (`Monitored = MoviesMonitored = false`, `JavMonitored = true`)
   - The same three walk cases for performers.
 - [ ] **Step 2: Run them.** FAIL.
