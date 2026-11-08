@@ -256,8 +256,25 @@ merged forward into `v5`.
     TPDB call, cached 24 h. It is meant for a "monitor JAV" toggle on detail pages.
   - **Loops:** a JAV change feed and stale refresh, off unless `Caching:Loops:TpdbJav` is
     set. They stay off until TPDB agrees to JAV traffic from v5.
-  - **Client side still to come:** the JAV index, release search, the monitor-JAV toggle,
-    code-based release matching and the v2 JAV migration gap.
+  - **Client side (built, PR pending):** JAV is a content type (`ItemType.Jav`) available only
+    while the scene metadata source is TPDB.
+    - **Library:** a JAV section with its own index options, and an Add JAV search by code
+      or title.
+    - **Matching and import:** releases and files match by normalised code (`ABP-123`).
+      JAV is searched on indexers by code, imported and scanned like movies, and suggested
+      for unmapped files that carry a code. It shows in the Calendar and Wanted pages.
+    - **Naming:** its own file and folder formats (`jav/{Studio}/{Code}`).
+    - **Monitoring:** a Monitor JAV toggle on studios and performers that have JAV, also
+      offered in the Add Studio and Add Performer dialogs. It drives the catalog walk.
+    - **Migration:** v2 JAV studios are carried over, and the setup wizard warns about
+      them when StashDB is chosen.
+  - **Out of scope for now:**
+    - Folder import ("Import JAV" from an existing tree).
+    - Import lists for JAV.
+    - An exact-code fast path for FC2-PPV multi-part codes; they go through free-text
+      search instead.
+    - Custom formats keyed on JAV.
+    - JAV fingerprint matching, which needs a Skyhook change first.
 
 **Fingerprints in the cache:**
 - Fetch scene hashes during normal hydration and the refresh loops.
