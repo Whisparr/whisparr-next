@@ -2206,6 +2206,7 @@
   "SetupEnvSwitchReady": "Your v5 database is ready",
   "SetupFoundSummary": "Found {app} on {database}: {studios} studios, {scenes} scenes, {movies} movies and {files} files.",
   "SetupHeader": "Migration needed",
+  "SetupJavNeedsTpdb": "{count} JAV studios won't migrate under StashDB; their files are parked",
   "SetupKindChoice": "Both installs were found. Which one do you want to migrate?",
   "SetupLocalOnly": "The legacy install has no one to sign in as, so this page is only served to local addresses.",
   "SetupMigrationFailed": "The migration stopped",

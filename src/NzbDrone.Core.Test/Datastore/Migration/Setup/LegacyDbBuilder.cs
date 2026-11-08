@@ -56,7 +56,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 connection.Execute("INSERT INTO \"VersionInfo\" (\"Version\", \"Description\") VALUES (@version, 'v2')", new { version });
             }
 
-            connection.Execute("CREATE TABLE \"Series\" (\"Id\" INTEGER PRIMARY KEY, \"TvdbId\" INTEGER, \"Title\" TEXT, \"Monitored\" INTEGER, \"Path\" TEXT)");
+            connection.Execute("CREATE TABLE \"Series\" (\"Id\" INTEGER PRIMARY KEY, \"TvdbId\" INTEGER, \"Title\" TEXT, \"Monitored\" INTEGER, \"Path\" TEXT, \"SeriesType\" INTEGER NOT NULL DEFAULT 0)");
             connection.Execute("CREATE TABLE \"Episodes\" (\"Id\" INTEGER PRIMARY KEY, \"SeriesId\" INTEGER, \"Title\" TEXT, \"Monitored\" INTEGER, \"EpisodeFileId\" INTEGER)");
             connection.Execute("CREATE TABLE \"EpisodeFiles\" (\"Id\" INTEGER PRIMARY KEY, \"SeriesId\" INTEGER, \"RelativePath\" TEXT)");
             connection.Execute("CREATE TABLE \"Users\" (\"Id\" INTEGER PRIMARY KEY, \"Identifier\" TEXT, \"Username\" TEXT, \"Password\" TEXT)");
@@ -98,9 +98,9 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             return Path.Combine(TestContext.CurrentContext.TestDirectory, "Files", "LegacyV2", name);
         }
 
-        public static void InsertSeries(string path, int id)
+        public static void InsertSeries(string path, int id, int seriesType = 0)
         {
-            Execute(path, "INSERT INTO \"Series\" (\"Id\", \"TvdbId\", \"Title\", \"Monitored\", \"Path\") VALUES (@id, @id, 'Studio', 1, '/media/studio')", new { id });
+            Execute(path, "INSERT INTO \"Series\" (\"Id\", \"TvdbId\", \"Title\", \"Monitored\", \"Path\", \"SeriesType\") VALUES (@id, @id, 'Studio', 1, '/media/studio', @seriesType)", new { id, seriesType });
         }
 
         public static void InsertEpisode(string path, int id, int seriesId, int fileId = 0)

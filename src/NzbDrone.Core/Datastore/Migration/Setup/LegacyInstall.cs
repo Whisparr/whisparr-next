@@ -44,6 +44,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         public MovieMetadataType PreviousMovieSource { get; set; }
         public bool HasUsableCredentials { get; set; }
 
+        // v2 only: studios v2 flags as JAV, which need the TPDB scene source
+        public int JavStudios { get; set; }
+
         // Eros only.
         public bool HasMixedMovies { get; set; }
     }

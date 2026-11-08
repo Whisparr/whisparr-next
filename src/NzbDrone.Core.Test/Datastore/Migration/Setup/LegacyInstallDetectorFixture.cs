@@ -162,6 +162,16 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
+        public void v2_counts_jav_series()
+        {
+            var path = CreateV2();
+            LegacyDbBuilder.InsertSeries(path, 1);
+            LegacyDbBuilder.InsertSeries(path, 2, seriesType: 1);
+
+            Detect().Installs.Single().JavStudios.Should().Be(1);
+        }
+
+        [Test]
         public void should_refuse_v2_older_than_221()
         {
             CreateV2(220);

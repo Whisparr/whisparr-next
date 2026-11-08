@@ -17,6 +17,7 @@ export interface SetupInstall {
   previousSceneSource: SceneSource;
   previousMovieSource: MovieSource;
   hasMixedMovies: boolean;
+  javStudios: number;
   namedByEnvironment: boolean;
 }
 
