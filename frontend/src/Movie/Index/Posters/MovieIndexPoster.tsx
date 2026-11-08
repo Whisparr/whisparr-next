@@ -26,7 +26,7 @@ import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import formatDate from 'Utilities/Date/formatDate';
 import getRelativeDate from 'Utilities/Date/getRelativeDate';
 import translate from 'Utilities/String/translate';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 import MovieIndexPosterInfo from './MovieIndexPosterInfo';
 import styles from './MovieIndexPoster.module.css';
 
@@ -66,6 +66,7 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
 
   const safeForWorkMode = useSafeForWorkMode();
 
+  const { useMovieIndexOption } = useMovieIndexStore();
   const indexPosterOptions = useMovieIndexOption('posterOptions');
   const {
     detailedProgressBar,

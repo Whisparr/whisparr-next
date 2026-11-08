@@ -10,10 +10,7 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import { inputTypes } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
-import {
-  setMovieIndexOverviewOption,
-  useMovieIndexOption,
-} from '../../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../../movieIndexOptionsStore';
 
 const posterSizeOptions = [
   {
@@ -44,6 +41,8 @@ function MovieIndexOverviewOptionsModalContent(
   props: MovieIndexOverviewOptionsModalContentProps
 ) {
   const { onModalClose } = props;
+  const { useMovieIndexOption, setMovieIndexOverviewOption } =
+    useMovieIndexStore();
 
   const {
     detailedProgressBar,
@@ -63,7 +62,7 @@ function MovieIndexOverviewOptionsModalContent(
     ({ name, value }: { name: string; value: unknown }) => {
       setMovieIndexOverviewOption({ [name]: value });
     },
-    []
+    [setMovieIndexOverviewOption]
   );
 
   return (

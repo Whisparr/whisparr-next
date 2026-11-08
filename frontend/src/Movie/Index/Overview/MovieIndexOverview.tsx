@@ -22,7 +22,7 @@ import { useQualityProfile } from 'Settings/Profiles/Quality/useQualityProfiles'
 import dimensions from 'Styles/Variables/dimensions';
 import fonts from 'Styles/Variables/fonts';
 import translate from 'Utilities/String/translate';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 import MovieIndexOverviewInfo from './MovieIndexOverviewInfo';
 import styles from './MovieIndexOverview.module.css';
 
@@ -77,6 +77,7 @@ function MovieIndexOverview(props: Readonly<MovieIndexOverviewProps>) {
 
   const safeForWorkMode = useSafeForWorkMode();
 
+  const { useMovieIndexOption } = useMovieIndexStore();
   const overviewOptions = useMovieIndexOption('overviewOptions');
 
   const {

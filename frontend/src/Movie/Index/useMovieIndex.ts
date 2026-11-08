@@ -4,21 +4,30 @@ import { useCustomFiltersList } from 'Filters/useCustomFilters';
 import usePage from 'Helpers/Hooks/usePage';
 import { MOVIE_INDEX_FILTERS } from 'Movie/Index/movieIndexFilters';
 import {
+  getMovieIndexStore,
+  MovieIndexItemType,
   MovieIndexOverviewOptions,
   MovieIndexPosterOptions,
   MovieIndexTableOptions,
-  setMovieIndexFilter,
-  setMovieIndexOption,
-  setMovieIndexOverviewOption,
-  setMovieIndexPosterOption,
-  setMovieIndexSort,
-  setMovieIndexTableOption,
-  setMovieIndexView,
-  useMovieIndexOptions,
 } from './movieIndexOptionsStore';
 import { useMovieIndexQuery } from './useMovieIndexQuery';
 
-export function useMovieIndex(itemType: 'movie' | 'jav' = 'movie') {
+export function useMovieIndex(itemType: MovieIndexItemType = 'movie') {
+  // Called by the index itself, above its store provider, so the store comes
+  // from the argument rather than the context.
+  const {
+    pageKey,
+    customFilterType,
+    useMovieIndexOptions,
+    setMovieIndexFilter,
+    setMovieIndexOption,
+    setMovieIndexOverviewOption,
+    setMovieIndexPosterOption,
+    setMovieIndexSort,
+    setMovieIndexTableOption,
+    setMovieIndexView,
+  } = getMovieIndexStore(itemType);
+
   const {
     sortKey,
     sortDirection,
@@ -31,8 +40,8 @@ export function useMovieIndex(itemType: 'movie' | 'jav' = 'movie') {
     overviewOptions,
   } = useMovieIndexOptions();
 
-  const { page, goToPage } = usePage('movieIndex');
-  const customFilters = useCustomFiltersList('movieIndex');
+  const { page, goToPage } = usePage(pageKey);
+  const customFilters = useCustomFiltersList(customFilterType);
 
   function getPageSize() {
     switch (view) {
@@ -83,21 +92,30 @@ export function useMovieIndex(itemType: 'movie' | 'jav' = 'movie') {
   );
 
   // Sort, filter, view handlers. Each resets the page, as the reducers did.
-  const handleSortPress = useCallback((value: string) => {
-    setMovieIndexSort(value);
-  }, []);
+  const handleSortPress = useCallback(
+    (value: string) => {
+      setMovieIndexSort(value);
+    },
+    [setMovieIndexSort]
+  );
 
-  const handleFilterSelect = useCallback((value: string | number) => {
-    setMovieIndexFilter(value);
-  }, []);
+  const handleFilterSelect = useCallback(
+    (value: string | number) => {
+      setMovieIndexFilter(value);
+    },
+    [setMovieIndexFilter]
+  );
 
-  const handleViewSelect = useCallback((value: string) => {
-    setMovieIndexView(value);
+  const handleViewSelect = useCallback(
+    (value: string) => {
+      setMovieIndexView(value);
 
-    if (scrollerRef.current) {
-      scrollerRef.current.scrollTo(0, 0);
-    }
-  }, []);
+      if (scrollerRef.current) {
+        scrollerRef.current.scrollTo(0, 0);
+      }
+    },
+    [setMovieIndexView]
+  );
 
   const handleTableOptionChange = useCallback(
     (payload: {
@@ -106,26 +124,29 @@ export function useMovieIndex(itemType: 'movie' | 'jav' = 'movie') {
     }) => {
       setMovieIndexTableOption(payload);
     },
-    []
+    [setMovieIndexTableOption]
   );
 
   const handlePosterOptionChange = useCallback(
     (payload: Partial<MovieIndexPosterOptions>) => {
       setMovieIndexPosterOption(payload);
     },
-    []
+    [setMovieIndexPosterOption]
   );
 
   const handleOverviewOptionChange = useCallback(
     (payload: Partial<MovieIndexOverviewOptions>) => {
       setMovieIndexOverviewOption(payload);
     },
-    []
+    [setMovieIndexOverviewOption]
   );
 
-  const handleIndexModeChange = useCallback((value: string) => {
-    setMovieIndexOption('indexMode', value);
-  }, []);
+  const handleIndexModeChange = useCallback(
+    (value: string) => {
+      setMovieIndexOption('indexMode', value);
+    },
+    [setMovieIndexOption]
+  );
 
   const handleSelectModePress = useCallback(() => {
     setIsSelectMode((prev) => !prev);

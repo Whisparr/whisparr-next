@@ -3,7 +3,7 @@ import Scroller from 'Components/Scroller/Scroller';
 import { HORIZONTAL } from 'Helpers/Props/scrollDirections';
 import { SortDirection } from 'Helpers/Props/sortDirections';
 import Movie from 'Movie/Movie';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 import MovieIndexRow from './MovieIndexRow';
 import MovieIndexTableHeader from './MovieIndexTableHeader';
 import styles from './MovieIndexTable.module.css';
@@ -18,6 +18,7 @@ interface MovieIndexTableProps {
 
 function MovieIndexTable(props: MovieIndexTableProps) {
   const { items, sortKey, sortDirection, isSelectMode } = props;
+  const { useMovieIndexOption } = useMovieIndexStore();
   const columns = useMovieIndexOption('columns');
 
   return (

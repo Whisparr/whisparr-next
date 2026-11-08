@@ -24,9 +24,12 @@ function MovieReleaseDates({
     useUiSettingsValues();
   const sceneSource = useSceneMetadataSource();
 
-  let url = `https://www.themoviedb.org/movie/${foreignId}`;
+  let url: string | undefined = `https://www.themoviedb.org/movie/${foreignId}`;
 
-  if (itemType === 'movie' && foreignId.startsWith('tpdb:')) {
+  if (itemType === 'jav') {
+    // No JAV page to point at; the missing-dates note links to TMDb.
+    url = undefined;
+  } else if (itemType === 'movie' && foreignId.startsWith('tpdb:')) {
     url = `https://theporndb.net/movies/${foreignId}`;
   } else if (itemType === 'scene') {
     // A scene's foreign id comes from the locked scene source.
@@ -40,9 +43,11 @@ function MovieReleaseDates({
           <Icon name={icons.MISSING} />
         </div>
 
-        <InlineMarkdown
-          data={translate('NoMovieReleaseDatesAvailable', { url })}
-        />
+        {url ? (
+          <InlineMarkdown
+            data={translate('NoMovieReleaseDatesAvailable', { url })}
+          />
+        ) : null}
       </div>
     );
   }

@@ -5,7 +5,10 @@ import { SortDirection } from 'Helpers/Props/sortDirections';
 import { MOVIE_INDEX_FILTERS } from 'Movie/Index/movieIndexFilters';
 import Movie from 'Movie/Movie';
 import { PagingResource } from 'Movie/Movie.types';
-import { useMovieIndexOption } from './movieIndexOptionsStore';
+import {
+  getMovieIndexStore,
+  MovieIndexItemType,
+} from './movieIndexOptionsStore';
 
 export interface MovieIndexQueryParams {
   page: number;
@@ -16,11 +19,13 @@ export interface MovieIndexQueryParams {
 
 export function useMovieIndexQuery(
   params: MovieIndexQueryParams,
-  itemType: 'movie' | 'jav' = 'movie'
+  itemType: MovieIndexItemType = 'movie'
 ) {
+  const { customFilterType, useMovieIndexOption } =
+    getMovieIndexStore(itemType);
   const selectedFilterKey = useMovieIndexOption('selectedFilterKey');
 
-  const customFilters = useCustomFiltersList('movieIndex');
+  const customFilters = useCustomFiltersList(customFilterType);
 
   let filterDef: Filter | CustomFilter | undefined = undefined;
   let filters: PropertyFilter[] = [];

@@ -13,8 +13,7 @@ import { CheckInputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import {
   MovieIndexTableOptions as MovieIndexTableOptionsState,
-  setMovieIndexSort,
-  setMovieIndexTableOption,
+  useMovieIndexStore,
 } from '../movieIndexOptionsStore';
 import MovieIndexTableOptions from './MovieIndexTableOptions';
 import styles from './MovieIndexTableHeader.module.css';
@@ -29,10 +28,14 @@ interface MovieIndexTableHeaderProps {
 function MovieIndexTableHeader(props: MovieIndexTableHeaderProps) {
   const { columns, sortKey, sortDirection, isSelectMode } = props;
   const [selectState, selectDispatch] = useSelect();
+  const { setMovieIndexSort, setMovieIndexTableOption } = useMovieIndexStore();
 
-  const onSortPress = useCallback((value: string) => {
-    setMovieIndexSort(value);
-  }, []);
+  const onSortPress = useCallback(
+    (value: string) => {
+      setMovieIndexSort(value);
+    },
+    [setMovieIndexSort]
+  );
 
   const onTableOptionChange = useCallback(
     (payload: {
@@ -41,7 +44,7 @@ function MovieIndexTableHeader(props: MovieIndexTableHeaderProps) {
     }) => {
       setMovieIndexTableOption(payload);
     },
-    []
+    [setMovieIndexTableOption]
   );
 
   const onSelectAllChange = useCallback(

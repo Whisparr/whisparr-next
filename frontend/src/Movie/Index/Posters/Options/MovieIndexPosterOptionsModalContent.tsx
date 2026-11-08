@@ -10,10 +10,7 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import { inputTypes } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
-import {
-  setMovieIndexPosterOption,
-  useMovieIndexOption,
-} from '../../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../../movieIndexOptionsStore';
 
 const posterSizeOptions = [
   {
@@ -45,6 +42,8 @@ function MovieIndexPosterOptionsModalContent(
 ) {
   const { onModalClose } = props;
 
+  const { useMovieIndexOption, setMovieIndexPosterOption } =
+    useMovieIndexStore();
   const posterOptions = useMovieIndexOption('posterOptions');
 
   const {
@@ -64,7 +63,7 @@ function MovieIndexPosterOptionsModalContent(
     ({ name, value }: { name: string; value: unknown }) => {
       setMovieIndexPosterOption({ [name]: value });
     },
-    []
+    [setMovieIndexPosterOption]
   );
 
   return (

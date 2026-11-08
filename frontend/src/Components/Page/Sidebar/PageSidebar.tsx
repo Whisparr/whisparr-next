@@ -33,6 +33,8 @@ interface SidebarItem {
   title: string | (() => string);
   to: string;
   alias?: string;
+  // Hidden unless the metadata sources make JAV available.
+  requiresJav?: boolean;
   isActive?: boolean;
   isActiveParent?: boolean;
   isParentItem?: boolean;
@@ -94,6 +96,7 @@ let LINKS: SidebarItem[] = [
     iconName: icons.DISC,
     title: () => translate('Jav'),
     to: '/jav',
+    requiresJav: true,
     children: [
       {
         title: () => translate('AddNew'),
@@ -321,7 +324,7 @@ function PageSidebar({
   const javAvailable = useJavAvailable();
 
   const visibleLinks = LINKS.filter(
-    (link) => javAvailable || link.iconName !== icons.DISC
+    (link) => javAvailable || !link.requiresJav
   ).map((link) =>
     !hasMigrationReport && link.children
       ? {

@@ -54,9 +54,9 @@ function AppRoutes() {
 
       <Route path="/" element={<SceneIndex />} />
 
-      <Route path="/movies" element={<MovieIndex />} />
+      <Route path="/movies" element={<MovieIndex key="movie" />} />
 
-      <Route path="/jav" element={<MovieIndex itemType="jav" />} />
+      <Route path="/jav" element={<MovieIndex key="jav" itemType="jav" />} />
 
       <Route path="/collections" element={<Collection />} />
 

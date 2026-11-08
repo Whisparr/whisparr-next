@@ -2,7 +2,7 @@ import React, { RefObject, useEffect, useMemo, useState } from 'react';
 import useMeasure from 'Helpers/Hooks/useMeasure';
 import Movie from 'Movie/Movie';
 import dimensions from 'Styles/Variables/dimensions';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 import MovieIndexPoster from './MovieIndexPoster';
 
 const bodyPadding = Number.parseInt(dimensions.pageContentBodyPadding, 10);
@@ -42,6 +42,7 @@ export default function MovieIndexPosters(
     isSelectMode,
     isSmallScreen,
   } = props;
+  const { useMovieIndexOption } = useMovieIndexStore();
   const posterOptions = useMovieIndexOption('posterOptions');
   const [measureRef, bounds] = useMeasure();
   const [width, setWidth] = useState(0);
