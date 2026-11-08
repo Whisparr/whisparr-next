@@ -6,6 +6,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Parser.RomanNumerals;
 
@@ -24,12 +25,15 @@ namespace NzbDrone.Core.Parser
         private static HashSet<ArabicRomanNumeral> _arabicRomanNumeralMappings;
 
         private readonly IMovieService _movieService;
+        private readonly IJavAvailability _javAvailability;
         private readonly Logger _logger;
 
         public ParsingService(IMovieService movieService,
+                              IJavAvailability javAvailability,
                               Logger logger)
         {
             _movieService = movieService;
+            _javAvailability = javAvailability;
             _logger = logger;
 
             if (_arabicRomanNumeralMappings == null)
@@ -137,6 +141,20 @@ namespace NzbDrone.Core.Parser
             var searchingForScene = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Scene;
             var searchingForJav = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Jav;
             var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene || searchingForJav;
+
+            // A file import named by an unhyphenated JAV code ('abp123.mp4') never parses as a scene
+            if (!sceneLookup && searchCriteria == null && _javAvailability.IsAvailable() &&
+                JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out _))
+            {
+                result = GetSceneMovie(parsedMovieInfo, null);
+
+                if (result?.Movie != null)
+                {
+                    return result;
+                }
+
+                result = null;
+            }
 
             if (sceneLookup)
             {

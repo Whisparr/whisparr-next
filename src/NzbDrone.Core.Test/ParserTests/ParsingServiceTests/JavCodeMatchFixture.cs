@@ -45,6 +45,24 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
         }
 
         [Test]
+        public void unhyphenated_file_matches_jav()
+        {
+            var parsed = Parser.Parser.ParseMovieTitle("abp123.mp4");
+
+            parsed.Should().NotBeNull();
+            Subject.FindScene(parsed).Should().Be(_jav);
+        }
+
+        [Test]
+        public void unhyphenated_release_in_jav_search_matches()
+        {
+            var parsed = Parser.Parser.ParseMovieTitle("ABP123.720p");
+
+            parsed.Should().NotBeNull();
+            Subject.FindScene(parsed, false, Criteria(ItemType.Jav)).Should().Be(_jav);
+        }
+
+        [Test]
         public void jav_search_miss_does_not_title_match_scene()
         {
             Subject.FindScene(Parsed("ABP-999"), false, Criteria(ItemType.Jav)).Should().BeNull();

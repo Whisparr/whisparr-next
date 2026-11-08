@@ -277,6 +277,8 @@ namespace NzbDrone.Core.Test.ParserTests
             Parser.Parser.NormalizeImdbId(imdbid).Should().BeEquivalentTo(normalized);
         }
 
+        [TestCase("abp123.mp4", "ABP-123")]
+        [TestCase("ABP_123 Momo Sakai.mkv", "ABP-123")]
         [TestCase("ABP-123.mp4", "ABP-123")]
         [TestCase("[FHD] ABP-123.mkv", "ABP-123")]
         [TestCase("abp-123 Momo Sakai 1080p.mp4", "abp-123")]

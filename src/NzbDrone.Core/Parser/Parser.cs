@@ -11,6 +11,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser.Model;
 
 namespace NzbDrone.Core.Parser
@@ -521,6 +522,21 @@ namespace NzbDrone.Core.Parser
                         StashId = stashIdValue
                     };
                     return result;
+                }
+
+                // Last resort: a bare unhyphenated JAV code ('abp123.mp4') matches no regex above. Only titles that
+                // would otherwise be unparseable reach this, so no existing parse changes.
+                if (JavCode.TryExtract(releaseTitle, out var javCode))
+                {
+                    return new ParsedMovieInfo
+                    {
+                        Code = javCode,
+                        ReleaseTokens = releaseTitle,
+                        OriginalTitle = originalTitle,
+                        ReleaseTitle = releaseTitle,
+                        SimpleReleaseTitle = SimpleReleaseTitleRegex.Replace(releaseTitle, string.Empty),
+                        Quality = QualityParser.ParseQuality(title)
+                    };
                 }
             }
             catch (Exception e)

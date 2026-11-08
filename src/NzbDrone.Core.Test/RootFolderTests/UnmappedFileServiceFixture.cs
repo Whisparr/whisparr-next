@@ -130,6 +130,18 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void unhyphenated_code_file_suggests_jav_first()
+        {
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.Get(8)).Returns(new ImportFile { Id = 8, RootFolderId = 1, Path = "/media/jav/abp123.mp4", Name = "abp123.mp4" });
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+            GivenTypedSearch("ABP-123", ItemType.Jav, Scene("jav", "Unrelated"));
+
+            var results = Subject.Suggest(8, null, ItemType.Scene).Results;
+
+            results.Select(r => r.Movie.ForeignId).Should().StartWith("jav");
+        }
+
+        [Test]
         public void jav_unavailable_suggests_scenes_only()
         {
             GivenJavFile(false);

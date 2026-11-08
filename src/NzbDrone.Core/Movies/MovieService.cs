@@ -743,7 +743,8 @@ namespace NzbDrone.Core.Movies
 
             // Scene and movie searches never map to a JAV row; file imports (no criteria) and JAV searches do
             if ((searchCriteria == null || javSearch) &&
-                JavCode.TryNormalize(parsedMovieInfo.Code, out var javCode) &&
+                (JavCode.TryNormalize(parsedMovieInfo.Code, out var javCode) ||
+                 JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out javCode)) &&
                 _javAvailability.IsAvailable())
             {
                 var jav = FindByJavCode(javCode);

@@ -109,7 +109,7 @@ namespace NzbDrone.Core.RootFolders
 
             var javIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (itemType != ItemType.Jav && javAvailable && JavCode.TryNormalize(parsed?.Code, out var javCode))
+            if (itemType != ItemType.Jav && javAvailable && (JavCode.TryNormalize(parsed?.Code, out var javCode) || JavCode.TryExtract(Path.GetFileName(file.Path), out javCode)))
             {
                 try
                 {
