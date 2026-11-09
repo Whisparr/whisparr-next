@@ -21,6 +21,7 @@ namespace NzbDrone.Core.MediaFiles.Events
         RootFolderIsEmpty,
         MovieFolderDoesNotExist,
         NeverRescanAfterRefresh,
-        RescanAfterManualRefreshOnly
+        RescanAfterManualRefreshOnly,
+        MigrationInProgress
     }
 }
