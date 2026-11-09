@@ -129,18 +129,25 @@ namespace NzbDrone.Core.LegacyMigration
 
             var gaveUp = 0;
 
+            // An unmonitored studio only brings what the user owned or wanted in v2; a studio refresh doesn't fill its catalog either.
             // A JAV-only series has no scene catalog to walk
-            if (!JavOnlySeries.Contains(series.LegacyId))
+            if (series.Monitored && !JavOnlySeries.Contains(series.LegacyId))
             {
                 gaveUp += _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(siteUuid, cursor), BuildStub, () => true).GaveUp;
             }
 
-            if (series.IsJav)
+            if (series.Monitored && series.IsJav)
             {
                 gaveUp += _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioJavPage(siteUuid, cursor), BuildJavStub, () => true).GaveUp;
             }
 
-            var missing = episodeByUuid.Keys.Where(uuid => _movieService.FindByForeignId(uuid) == null).ToList();
+            // By episode, not episodeByUuid: that holds one episode per scene, and it may not be the one with the file
+            var missing = episodes
+                .Where(e => sceneUuids.ContainsKey(e.TpdbSceneId) && (series.Monitored || e.Monitored || e.LegacyEpisodeFileId > 0))
+                .Select(e => sceneUuids[e.TpdbSceneId])
+                .Distinct()
+                .Where(uuid => _movieService.FindByForeignId(uuid) == null)
+                .ToList();
 
             var added = missing.Count > 0
                 ? _addMovieService.AddMovies(missing.Select(BuildStub).ToList(), true, refreshInline: true)

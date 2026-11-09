@@ -31,6 +31,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private Dictionary<string, Studio> _studios;
         private Dictionary<string, Movie> _movies;
         private Dictionary<string, HashMatch> _hashes;
+        private List<ScenePageItem> _catalog;
+        private ScenePageWalkResult _walkResult;
         private Mock<ILegacyImportProgress> _progress;
         private Func<string, Movie> _buildStub;
         private Action<MovieFile> _fill;
@@ -49,6 +51,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _studios = new Dictionary<string, Studio>();
             _movies = new Dictionary<string, Movie>();
             _hashes = new Dictionary<string, HashMatch>();
+            _catalog = new List<ScenePageItem>();
+            _walkResult = new ScenePageWalkResult();
             _progress = new Mock<ILegacyImportProgress>();
             _mapped = new IdMapResult(StashStudio, IdMapMethod.Mapping);
             _parsedScene = null;
@@ -102,6 +106,18 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
                       return movies;
                   });
+
+            Mocker.GetMock<IScenePageWalker>()
+                  .Setup(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()))
+                  .Returns<Func<string, ScenePage>, Action<ScenePage>, Func<bool>>((fetch, handle, _) =>
+                  {
+                      handle(fetch(null));
+
+                      return _walkResult;
+                  });
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(i => i.GetStudioScenePage(StashStudio, It.IsAny<string>()))
+                  .Returns(() => new ScenePage { Items = _catalog });
 
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
@@ -320,7 +336,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         [Test]
         public void catalog_added_unmonitored()
         {
-            var series = GivenSeries(1, monitored: false);
+            var series = GivenSeries(1);
 
             Run();
 
@@ -330,8 +346,9 @@ namespace NzbDrone.Core.Test.LegacyMigration
             studio.RootFolderPath.Should().Be(Root);
             studio.QualityProfileId.Should().Be(4);
             studio.Tags.Should().BeEquivalentTo(new[] { 2, 3 });
-            studio.Monitored.Should().BeFalse();
+            studio.Monitored.Should().BeTrue();
             studio.SearchOnAdd.Should().BeFalse();
+            Mocker.GetMock<IScenePageWalker>().Verify(w => w.Walk(It.IsAny<Func<string, ScenePage>>(), It.IsAny<Action<ScenePage>>(), It.IsAny<Func<bool>>()), Times.Never());
 
             var stub = _buildStub("scene-x");
 
@@ -347,6 +364,85 @@ namespace NzbDrone.Core.Test.LegacyMigration
                   .Verify(i => i.ImportScenes(series.Title, It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
             Mocker.GetMock<IStudioService>().Verify(s => s.Update(studio), Times.Once());
             series.Done.Should().BeTrue();
+        }
+
+        // The refresh is what files a new scene under its studio
+        private void GivenCatalogScene(string foreignId, string title, string date)
+        {
+            _catalog.Add(new ScenePageItem { SceneId = foreignId, Title = title, ReleaseDate = DateTime.Parse(date, System.Globalization.CultureInfo.InvariantCulture) });
+
+            Mocker.GetMock<IRefreshNewScenes>()
+                  .Setup(r => r.RefreshNewScenes(It.IsAny<List<Movie>>()))
+                  .Callback<List<Movie>>(added => added.ForEach(m =>
+                  {
+                      var scene = _catalog.Single(i => i.SceneId == m.ForeignId);
+
+                      m.Title = scene.Title;
+                      m.MovieMetadata.Value.StudioForeignId = StashStudio;
+                      m.MovieMetadata.Value.ReleaseDateUtc = scene.ReleaseDate;
+                  }));
+        }
+
+        [Test]
+        public void unmonitored_studio_adds_only_owned_and_wanted_scenes()
+        {
+            var series = GivenSeries(1, monitored: false);
+            var file = GivenFile(5, series);
+
+            GivenCatalogScene("owned", "Scene One", "2024-05-06");
+            GivenCatalogScene("wanted", "Scene Two", "2024-05-07");
+            GivenCatalogScene("neither", "Scene Three", "2024-05-08");
+            GivenCatalogScene("not-in-v2", "Scene Four", "2024-05-09");
+
+            GivenEpisode(1, series, "Scene One", "2024-05-06", monitored: false, fileId: 5);
+            GivenEpisode(2, series, "Scene Two", "2024-05-07");
+            GivenEpisode(3, series, "Scene Three", "2024-05-08", monitored: false);
+
+            Run();
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                  .Verify(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Never());
+            _movies.Keys.Should().BeEquivalentTo("owned", "wanted");
+            VerifyLinked("owned", file);
+            _movies["owned"].Monitored.Should().BeFalse();
+            _movies["wanted"].Monitored.Should().BeTrue();
+            _studios[StashStudio].Monitored.Should().BeFalse();
+            series.Done.Should().BeTrue();
+            VerifyReport(LegacyReportCategory.LeftBehind, "Scenes", series.Title, "StashDB scenes with no v2 twin, left unmonitored", Times.Never());
+        }
+
+        [Test]
+        public void unmonitored_studio_does_not_add_a_scene_already_in_the_library()
+        {
+            var series = GivenSeries(1, monitored: false);
+            var file = GivenFile(5, series);
+            var existing = GivenScene("owned", "Scene One", "2024-05-06");
+
+            GivenCatalogScene("owned", "Scene One", "2024-05-06");
+            GivenEpisode(1, series, "Scene One", "2024-05-06", fileId: 5);
+
+            Run();
+
+            Mocker.GetMock<IAddMovieService>().Verify(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never());
+            VerifyLinked("owned", file);
+            existing.Monitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void unmonitored_studio_with_an_incomplete_catalog_links_what_matches_and_holds_the_rest()
+        {
+            var series = GivenSeries(1, monitored: false);
+            var file = GivenFile(5, series);
+
+            GivenCatalogScene("owned", "Scene One", "2024-05-06");
+            GivenEpisode(1, series, "Scene One", "2024-05-06", fileId: 5);
+            _walkResult.GaveUp.Add("cursor-2");
+
+            Run();
+
+            VerifyLinked("owned", file);
+            file.Done.Should().BeTrue();
+            series.Done.Should().BeFalse();
         }
 
         [Test]
