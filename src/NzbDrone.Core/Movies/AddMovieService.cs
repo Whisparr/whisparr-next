@@ -112,7 +112,7 @@ namespace NzbDrone.Core.Movies
             var httpExceptionCount = 0;
             var added = DateTime.UtcNow;
             var moviesToAdd = new List<Movie>();
-            var existingMovieForeignIds = _movieService.AllMovieForeignIds();
+            var existingMovieForeignIds = new HashSet<string>(_movieService.AllMovieForeignIds());
 
             foreach (var m in newMovies)
             {
@@ -123,7 +123,7 @@ namespace NzbDrone.Core.Movies
 
                     movie.Added = added;
 
-                    if (existingMovieForeignIds.Any(f => f == movie.ForeignId))
+                    if (existingMovieForeignIds.Contains(movie.ForeignId))
                     {
                         _logger.Debug("Foreign ID {0} was not added due to validation failure: Movie already exists in database", m.ForeignId);
                         continue;
