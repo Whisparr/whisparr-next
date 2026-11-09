@@ -63,8 +63,8 @@ namespace NzbDrone.Core.Datastore
                 DateTimeKind = DateTimeKind.Utc,
                 JournalMode = OsInfo.IsOsx ? SQLiteJournalModeEnum.Truncate : SQLiteJournalModeEnum.Wal,
 
-                // FULL costs a disk flush per commit, which makes bulk writes very slow
-                SyncMode = SynchronizationModes.Normal,
+                // FULL costs a disk flush per commit. With WAL, NORMAL can't corrupt the database; a power cut can only lose the latest commits.
+                SyncMode = OsInfo.IsOsx ? SynchronizationModes.Full : SynchronizationModes.Normal,
                 Pooling = true,
                 Version = 3,
                 BusyTimeout = 1000

@@ -40,7 +40,7 @@ namespace NzbDrone.Core.Test.Datastore
         }
 
         [Test]
-        public void should_not_force_every_sqlite_commit_to_disk()
+        public void should_use_normal_sqlite_sync_except_on_macos()
         {
             var builder = new SQLiteConnectionStringBuilder(NewFactory().MainDbConnection.ConnectionString)
             {
@@ -54,8 +54,8 @@ namespace NzbDrone.Core.Test.Datastore
             using var command = connection.CreateCommand();
             command.CommandText = "PRAGMA synchronous";
 
-            // 1 is NORMAL, 2 is FULL
-            command.ExecuteScalar().Should().Be(1L);
+            // 1 is NORMAL, 2 is FULL. macOS doesn't use WAL, where NORMAL could corrupt the database on a power cut.
+            command.ExecuteScalar().Should().Be(OsInfo.IsOsx ? 2L : 1L);
         }
 
         [Test]
