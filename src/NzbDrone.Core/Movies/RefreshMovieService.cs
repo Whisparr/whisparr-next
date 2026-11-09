@@ -9,6 +9,7 @@ using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
@@ -31,6 +32,7 @@ namespace NzbDrone.Core.Movies
     {
         /// <summary>
         /// Refreshes freshly added scenes inline and scans them, without queuing commands or publishing MovieUpdatedEvent.
+        /// While a library migration runs the scan is skipped.
         /// </summary>
         void RefreshNewScenes(List<Movie> movies);
     }
@@ -57,6 +59,7 @@ namespace NzbDrone.Core.Movies
         private readonly IRenameMovieFileService _renameMovieFileService;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly ICommandResultReporter _commandResultReporter;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         public RefreshMovieService(IProvideMovieInfo movieInfo,
@@ -79,6 +82,7 @@ namespace NzbDrone.Core.Movies
                                     IRenameMovieFileService renameMovieFileService,
                                     IManageCommandQueue commandQueueManager,
                                     ICommandResultReporter commandResultReporter,
+                                    ILegacyMigrationGate migrationGate,
                                     Logger logger)
         {
             _movieInfo = movieInfo;
@@ -101,6 +105,7 @@ namespace NzbDrone.Core.Movies
             _renameMovieFileService = renameMovieFileService;
             _commandQueueManager = commandQueueManager;
             _commandResultReporter = commandResultReporter;
+            _migrationGate = migrationGate;
             _logger = logger;
         }
 
@@ -399,7 +404,7 @@ namespace NzbDrone.Core.Movies
                 try
                 {
                     var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
-                    RescanMovie(movie, true, CommandTrigger.Unspecified);
+                    ScanNewScene(movie);
                 }
                 catch (MovieNotFoundException)
                 {
@@ -411,9 +416,23 @@ namespace NzbDrone.Core.Movies
 
                     // Same as Execute: a failed refresh still gets its rescan, so search on add
                     // and clearing AddOptions happen.
-                    RescanMovie(_movieService.GetMovie(scene.Id), true, CommandTrigger.Unspecified);
+                    ScanNewScene(_movieService.GetMovie(scene.Id));
                 }
             }
+        }
+
+        private void ScanNewScene(Movie movie)
+        {
+            // A studio's scenes share one folder, so scanning each new scene re-reads that whole folder every time.
+            // The migration links its files itself; the skip event still clears AddOptions.
+            if (_migrationGate.AutomationPaused)
+            {
+                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.MigrationInProgress));
+
+                return;
+            }
+
+            RescanMovie(movie, true, CommandTrigger.Unspecified);
         }
 
         public void Execute(RefreshMovieCommand message)

@@ -6,7 +6,9 @@ using NUnit.Framework;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
@@ -274,6 +276,47 @@ namespace NzbDrone.Core.Test.MovieTests
             Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[1]), Times.Once());
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_skip_scan_of_new_scenes_during_migration()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Mocker.GetMock<ILegacyMigrationGate>().Setup(s => s.AutomationPaused).Returns(true);
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+
+            VerifyScanSkipped(scenes[0]);
+            VerifyScanSkipped(scenes[1]);
+        }
+
+        [Test]
+        public void should_skip_scan_of_new_scene_during_migration_when_its_refresh_fails()
+        {
+            var scenes = GivenNewScenes(1);
+
+            Mocker.GetMock<ILegacyMigrationGate>().Setup(s => s.AutomationPaused).Returns(true);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(scenes[0].ForeignId))
+                  .Throws(new IOException());
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+
+            VerifyScanSkipped(scenes[0]);
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        private void VerifyScanSkipped(Movie scene)
+        {
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.Is<MovieScanSkippedEvent>(e => e.Movie == scene && e.Reason == MovieScanSkippedReason.MigrationInProgress)), Times.Once());
         }
 
         [Test]
