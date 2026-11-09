@@ -24,6 +24,7 @@ using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Performers.Commands;
 using NzbDrone.Core.Movies.Performers.Events;
@@ -420,6 +421,129 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerWorks(_successfulPerformer.ForeignId), Times.Once());
             Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerWorks(performer.ForeignId), Times.Once());
             logs.Logs.Should().NotContain(TpdbMovieSync.NeedsTpdbMovieSourceMessage);
+        }
+
+        private Performer GivenJavPerformer(bool monitored, bool hasJav, bool javAvailable)
+        {
+            var performer = GivenPerformer(true);
+
+            performer.Monitored = monitored;
+            performer.MoviesMonitored = false;
+            performer.JavMonitored = true;
+            performer.HasJav = hasJav;
+            performer.HasJavReported = null;
+
+            Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(javAvailable);
+
+            return performer;
+        }
+
+        [Test]
+        public void jav_monitored_performer_walks_jav_pages()
+        {
+            var performer = GivenJavPerformer(true, true, true);
+            var calls = new List<(Func<string, ScenePage> Fetch, Func<string, Movie> Build, Func<bool> Keep)>();
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Setup(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
+                .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((_, fetch, build, keep) => calls.Add((fetch, build, keep)))
+                .Returns(new SceneCatalogImportResult(0, 0));
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            calls.Should().HaveCount(2);
+
+            var jav = calls[1];
+
+            jav.Fetch("c1");
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerJavPage(performer.ForeignId, "c1"), Times.Once());
+            jav.Build("j1").MovieMetadata.Value.ItemType.Should().Be(ItemType.Jav);
+            jav.Build("j1").ForeignId.Should().Be("j1");
+            calls[0].Build("s1").MovieMetadata.Value.ItemType.Should().NotBe(ItemType.Jav);
+
+            Mocker.GetMock<IPerformerService>()
+                .Setup(s => s.FindByForeignId(performer.ForeignId))
+                .Returns(new Performer { ForeignId = performer.ForeignId, Monitored = true, JavMonitored = false });
+
+            jav.Keep().Should().BeFalse();
+        }
+
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        public void jav_not_walked_when_has_jav_false_or_unavailable(bool hasJav, bool javAvailable)
+        {
+            var performer = GivenJavPerformer(true, hasJav, javAvailable);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            Mocker.GetMock<ISceneCatalogImporter>()
+                .Verify(s => s.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()), Times.Once());
+        }
+
+        [Test]
+        public void only_jav_monitored_still_syncs()
+        {
+            var performer = GivenJavPerformer(false, true, true);
+
+            GivenImporterCapturesCallbacks();
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            _fetchPage("c1");
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerJavPage(performer.ForeignId, "c1"), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [TestCase(true, null, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, true)]
+        public void has_jav_reported_by_skyhook_is_copied_when_not_null(bool stored, bool? reported, bool expected)
+        {
+            var performer = GivenJavPerformer(false, stored, true);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetPerformerInfo(performer.ForeignId))
+                .Returns(new Performer { ForeignId = performer.ForeignId, Name = performer.Name, HasJavReported = reported });
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetPerformerHasJav(performer.ForeignId)).Returns((bool?)null);
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            performer.HasJav.Should().Be(expected);
+        }
+
+        [Test]
+        public void has_jav_null_falls_back_to_count_once()
+        {
+            var performer = GivenJavPerformer(false, false, true);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetPerformerInfo(performer.ForeignId))
+                .Returns(new Performer { ForeignId = performer.ForeignId, Name = performer.Name });
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetPerformerHasJav(performer.ForeignId)).Returns(true);
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            performer.HasJav.Should().BeTrue();
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerHasJav(performer.ForeignId), Times.Once());
+        }
+
+        [Test]
+        public void has_jav_no_fallback_when_unavailable()
+        {
+            var performer = GivenJavPerformer(false, true, false);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetPerformerInfo(performer.ForeignId))
+                .Returns(new Performer { ForeignId = performer.ForeignId, Name = performer.Name });
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            performer.HasJav.Should().BeTrue();
+            Mocker.GetMock<IProvideMovieInfo>().Verify(s => s.GetPerformerHasJav(It.IsAny<string>()), Times.Never());
         }
 
         private void GivenSources(SceneMetadataType sceneSource, MovieMetadataType movieSource)

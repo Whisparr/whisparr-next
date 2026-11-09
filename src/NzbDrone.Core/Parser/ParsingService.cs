@@ -6,6 +6,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Parser.RomanNumerals;
 
@@ -24,12 +25,15 @@ namespace NzbDrone.Core.Parser
         private static HashSet<ArabicRomanNumeral> _arabicRomanNumeralMappings;
 
         private readonly IMovieService _movieService;
+        private readonly IJavAvailability _javAvailability;
         private readonly Logger _logger;
 
         public ParsingService(IMovieService movieService,
+                              IJavAvailability javAvailability,
                               Logger logger)
         {
             _movieService = movieService;
+            _javAvailability = javAvailability;
             _logger = logger;
 
             if (_arabicRomanNumeralMappings == null)
@@ -135,7 +139,21 @@ namespace NzbDrone.Core.Parser
         {
             FindMovieResult result = null;
             var searchingForScene = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Scene;
-            var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene;
+            var searchingForJav = searchCriteria?.Movie.MovieMetadata?.Value.ItemType == ItemType.Jav;
+            var sceneLookup = parsedMovieInfo.IsScene || parsedMovieInfo.IsDatelessScene || searchingForScene || searchingForJav;
+
+            // A file import named by an unhyphenated JAV code ('abp123.mp4') never parses as a scene.
+            // Only the exact code lookup runs here: scene title matching must not pre-empt the movie path.
+            if (!sceneLookup && searchCriteria == null && _javAvailability.IsAvailable() &&
+                JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out var javCode))
+            {
+                var jav = _movieService.FindByJavCode(javCode);
+
+                if (jav != null)
+                {
+                    return new FindMovieResult(jav, MovieMatchType.Title);
+                }
+            }
 
             if (sceneLookup)
             {
@@ -148,7 +166,7 @@ namespace NzbDrone.Core.Parser
             }
 
             // A dateless "Studio - Title" parse may just as well be a movie named "Title - Subtitle", so fall back to a movie lookup
-            var datelessMovieFallback = result == null && parsedMovieInfo.IsDatelessScene && !searchingForScene;
+            var datelessMovieFallback = result == null && parsedMovieInfo.IsDatelessScene && !searchingForScene && !searchingForJav;
 
             if (datelessMovieFallback || !sceneLookup)
             {

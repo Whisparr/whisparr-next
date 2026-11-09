@@ -2,6 +2,7 @@ export interface AddStudioOptions {
   rootFolderPath: string;
   monitored: boolean;
   moviesMonitored: boolean;
+  javMonitored?: boolean;
   whisparrMonitorNewItems: boolean;
   qualityProfileId: number;
   tags: number[];
@@ -15,6 +16,7 @@ function getNewStudio<T extends object>(studio: T, options: AddStudioOptions) {
     rootFolderPath,
     monitored,
     moviesMonitored,
+    javMonitored = false,
     whisparrMonitorNewItems,
     qualityProfileId,
     tags,
@@ -30,6 +32,7 @@ function getNewStudio<T extends object>(studio: T, options: AddStudioOptions) {
     },
     monitored,
     moviesMonitored,
+    javMonitored,
     whisparrMonitorNewItems,
     qualityProfileId,
     rootFolderPath,

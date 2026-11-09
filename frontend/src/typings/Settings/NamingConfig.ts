@@ -14,6 +14,9 @@ export default interface NamingConfig {
   standardSceneFormat: string;
   sceneFolderFormat: string;
   sceneImportFolderFormat: string;
+  renameJav: boolean;
+  standardJavFormat: string;
+  javFolderFormat: string;
   maxFolderPathLength: number;
   maxFilePathLength: number;
 }

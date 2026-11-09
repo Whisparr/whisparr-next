@@ -75,6 +75,12 @@ function SetupSourceForm({
             sceneIsPrevious ? 'SetupPreviousSource' : 'SetupRebuildsFromFiles'
           )}
         </span>
+
+        {choice.sceneSource === 'stashDb' && install.javStudios > 0 ? (
+          <span className={styles.warning}>
+            {translate('SetupJavNeedsTpdb', { count: install.javStudios })}
+          </span>
+        ) : null}
       </div>
 
       <div className={styles.field}>

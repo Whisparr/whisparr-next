@@ -28,8 +28,8 @@ namespace NzbDrone.Core.Validation.Paths
 
             context.MessageFormatter.AppendArgument("path", value);
 
-            // A scene may contain any item's folder; only a movie must not.
-            if (ValidatedItemType.IsScene(context.InstanceToValidate))
+            // A scene or JAV item may contain any item's folder; only a movie must not.
+            if (ValidatedItemType.UsesSceneLayout(context.InstanceToValidate))
             {
                 return true;
             }

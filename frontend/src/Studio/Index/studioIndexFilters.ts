@@ -34,6 +34,17 @@ export const STUDIO_INDEX_FILTERS: Filter[] = [
     ],
   },
   {
+    key: 'monitoredJav',
+    label: () => translate('MonitoredJavOnly'),
+    filters: [
+      {
+        key: 'javMonitored',
+        value: true,
+        type: filterTypes.EQUAL,
+      },
+    ],
+  },
+  {
     key: 'unmonitored',
     label: () => translate('Unmonitored'),
     filters: [

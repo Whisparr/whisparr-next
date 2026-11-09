@@ -20,6 +20,7 @@ using NzbDrone.Core.Movies.Collections;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Movies.Credits;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.RootFolders;
@@ -51,6 +52,7 @@ namespace NzbDrone.Core.Movies
         private readonly IDiskScanService _diskScanService;
         private readonly ICheckIfMovieShouldBeRefreshed _checkIfMovieShouldBeRefreshed;
         private readonly IConfigService _configService;
+        private readonly IJavAvailability _javAvailability;
         private readonly IAutoTaggingService _autoTaggingService;
         private readonly IRenameMovieFileService _renameMovieFileService;
         private readonly IManageCommandQueue _commandQueueManager;
@@ -72,6 +74,7 @@ namespace NzbDrone.Core.Movies
                                     IDiskScanService diskScanService,
                                     ICheckIfMovieShouldBeRefreshed checkIfMovieShouldBeRefreshed,
                                     IConfigService configService,
+                                    IJavAvailability javAvailability,
                                     IAutoTaggingService autoTaggingService,
                                     IRenameMovieFileService renameMovieFileService,
                                     IManageCommandQueue commandQueueManager,
@@ -93,6 +96,7 @@ namespace NzbDrone.Core.Movies
             _diskScanService = diskScanService;
             _checkIfMovieShouldBeRefreshed = checkIfMovieShouldBeRefreshed;
             _configService = configService;
+            _javAvailability = javAvailability;
             _autoTaggingService = autoTaggingService;
             _renameMovieFileService = renameMovieFileService;
             _commandQueueManager = commandQueueManager;
@@ -106,6 +110,13 @@ namespace NzbDrone.Core.Movies
             // but before this movie was refreshed won't be lost.
             var movie = _movieService.GetMovie(movieId);
             var movieMetadata = _movieMetadataService.Get(movie.MovieMetadataId);
+
+            if (movie.IsJavLookup() && !_javAvailability.IsAvailable())
+            {
+                _logger.Warn("Skipping refresh of {0}: JAV needs the TPDB scene metadata source", movie);
+
+                return movie;
+            }
 
             _logger.ProgressInfo("Updating info for {0}", movie.Title);
 
@@ -300,6 +311,10 @@ namespace NzbDrone.Core.Movies
                 {
                     return _movieInfo.GetTpdbMovieInfo(movie.TpdbId);
                 }
+                else if (movie.MovieMetadata.Value.MetadataSource == MetadataSource.TpdbJav)
+                {
+                    return _movieInfo.GetJavInfo(movie.ForeignId);
+                }
                 else if (movie.MovieMetadata.Value.MetadataSource is MetadataSource.Stash or MetadataSource.TpdbScene)
                 {
                     return _movieInfo.GetSceneInfo(movie.ForeignId);
@@ -443,6 +458,7 @@ namespace NzbDrone.Core.Movies
             {
                 var updatedMovies = new HashSet<string>();
                 var updatedScenes = new HashSet<string>();
+                HashSet<string> updatedJav = [];
 
                 if (message.LastStartTime.HasValue && message.LastStartTime.Value.AddDays(14) > DateTime.UtcNow)
                 {
@@ -457,6 +473,11 @@ namespace NzbDrone.Core.Movies
                     }
 
                     updatedScenes = _movieInfo.GetChangedScenes(message.LastStartTime.Value);
+
+                    if (_javAvailability.IsAvailable())
+                    {
+                        updatedJav = _movieInfo.GetChangedJav(message.LastStartTime.Value);
+                    }
                 }
 
                 var movieLists = _movieService.AllMovieIdsOrderByLastInfoSync().Chunk(1000);
@@ -467,8 +488,10 @@ namespace NzbDrone.Core.Movies
                     foreach (var movie in allMovie)
                     {
                         var movieLocal = movie;
-                        var isScene = movie.MovieMetadata.Value.ItemType == ItemType.Scene;
-                        var inChangedList = isScene ? updatedScenes.Contains(movie.ForeignId) : updatedMovies.Contains(movie.ForeignId);
+                        var isScene = movie.MovieMetadata.Value.ItemType is ItemType.Scene or ItemType.Jav;
+
+                        // JAV ids only add to what refreshes; the scene schedule fallback stays keyed to the scene feed alone.
+                        var inChangedList = isScene ? updatedScenes.Contains(movie.ForeignId) || updatedJav.Contains(movie.ForeignId) : updatedMovies.Contains(movie.ForeignId);
                         var noChangedList = isScene ? updatedScenes.Count == 0 : updatedMovies.Count == 0;
                         if ((
                             noChangedList

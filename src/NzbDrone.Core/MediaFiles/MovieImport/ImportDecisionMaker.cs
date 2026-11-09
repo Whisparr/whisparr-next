@@ -473,7 +473,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                 _aggregationService.Augment(localMovie, downloadClientItem);
 
-                if (localMovie.Movie.MovieMetadata.Value.ItemType == ItemType.Movie)
+                if (localMovie.Movie.MovieMetadata.Value.ItemType != ItemType.Scene)
                 {
                     _formatCalculator.UpdateMovieCustomFormats(localMovie);
 

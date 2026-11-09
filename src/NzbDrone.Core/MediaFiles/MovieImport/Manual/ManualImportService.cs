@@ -541,7 +541,21 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
 
         private bool IsSharedFolder(string folder)
         {
-            return _sceneFolderLayout.IsFlat() || _sceneFolderLayout.GetItemsInFolder(folder).Count > 1;
+            var items = _sceneFolderLayout.GetItemsInFolder(folder);
+
+            if (items.Count > 1)
+            {
+                return true;
+            }
+
+            // A folder that holds one item is judged by that item's own type, so a movie folder is never "flat"
+            if (items.Count == 1)
+            {
+                return _sceneFolderLayout.IsFlat(items[0].ItemType);
+            }
+
+            // Nothing is there yet, so either flat layout makes it shared
+            return _sceneFolderLayout.IsFlat(ItemType.Scene) || _sceneFolderLayout.IsFlat(ItemType.Jav);
         }
 
         private bool SceneSource(Movie movie, string folder)
@@ -701,8 +715,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                         });
                     }
 
-                    // Check if movie is a scene, then cleanup the unmapped scene
-                    if (movie.MovieMetadata.Value.ItemType != ItemType.Scene)
+                    // Check if movie is in the scene layout, then cleanup the unmapped file
+                    if (!movie.MovieMetadata.Value.ItemType.UsesSceneLayout())
                     {
                         continue;
                     }

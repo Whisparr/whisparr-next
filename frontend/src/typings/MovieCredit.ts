@@ -17,6 +17,10 @@ interface MovieCredit extends ModelBase {
   monitored: boolean;
   canMovieMonitor: boolean;
   moviesMonitored: boolean;
+  hasJav: boolean;
+  javMonitored: boolean;
+  javCount: number;
+  totalJavCount: number;
   performerHidden: boolean;
 }
 

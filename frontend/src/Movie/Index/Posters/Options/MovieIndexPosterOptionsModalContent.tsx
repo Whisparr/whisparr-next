@@ -8,12 +8,11 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import { getLinkedMovieMetadataSource } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
+import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
 import translate from 'Utilities/String/translate';
-import {
-  setMovieIndexPosterOption,
-  useMovieIndexOption,
-} from '../../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../../movieIndexOptionsStore';
 
 const posterSizeOptions = [
   {
@@ -41,11 +40,21 @@ interface MovieIndexPosterOptionsModalContentProps {
 }
 
 function MovieIndexPosterOptionsModalContent(
-  props: MovieIndexPosterOptionsModalContentProps
+  props: Readonly<MovieIndexPosterOptionsModalContentProps>
 ) {
   const { onModalClose } = props;
 
+  const { itemType, useMovieIndexOption, setMovieIndexPosterOption } =
+    useMovieIndexStore();
   const posterOptions = useMovieIndexOption('posterOptions');
+  const { data: generalSettings } = useGeneralSettings();
+
+  // JAV comes from ThePornDB, so it never has a TMDb rating.
+  const canShowTmdbRating =
+    itemType !== 'jav' &&
+    getLinkedMovieMetadataSource(
+      generalSettings?.whisparrMovieMetadataSource
+    ) === 'tmdb';
 
   const {
     detailedProgressBar,
@@ -64,7 +73,7 @@ function MovieIndexPosterOptionsModalContent(
     ({ name, value }: { name: string; value: unknown }) => {
       setMovieIndexPosterOption({ [name]: value });
     },
-    []
+    [setMovieIndexPosterOption]
   );
 
   return (
@@ -162,17 +171,19 @@ function MovieIndexPosterOptionsModalContent(
             />
           </FormGroup>
 
-          <FormGroup>
-            <FormLabel>{translate('ShowTmdbRating')}</FormLabel>
+          {canShowTmdbRating ? (
+            <FormGroup>
+              <FormLabel>{translate('ShowTmdbRating')}</FormLabel>
 
-            <FormInputGroup
-              type={inputTypes.CHECK}
-              name="showTmdbRating"
-              value={showTmdbRating}
-              helpText={translate('ShowTmdbRatingHelpText')}
-              onChange={onPosterOptionChange}
-            />
-          </FormGroup>
+              <FormInputGroup
+                type={inputTypes.CHECK}
+                name="showTmdbRating"
+                value={showTmdbRating}
+                helpText={translate('ShowTmdbRatingHelpText')}
+                onChange={onPosterOptionChange}
+              />
+            </FormGroup>
+          ) : null}
 
           <FormGroup>
             <FormLabel>{translate('ShowTags')}</FormLabel>

@@ -16,6 +16,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Credits;
 using NzbDrone.Core.Movies.Events;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Parser;
@@ -35,6 +36,7 @@ namespace NzbDrone.Core.Movies
         Movie FindByTpdbId(string tpdbid);
         Movie FindByTmdbId(int tmdbid);
         Movie FindByForeignId(string foreignId);
+        Movie FindByJavCode(string code);
         List<Movie> FindByForeignIds(List<string> foreignIds);
         Movie FindByTitle(string title);
         Movie FindByTitle(string title, int year);
@@ -99,6 +101,7 @@ namespace NzbDrone.Core.Movies
         private readonly IBuildMoviePaths _moviePathBuilder;
         private readonly IAutoTaggingService _autoTaggingService;
         private readonly ICacheManager _cacheManager;
+        private readonly IJavAvailability _javAvailability;
         private readonly Logger _logger;
 
         public MovieService(IMovieRepository movieRepository,
@@ -109,8 +112,10 @@ namespace NzbDrone.Core.Movies
                             IBuildMoviePaths moviePathBuilder,
                             IAutoTaggingService autoTaggingService,
                             ICacheManager cacheManager,
+                            IJavAvailability javAvailability,
                             Logger logger)
         {
+            _javAvailability = javAvailability;
             _movieRepository = movieRepository;
             _creditService = creditService;
             _studioService = studioService;
@@ -311,6 +316,11 @@ namespace NzbDrone.Core.Movies
         public Movie FindByForeignId(string foreignId)
         {
             return _movieRepository.FindByForeignId(foreignId);
+        }
+
+        public Movie FindByJavCode(string code)
+        {
+            return _movieRepository.FindByJavCode(code);
         }
 
         public List<Movie> FindByForeignIds(List<string> foreignIds)
@@ -729,6 +739,28 @@ namespace NzbDrone.Core.Movies
         /// <returns>The movie object if found; otherwise, null.</returns>
         public Movie FindScene(ParsedMovieInfo parsedMovieInfo, bool interactiveSearch = false, SearchCriteriaBase searchCriteria = null)
         {
+            var javSearch = searchCriteria?.Movie?.MovieMetadata?.Value?.ItemType == ItemType.Jav;
+
+            // Scene and movie searches never map to a JAV row; file imports (no criteria) and JAV searches do
+            if ((searchCriteria == null || javSearch) &&
+                (JavCode.TryNormalize(parsedMovieInfo.Code, out var javCode) ||
+                 JavCode.TryExtract(parsedMovieInfo.ReleaseTitle.IsNotNullOrWhiteSpace() ? parsedMovieInfo.ReleaseTitle : parsedMovieInfo.OriginalTitle, out javCode)) &&
+                _javAvailability.IsAvailable())
+            {
+                var jav = FindByJavCode(javCode);
+
+                if (jav != null)
+                {
+                    return jav;
+                }
+            }
+
+            // A JAV search never title-matches scenes or movies
+            if (javSearch)
+            {
+                return null;
+            }
+
             Movie result = null;
             if (parsedMovieInfo.StashId.IsNotNullOrWhiteSpace())
             {

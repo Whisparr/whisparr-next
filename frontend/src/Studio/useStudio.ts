@@ -30,6 +30,7 @@ interface ToggleStudioInput {
   foreignId: string;
   monitored: boolean;
   moviesMonitored: boolean;
+  javMonitored?: boolean;
 }
 
 // `PUT /studio/{id}` takes the whole studio, but callers only hold the two
@@ -40,7 +41,7 @@ export function useToggleStudioMonitored() {
   return useApiMutation<Studio, ToggleStudioInput, Studio>({
     method: 'PUT',
     path: ({ studioId }) => `/studio/${studioId}`,
-    body: async ({ foreignId, monitored, moviesMonitored }) => {
+    body: async ({ foreignId, monitored, moviesMonitored, javMonitored }) => {
       const studioPath = `/studio/${foreignId}`;
       // Fetch from cache first; falls back to network if not cached
       const studio = await queryClient.fetchQuery<Studio>({
@@ -54,7 +55,12 @@ export function useToggleStudioMonitored() {
             },
           }),
       });
-      return { ...studio, monitored, moviesMonitored };
+      return {
+        ...studio,
+        monitored,
+        moviesMonitored,
+        javMonitored: javMonitored ?? studio.javMonitored,
+      };
     },
     mutationOptions: {
       onSuccess: (data) => {

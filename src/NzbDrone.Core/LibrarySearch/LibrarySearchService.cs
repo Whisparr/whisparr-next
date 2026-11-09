@@ -29,6 +29,7 @@ namespace NzbDrone.Core.LibrarySearch
         public LibrarySearchPage<Studio> Studios { get; set; } = new();
         public LibrarySearchPage<Movie> Scenes { get; set; } = new();
         public LibrarySearchPage<Movie> Movies { get; set; } = new();
+        public LibrarySearchPage<Movie> Jav { get; set; } = new();
     }
 
     /// <summary>Searches the local library across performers, studios, scenes and movies.</summary>
@@ -63,6 +64,7 @@ namespace NzbDrone.Core.LibrarySearch
             result.Studios = SearchStudios(term, 1, limit);
             result.Scenes = LoadPage(titles.Where(t => t.ItemType == ItemType.Scene), 1, limit);
             result.Movies = LoadPage(titles.Where(t => t.ItemType == ItemType.Movie), 1, limit);
+            result.Jav = LoadPage(titles.Where(t => t.ItemType == ItemType.Jav), 1, limit);
 
             return result;
         }

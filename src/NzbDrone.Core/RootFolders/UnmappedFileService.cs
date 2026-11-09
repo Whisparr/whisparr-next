@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
+using NLog;
 using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -14,6 +15,7 @@ using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 
@@ -58,6 +60,8 @@ namespace NzbDrone.Core.RootFolders
         private readonly IRootFolderService _rootFolderService;
         private readonly ILegacyFileLinker _fileLinker;
         private readonly IDiskProvider _diskProvider;
+        private readonly IJavAvailability _javAvailability;
+        private readonly Logger _logger;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public UnmappedFileService(IImportFileRepository importFileRepository,
@@ -67,8 +71,12 @@ namespace NzbDrone.Core.RootFolders
                                    IRefreshNewScenes refreshNewScenes,
                                    IRootFolderService rootFolderService,
                                    ILegacyFileLinker fileLinker,
-                                   IDiskProvider diskProvider)
+                                   IDiskProvider diskProvider,
+                                   IJavAvailability javAvailability,
+                                   Logger logger)
         {
+            _javAvailability = javAvailability;
+            _logger = logger;
             _importFileRepository = importFileRepository;
             _searchProxy = searchProxy;
             _movieService = movieService;
@@ -92,6 +100,29 @@ namespace NzbDrone.Core.RootFolders
             var fileTitle = GetSearchTerm(file, parsed);
             var hashIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var movies = new List<Movie>();
+            var javAvailable = _javAvailability.IsAvailable();
+
+            if (itemType == ItemType.Jav && !javAvailable)
+            {
+                return new UnmappedFileSuggestions { Term = searchTerm, Results = new List<UnmappedFileSuggestion>() };
+            }
+
+            var javIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (itemType != ItemType.Jav && javAvailable && (JavCode.TryNormalize(parsed?.Code, out var javCode) || JavCode.TryExtract(Path.GetFileName(file.Path), out javCode)))
+            {
+                try
+                {
+                    var javResults = Search(javCode, ItemType.Jav);
+
+                    movies.AddRange(javResults);
+                    javResults.ForEach(m => javIds.Add(m.ForeignId));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "JAV search for {0} failed; suggesting scenes only", javCode);
+                }
+            }
 
             foreach (var candidate in (file.Candidates ?? []).Where(c => c.SceneId.IsNotNullOrWhiteSpace()).Take(MaxHashLookups))
             {
@@ -112,6 +143,7 @@ namespace NzbDrone.Core.RootFolders
                     .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
                     .Select(m => Score(m, parsed, fileTitle, hashIds))
                     .OrderByDescending(s => s.HashMatch)
+                    .ThenByDescending(s => javIds.Contains(s.Movie.ForeignId))
                     .ThenByDescending(s => s.SameDate)
                     .ThenByDescending(s => s.TitleSimilarity)
                     .ThenByDescending(s => s.SameStudio)

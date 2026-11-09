@@ -11,6 +11,7 @@ interface PageStore {
   events: number;
   history: number;
   importListExclusion: number;
+  javIndex: number;
   missing: number;
   movieIndex: number;
   performerIndex: number;
@@ -26,6 +27,7 @@ const pageStore = create<PageStore>(() => ({
   events: 1,
   history: 1,
   importListExclusion: 1,
+  javIndex: 1,
   missing: 1,
   movieIndex: 1,
   performerIndex: 1,

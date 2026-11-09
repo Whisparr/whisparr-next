@@ -12,9 +12,11 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Movies.Studios.Events;
 using NzbDrone.Core.MovieStats;
@@ -66,6 +68,8 @@ namespace Whisparr.Api.V5.Studios
                                 IImportListExclusionService exclusionService,
                                 ICacheManager cacheManager,
                                 IConfigService configService,
+                                IJavAvailability javAvailability,
+                                ILocalizationService localizationService,
                                 QualityProfileExistsValidator<StudioResource> qualityProfileExistsValidator,
                                 RootFolderExistsValidator<StudioResource> rootFolderExistsValidator,
                                 Logger logger,
@@ -90,6 +94,10 @@ namespace Whisparr.Api.V5.Studios
                 .IsValidPath()
                 .SetValidator(rootFolderExistsValidator)
                 .When(s => s.RootFolderPath.IsNotNullOrWhiteSpace());
+
+            SharedValidator.RuleFor(s => s.JavMonitored)
+                .Must(monitored => !monitored || javAvailability.IsAvailable())
+                .WithMessage(_ => localizationService.GetLocalizedString("JavRequiresTpdbSceneSource"));
 
             if (configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
             {
@@ -403,6 +411,8 @@ namespace Whisparr.Api.V5.Studios
             resource.TotalMovieCount = movies.Where(x => x.MovieMetadata.Value.ItemType == ItemType.Movie).Count();
             resource.SceneCount = movies.Where(x => x.HasFile && x.MovieMetadata.Value.ItemType == ItemType.Scene).Count();
             resource.TotalSceneCount = movies.Where(x => x.MovieMetadata.Value.ItemType == ItemType.Scene).Count();
+            resource.JavCount = movies.Count(x => x.HasFile && x.MovieMetadata.Value.ItemType == ItemType.Jav);
+            resource.TotalJavCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Jav);
 
             var ids = movies.Map(x => x.Id).ToList();
             var movieStats = _movieStatisticsService.MovieStatistics(ids);

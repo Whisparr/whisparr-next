@@ -4,6 +4,7 @@ export interface AddStudioDefaults {
   rootFolderPath: string;
   monitored: boolean;
   moviesMonitored: boolean;
+  javMonitored: boolean;
   whisparrMonitorNewItems: boolean;
   qualityProfileId: number;
   searchForMovie: boolean;
@@ -19,6 +20,7 @@ const addStudioDefaultsStore = createPersist<AddStudioDefaults>(
     rootFolderPath: '',
     monitored: true,
     moviesMonitored: false,
+    javMonitored: false,
     whisparrMonitorNewItems: true,
     qualityProfileId: 0,
     searchForMovie: false,

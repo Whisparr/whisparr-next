@@ -318,14 +318,19 @@ namespace Whisparr.Api.V5.Movies
             return movieTask.GetAwaiter().GetResult();
         }
 
-        /// <summary>GET /movie/stats?itemType=movie|scene</summary>
+        /// <summary>GET /movie/stats?itemType=movie|scene|jav</summary>
         /// <param name="itemType">Optional query parameter to specify whether to return stats for movies or scenes. Defaults to movies if not provided.</param>
         /// <remarks>Returns statistics for the item type, including total count, monitored count, file count, and total file size.
         /// If itemType is specified, returns stats for that item type instead of movies + scenes.</remarks>
         [HttpGet("stats")]
         public ActionResult<MovieIndexStatsResource> GetStats(string itemType = null)
         {
-            var itemTypeEnum = itemType?.ToLowerInvariant() == "scene" ? ItemType.Scene : ItemType.Movie;
+            var itemTypeEnum = itemType?.ToLowerInvariant() switch
+            {
+                "scene" => ItemType.Scene,
+                "jav" => ItemType.Jav,
+                _ => ItemType.Movie
+            };
             var overview = _movieStatisticsService.GetMovieIndexOverview(itemTypeEnum);
 
             return Ok(new MovieIndexStatsResource

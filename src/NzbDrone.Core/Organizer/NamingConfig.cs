@@ -16,12 +16,18 @@ namespace NzbDrone.Core.Organizer
             SceneImportFolderFormat = OsInfo.IsWindows ? "import\\" : "import/",
             StandardMovieFormat = "{Movie Title} {(Release Year)} {[Quality Title]}",
             StandardSceneFormat = "{Studio CleanTitleSlug} - {Release-Date} - {Scene CleanTitle} {[Quality Title]}",
+            RenameJav = true,
+            StandardJavFormat = "{Scene Code} - {Scene CleanTitle} {[Quality Title]}",
+            JavFolderFormat = OsInfo.IsWindows ? "jav\\{Studio CleanTitle}\\{Scene Code}" : "jav/{Studio CleanTitle}/{Scene Code}",
             MaxFolderPathLength = OsInfo.IsWindows ? 240 : 255,
             MaxFilePathLength = OsInfo.IsWindows ? 248 : 255,
         };
 
         public bool RenameMovies { get; set; }
         public bool RenameScenes { get; set; }
+        public bool RenameJav { get; set; }
+        public string StandardJavFormat { get; set; }
+        public string JavFolderFormat { get; set; }
         public bool ReplaceIllegalCharacters { get; set; }
         public ColonReplacementFormat ColonReplacementFormat { get; set; }
         public string StandardMovieFormat { get; set; }

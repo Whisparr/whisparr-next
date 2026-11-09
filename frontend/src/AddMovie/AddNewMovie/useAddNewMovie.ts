@@ -81,7 +81,7 @@ interface AddMovieSettings {
 }
 
 // Hook for the AddNewMovie and AddNewScene pages
-export function useAddNewMovie(itemType: 'movie' | 'scene') {
+export function useAddNewMovie(itemType: 'movie' | 'scene' | 'jav') {
   const location = useLocation();
   const uiSettings = useUiSettingsValues();
 

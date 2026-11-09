@@ -16,7 +16,9 @@ import Scroller from 'Components/Scroller/Scroller';
 import usePrevious from 'Helpers/Hooks/usePrevious';
 import { icons } from 'Helpers/Props';
 import { VERTICAL } from 'Helpers/Props/scrollDirections';
+import { useMovie } from 'Movie/useMovie';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import dimensions from 'Styles/Variables/dimensions';
 import useMigrationReport from 'System/MigrationReport/useMigrationReport';
 import HealthStatus from 'System/Status/Health/HealthStatus';
@@ -32,6 +34,8 @@ interface SidebarItem {
   title: string | (() => string);
   to: string;
   alias?: string;
+  // Hidden unless the metadata sources make JAV available.
+  requiresJav?: boolean;
   isActive?: boolean;
   isActiveParent?: boolean;
   isParentItem?: boolean;
@@ -85,6 +89,19 @@ let LINKS: SidebarItem[] = [
       {
         title: () => translate('Collections'),
         to: '/collections',
+      },
+    ],
+  },
+
+  {
+    iconName: icons.DISC,
+    title: () => translate('Jav'),
+    to: '/jav',
+    requiresJav: true,
+    children: [
+      {
+        title: () => translate('AddNew'),
+        to: '/add/new/jav',
       },
     ],
   },
@@ -273,7 +290,10 @@ interface PageSidebarProps {
   isSidebarVisible: boolean;
 }
 
-function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
+function PageSidebar({
+  isSidebarVisible,
+  isSmallScreen,
+}: Readonly<PageSidebarProps>) {
   const location = useLocation();
   const sidebarRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
@@ -302,7 +322,11 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
 
   const { hasReport: hasMigrationReport } = useMigrationReport();
 
-  const visibleLinks = LINKS.map((link) =>
+  const javAvailable = useJavAvailable();
+
+  const visibleLinks = LINKS.filter(
+    (link) => javAvailable || !link.requiresJav
+  ).map((link) =>
     !hasMigrationReport && link.children
       ? {
           ...link,
@@ -315,7 +339,19 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
 
   const pathname = location.pathname;
 
+  // JAV ids are TPDB UUIDs like scenes, so the URL alone can't tell them apart.
+  // useMovie shares the details page's query cache, so this adds no request.
+  const detailSlug = javAvailable
+    ? /^\/movie\/([^/]+)/.exec(pathname)?.[1]
+    : undefined;
+  const { data: detailMovie } = useMovie(detailSlug);
+  const isJavDetail = !!detailSlug && detailMovie?.itemType === 'jav';
+
   const activeParent = useMemo(() => {
+    if (isJavDetail) {
+      return '/jav';
+    }
+
     const uuidRegex =
       /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -367,7 +403,7 @@ function PageSidebar({ isSidebarVisible, isSmallScreen }: PageSidebarProps) {
     }
 
     return LINKS[0].to;
-  }, [pathname]);
+  }, [pathname, isJavDetail]);
 
   const handleWindowClick = useCallback(
     (event: MouseEvent) => {

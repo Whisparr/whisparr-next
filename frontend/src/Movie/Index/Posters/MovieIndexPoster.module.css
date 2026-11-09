@@ -29,6 +29,12 @@
   object-fit: cover;
 }
 
+/* A JAV cover is a wide spread; the front is its right half. */
+.javPoster {
+  object-fit: cover;
+  object-position: right;
+}
+
 .overlayTitle {
   position: absolute;
   top: 0;

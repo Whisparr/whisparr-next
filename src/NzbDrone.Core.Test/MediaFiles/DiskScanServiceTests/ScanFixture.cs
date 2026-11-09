@@ -877,6 +877,22 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void disk_scan_treats_jav_as_movie_folder()
+        {
+            GivenSceneWithLostEntries();
+            _movie.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            var row = GivenMissingRow(21, "old.mkv", "aaaaaaaaaaaaaaaa");
+            GivenRowsAndDisk(new List<MovieFile> { row });
+
+            Subject.Scan(_movie);
+
+            // No lost-file bookkeeping and no shared-folder lock: JAV owns its folder like a movie
+            Mocker.GetMock<ILostMovieFileService>().Verify(s => s.Record(It.IsAny<Movie>(), It.IsAny<MovieFile>()), Times.Never());
+            Mocker.GetMock<ISharedFolderScanner>().Verify(s => s.TryBeginLostFileCheck(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
         public void missing_owned_file_is_recorded_when_no_in_folder_relink()
         {
             GivenSceneWithLostEntries();

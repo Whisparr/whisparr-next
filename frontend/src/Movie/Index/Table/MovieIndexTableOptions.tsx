@@ -4,7 +4,7 @@ import FormInputGroup from 'Components/Form/FormInputGroup';
 import FormLabel from 'Components/Form/FormLabel';
 import { inputTypes } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 
 interface MovieIndexTableOptionsProps {
   onTableOptionChange(...args: unknown[]): unknown;
@@ -18,6 +18,7 @@ interface TableOptionInput {
 function MovieIndexTableOptions(props: MovieIndexTableOptionsProps) {
   const { onTableOptionChange } = props;
 
+  const { useMovieIndexOption } = useMovieIndexStore();
   const tableOptions = useMovieIndexOption('tableOptions');
   const { showSearchAction } = tableOptions;
 

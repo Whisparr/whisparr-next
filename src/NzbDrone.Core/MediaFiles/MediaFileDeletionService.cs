@@ -258,7 +258,7 @@ namespace NzbDrone.Core.MediaFiles
                     }
 
                     // No capture entry for a scene in a flat layout means sharing wasn't established: never recycle the folder
-                    if (movie.MovieMetadata.Value.ItemType == ItemType.Scene && _sceneFolderLayout.IsFlat())
+                    if (_sceneFolderLayout.IsFlat(movie.MovieMetadata.Value.ItemType))
                     {
                         _logger.Warn("Movie path: '{0}' is a flat scene folder with no captured files, not deleting the folder.", movie.Path);
                         continue;

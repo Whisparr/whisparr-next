@@ -22,6 +22,7 @@ using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Collections;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Parser;
@@ -102,7 +103,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             {
                 return $"{TpdbIdPrefix}{externalIdResource.TpdbId}";
             }
-            else if (metadataSource == Movies.MetadataSource.TpdbScene)
+            else if (metadataSource is Movies.MetadataSource.TpdbScene or Movies.MetadataSource.TpdbJav)
             {
                 return SceneSourceIds.Key(SceneMetadataType.Tpdb, externalIdResource);
             }
@@ -118,6 +119,12 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             if (resource == null)
             {
                 throw new ArgumentNullException(nameof(resource));
+            }
+
+            // JAV exists only in TPDB, whatever the scene source is.
+            if (resource.ItemType == ItemType.Jav)
+            {
+                sceneSource = SceneMetadataType.Tpdb;
             }
 
             var movie = new MovieMetadata();
@@ -136,10 +143,12 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             movie.TmdbId = resource.ForeignIds.TmdbId;
             movie.TpdbId = resource.ForeignIds.TpdbId;
             movie.StashId = resource.ForeignIds.StashId;
-            movie.Title = resource.Title;
-            movie.CleanTitle = resource.Title.CleanMovieTitle();
-            movie.SortTitle = Parser.Parser.NormalizeTitle(resource.Title);
-            movie.Code = resource.Code;
+            var (code, title) = resource.ItemType == ItemType.Jav ? NormalizeJavCodeAndTitle(resource.Code, resource.Title) : (resource.Code, resource.Title);
+
+            movie.Code = code;
+            movie.Title = title;
+            movie.CleanTitle = title.CleanMovieTitle();
+            movie.SortTitle = Parser.Parser.NormalizeTitle(title);
             movie.Overview = resource.Overview;
 
             if (resource.AlternativeTitles != null)
@@ -198,6 +207,21 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return movie;
         }
 
+        // Skyhook titles JAV "CODE - Title"; the code is stored on its own.
+        private static (string Code, string Title) NormalizeJavCodeAndTitle(string rawCode, string rawTitle)
+        {
+            if (rawCode.IsNullOrWhiteSpace())
+            {
+                return (rawCode, rawTitle);
+            }
+
+            var code = JavCode.TryNormalize(rawCode, out var normalized) ? normalized : rawCode.ToUpperInvariant();
+            var prefix = $"{rawCode} - ";
+            var title = rawTitle.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? rawTitle.Substring(prefix.Length) : rawTitle;
+
+            return (code, title);
+        }
+
         private static void MapMovieStudio(MovieMetadata movie, StudioResource studio, SceneMetadataType sceneSource)
         {
             var foreignIds = studio?.ForeignIds;
@@ -234,6 +258,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 ItemType.Movie => !string.IsNullOrWhiteSpace(externalIdResource.TpdbId)
                     ? Movies.MetadataSource.TpdbMovie
                     : Movies.MetadataSource.Tmdb,
+                ItemType.Jav => Movies.MetadataSource.TpdbJav,
                 _ => SceneSourceIds.SceneMetadataSource(sceneSource)
             };
         }
@@ -388,7 +413,56 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return GetSceneInfo(stashId, _configService.WhisparrSceneMetadataSource);
         }
 
+        public Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetJavInfo(string uuid)
+        {
+            return GetSceneInfo(uuid, SceneMetadataType.Tpdb, "tpdb/jav");
+        }
+
+        public HashSet<string> GetChangedJav(DateTime startTime)
+        {
+            return GetChangedSceneSourceIds("tpdb/jav/changed", "JAV", startTime);
+        }
+
+        public bool? GetStudioHasJav(string uuid)
+        {
+            return GetHasJav("tpdb/site", uuid);
+        }
+
+        public bool? GetPerformerHasJav(string uuid)
+        {
+            return GetHasJav("tpdb/performer", uuid);
+        }
+
+        // Null on any failure: callers keep what they have rather than guess.
+        private bool? GetHasJav(string route, string uuid)
+        {
+            try
+            {
+                var request = _whisparrMetadata.Create()
+                                               .SetSegment(RouteConst, route)
+                                               .Resource($"{uuid}/jav/count")
+                                               .Build();
+
+                request.AllowAutoRedirect = true;
+                request.SuppressHttpError = true;
+
+                var response = _httpClient.Get<JavCountResource>(request);
+
+                return response.StatusCode == HttpStatusCode.OK ? response.Resource?.HasJav : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Failed to read the JAV count for {0}", uuid.ForLog());
+                return null;
+            }
+        }
+
         private Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetSceneInfo(string stashId, SceneMetadataType sceneSource)
+        {
+            return GetSceneInfo(stashId, sceneSource, SceneSourceIds.Route(sceneSource, "scene"));
+        }
+
+        private Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetSceneInfo(string stashId, SceneMetadataType sceneSource, string route)
         {
             var cached = _scenePrefetch.Find(stashId);
 
@@ -398,7 +472,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
 
             var httpRequest = _whisparrMetadata.Create()
-                                             .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, "scene"))
+                                             .SetSegment(RouteConst, route)
                                              .Resource(stashId)
                                              .Build();
 
@@ -431,6 +505,16 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         public ScenePage GetPerformerScenePage(string stashId, string cursor)
         {
             return GetScenePage("performer", stashId, cursor);
+        }
+
+        public ScenePage GetStudioJavPage(string uuid, string cursor)
+        {
+            return GetScenePage("site", uuid, cursor, "jav");
+        }
+
+        public ScenePage GetPerformerJavPage(string uuid, string cursor)
+        {
+            return GetScenePage("performer", uuid, cursor, "jav");
         }
 
         public List<string> PrefetchPerformers(IEnumerable<string> stashIds)
@@ -499,12 +583,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
         }
 
-        private ScenePage GetScenePage(string route, string stashId, string cursor)
+        // The jav lane is TPDB-only, so it always takes the tpdb/ route whatever the scene source is.
+        private ScenePage GetScenePage(string route, string stashId, string cursor, string lane = "scenes")
         {
-            var sceneSource = _configService.WhisparrSceneMetadataSource;
+            var sceneSource = lane == "jav" ? SceneMetadataType.Tpdb : _configService.WhisparrSceneMetadataSource;
             var builder = _whisparrMetadata.Create()
                                            .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, route))
-                                           .Resource($"{stashId}/scenes/full");
+                                           .Resource($"{stashId}/{lane}/full");
 
             if (cursor.IsNotNullOrWhiteSpace())
             {
@@ -521,7 +606,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             switch (httpResponse.StatusCode)
             {
                 case HttpStatusCode.OK:
-                    return MapScenePage(httpResponse, ScenePageStatus.Complete, TimeSpan.Zero, sceneSource);
+                    return MapScenePage(httpResponse, ScenePageStatus.Complete, TimeSpan.Zero, sceneSource, lane == "jav");
                 case HttpStatusCode.Accepted when httpResponse.Resource is { Building: true }:
                     return new ScenePage
                     {
@@ -530,7 +615,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                         RetryAfter = ParseRetryAfter(httpResponse, TimeSpan.FromSeconds(5))
                     };
                 case HttpStatusCode.Accepted:
-                    return MapScenePage(httpResponse, ScenePageStatus.Pending, TimeSpan.FromSeconds(5), sceneSource);
+                    return MapScenePage(httpResponse, ScenePageStatus.Pending, TimeSpan.FromSeconds(5), sceneSource, lane == "jav");
                 case HttpStatusCode.ServiceUnavailable:
                     return new ScenePage
                     {
@@ -544,7 +629,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
         }
 
-        private ScenePage MapScenePage(HttpResponse<ScenePageResource> httpResponse, ScenePageStatus status, TimeSpan defaultRetryAfter, SceneMetadataType sceneSource)
+        private ScenePage MapScenePage(HttpResponse<ScenePageResource> httpResponse, ScenePageStatus status, TimeSpan defaultRetryAfter, SceneMetadataType sceneSource, bool isJav)
         {
             var resource = httpResponse.Resource;
             var items = new List<ScenePageItem>();
@@ -561,10 +646,13 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
                 _scenePrefetch.Set(sceneId, scene, PrefetchLifetime);
 
+                var (code, title) = isJav ? NormalizeJavCodeAndTitle(scene.Code, scene.Title) : (null, scene.Title);
+
                 items.Add(new ScenePageItem
                 {
                     SceneId = sceneId,
-                    Title = scene.Title,
+                    Code = code,
+                    Title = title,
                     ReleaseDate = scene.ReleaseDateUtc,
                     PerformerIds = (scene.Credits ?? new List<CastResource>())
                         .Select(c => SceneSourceIds.Key(sceneSource, c?.Performer?.ForeignIds))
@@ -1047,6 +1135,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 throw new InvalidSearchTermException("Invalid search term '{0}'", title);
             }
 
+            if (itemType == ItemType.Jav)
+            {
+                return SearchForNewJav(title).Cast<object>().ToList();
+            }
+
             var result = new List<object>();
             var movieInfo = Parser.Parser.ParseMoviePath(title);
 
@@ -1367,6 +1460,76 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         public List<Movie> SearchForNewScene(string title)
         {
             return SearchForNewScene(title, null, null, _configService.WhisparrSceneMetadataSource);
+        }
+
+        // JAV is TPDB-only. A bare UUID or tpdb: id is looked up; a code searches by its hyphenless variant.
+        public List<Movie> SearchForNewJav(string term)
+        {
+            var lowerTitle = term.ToLowerInvariant().Replace(".", "", StringComparison.Ordinal);
+
+            try
+            {
+                if (TryGetLookupId(lowerTitle, SceneMetadataType.Tpdb, out var uuid))
+                {
+                    return LookupJav(uuid);
+                }
+
+                var searchTerm = JavCode.TryNormalize(term, out var code) ? JavCode.SearchVariant(code) : ReplaceSearchSeparators(lowerTitle);
+
+                var request = _whisparrMetadata.Create()
+                    .SetSegment(RouteConst, "tpdb/jav/search")
+                    .AddQueryParam("q", searchTerm)
+                    .Build();
+
+                request.AllowAutoRedirect = true;
+
+                var httpResponse = _httpClient.Get<List<MovieResource>>(request);
+
+                return httpResponse.Resource
+                    .Select(resource =>
+                    {
+                        try
+                        {
+                            return MapSearchResult(resource, SceneMetadataType.Tpdb);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Trace(ex, $"Failed to map JAV search result for resource: {resource?.ToJson(Formatting.None)}");
+                            return null;
+                        }
+                    })
+                    .Where(x => x != null)
+                    .ToList();
+            }
+            catch (Exception ex) when (ex is UnexpectedHtmlContentException or JsonException)
+            {
+                _logger.Warn(ex, "Search for '{0}' failed. Skyhook returned an unreadable response.", term.ForLog());
+                return new List<Movie>();
+            }
+            catch (Exception ex) when (ex is HttpException or WebException)
+            {
+                _logger.Warn(ex);
+                throw new SkyHookException(SkyHookExceptionMessageConst, ex, term);
+            }
+        }
+
+        private List<Movie> LookupJav(string uuid)
+        {
+            if (uuid == null)
+            {
+                return new List<Movie>();
+            }
+
+            try
+            {
+                var metadata = GetJavInfo(uuid).Item1;
+                return new List<Movie> { _movieService.FindByForeignId(metadata.ForeignId) ?? new Movie { MovieMetadata = metadata } };
+            }
+            catch (MovieNotFoundException ex)
+            {
+                _logger.Debug(ex, "JAV not found");
+                return new List<Movie>();
+            }
         }
 
         // True when the term names an id rather than a title; id is null when that id can't be looked up.
@@ -2139,7 +2302,8 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 TmdbId = studioResource.ForeignIds.TmdbId,
                 Network = studioResource.Network,
                 Images = studioResource.Images?.Select(MapImage).ToList() ?? new List<MediaCover.MediaCover>(),
-                Status = studioResource.Status
+                Status = studioResource.Status,
+                HasJavReported = studioResource.HasJav
             };
 
             return newStudio;
@@ -2213,6 +2377,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 BreastType = performer.BreastType,
                 Status = performer.Status,
                 MergedIntoId = performer.MergedIntoId,
+                HasJavReported = performer.HasJav,
                 BirthDate = performer.BirthDate,
                 DeathDate = performer.DeathDate,
                 Age = performer.Age,

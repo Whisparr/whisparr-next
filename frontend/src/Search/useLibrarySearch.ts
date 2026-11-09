@@ -14,6 +14,7 @@ export interface LibrarySearchResult {
   studios: LibrarySearchSection<Studio>;
   scenes: LibrarySearchSection<Movie>;
   movies: LibrarySearchSection<Movie>;
+  jav: LibrarySearchSection<Movie>;
 }
 
 export type LibrarySearchType = 'scene' | 'movie' | 'performer' | 'studio';

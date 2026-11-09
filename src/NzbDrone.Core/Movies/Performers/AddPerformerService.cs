@@ -142,7 +142,7 @@ namespace NzbDrone.Core.Movies.Performers
 
             var performer = _performerService.Update(existingPerformer);
 
-            if (performer.Monitored || performer.MoviesMonitored)
+            if (performer.Monitored || performer.MoviesMonitored || performer.JavMonitored)
             {
                 _commandQueueManager.Push(new RefreshPerformersCommand(new List<int> { performer.Id }));
             }

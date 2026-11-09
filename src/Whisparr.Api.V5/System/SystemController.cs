@@ -105,6 +105,7 @@ namespace Whisparr.Api.V5.System
                 PackageUpdateMechanismMessage = _deploymentInfoProvider.PackageUpdateMechanismMessage,
                 MovieCount = _movieMetadataService.CountByType(ItemType.Movie),
                 SceneCount = _movieMetadataService.CountByType(ItemType.Scene),
+                JavCount = _movieMetadataService.CountByType(ItemType.Jav),
                 PerformerCount = _performerService.Count(),
                 StudioCount = _studioService.Count()
             };

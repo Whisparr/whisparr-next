@@ -18,6 +18,7 @@ namespace Whisparr.Http.Setup
         public SceneMetadataType PreviousSceneSource { get; set; }
         public MovieMetadataType PreviousMovieSource { get; set; }
         public bool HasMixedMovies { get; set; }
+        public int JavStudios { get; set; }
         public bool NamedByEnvironment { get; set; }
 
         public static SetupInstallResource MapToResource(LegacyInstall install)
@@ -34,6 +35,7 @@ namespace Whisparr.Http.Setup
                 PreviousSceneSource = install.PreviousSceneSource,
                 PreviousMovieSource = install.PreviousMovieSource,
                 HasMixedMovies = install.HasMixedMovies,
+                JavStudios = install.JavStudios,
                 NamedByEnvironment = install.Database?.NamedByEnvironment ?? false
             };
         }

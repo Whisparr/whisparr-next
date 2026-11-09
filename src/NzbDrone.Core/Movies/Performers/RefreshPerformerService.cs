@@ -13,6 +13,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers.Commands;
 
 namespace NzbDrone.Core.Movies.Performers
@@ -26,6 +27,7 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly IAddMovieService _addMovieService;
         private readonly ISceneCatalogImporter _sceneCatalogImporter;
         private readonly IConfigService _configService;
+        private readonly IJavAvailability _javAvailability;
         private readonly IDiskScanService _diskScanService;
         private readonly IEventAggregator _eventAggregator;
         private readonly IImportListExclusionService _importListExclusionService;
@@ -39,6 +41,7 @@ namespace NzbDrone.Core.Movies.Performers
                                         IAddMovieService addMovieService,
                                         ISceneCatalogImporter sceneCatalogImporter,
                                         IConfigService configService,
+                                        IJavAvailability javAvailability,
                                         IDiskScanService diskScanService,
                                         IEventAggregator eventAggregator,
                                         ImportListExclusionService importListExclusionsService,
@@ -51,6 +54,7 @@ namespace NzbDrone.Core.Movies.Performers
             _addMovieService = addMovieService;
             _sceneCatalogImporter = sceneCatalogImporter;
             _configService = configService;
+            _javAvailability = javAvailability;
             _diskScanService = diskScanService;
             _eventAggregator = eventAggregator;
             _importListExclusionService = importListExclusionsService;
@@ -142,6 +146,14 @@ namespace NzbDrone.Core.Movies.Performers
                 }
             }
 
+            // A null answer keeps the stored value; the next refresh tries again.
+            var hasJav = performerInfo.HasJavReported ?? (_javAvailability.IsAvailable() ? _movieInfo.GetPerformerHasJav(performer.ForeignId) : null);
+
+            if (hasJav.HasValue)
+            {
+                performer.HasJav = hasJav.Value;
+            }
+
             _performerService.Update(performer);
 
             _logger.Debug("Finished performer metadata refresh for {0}", performer.Name);
@@ -151,7 +163,7 @@ namespace NzbDrone.Core.Movies.Performers
 
         private void SyncPerformerItems(Performer performer, bool syncMovies)
         {
-            if (!performer.Monitored && !performer.MoviesMonitored)
+            if (!performer.Monitored && !performer.MoviesMonitored && !performer.JavMonitored)
             {
                 return;
             }
@@ -164,25 +176,42 @@ namespace NzbDrone.Core.Movies.Performers
             // and without a search on add.
             var monitorNewItems = _configService.WhisparrMonitorNewItems && performer.WhisparrMonitorNewItems;
 
+            Movie BuildStub(string stashId) => new()
+            {
+                ForeignId = stashId,
+                QualityProfileId = performer.QualityProfileId,
+                RootFolderPath = performer.RootFolderPath,
+                AddOptions = new AddMovieOptions
+                {
+                    SearchForMovie = performer.SearchOnAdd && monitorNewItems,
+                    AddMethod = AddMovieMethod.Performer
+                },
+                Monitored = monitorNewItems,
+                Tags = performer.Tags
+            };
+
             if (performer.Monitored)
             {
                 _sceneCatalogImporter.ImportScenes(
                     performer.Name,
                     cursor => _movieInfo.GetPerformerScenePage(performer.ForeignId, cursor),
-                    stashId => new Movie
-                    {
-                        ForeignId = stashId,
-                        QualityProfileId = performer.QualityProfileId,
-                        RootFolderPath = performer.RootFolderPath,
-                        AddOptions = new AddMovieOptions
-                        {
-                            SearchForMovie = performer.SearchOnAdd && monitorNewItems,
-                            AddMethod = AddMovieMethod.Performer
-                        },
-                        Monitored = monitorNewItems,
-                        Tags = performer.Tags
-                    },
+                    BuildStub,
                     () => _performerService.FindByForeignId(performer.ForeignId) is { Monitored: true });
+            }
+
+            if (performer.JavMonitored && performer.HasJav && _javAvailability.IsAvailable())
+            {
+                _sceneCatalogImporter.ImportScenes(
+                    performer.Name,
+                    cursor => _movieInfo.GetPerformerJavPage(performer.ForeignId, cursor),
+                    stashId =>
+                    {
+                        var stub = BuildStub(stashId);
+                        stub.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+                        return stub;
+                    },
+                    () => _performerService.FindByForeignId(performer.ForeignId) is { JavMonitored: true });
             }
 
             if (performer.MoviesMonitored && syncMovies)

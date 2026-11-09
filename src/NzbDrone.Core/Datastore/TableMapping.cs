@@ -184,9 +184,11 @@ namespace NzbDrone.Core.Datastore
                   .Ignore(i => i.TagIds);
 
             Mapper.Entity<Performer>("Performers").RegisterModel()
-                  .Ignore(e => e.MergedIntoId);
+                  .Ignore(e => e.MergedIntoId)
+                  .Ignore(e => e.HasJavReported);
 
-            Mapper.Entity<Studio>("Studios").RegisterModel();
+            Mapper.Entity<Studio>("Studios").RegisterModel()
+                  .Ignore(e => e.HasJavReported);
 
             Mapper.Entity<MovieCollection>("Collections").RegisterModel();
 

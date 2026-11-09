@@ -19,8 +19,12 @@ interface Performer extends ModelBase {
   gender: string;
   country: string;
   hairColor?: string;
+  hasJav: boolean;
   hasMovies: boolean;
   hasScenes: boolean;
+  javCount: number;
+  javMonitored: boolean;
+  totalJavCount: number;
   images: Image[];
   monitored: boolean;
   whisparrMonitorNewItems: boolean;

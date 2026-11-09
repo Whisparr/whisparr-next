@@ -1,7 +1,7 @@
 import React, { RefObject, useMemo } from 'react';
 import Movie from 'Movie/Movie';
 import dimensions from 'Styles/Variables/dimensions';
-import { useMovieIndexOption } from '../movieIndexOptionsStore';
+import { useMovieIndexStore } from '../movieIndexOptionsStore';
 import MovieIndexOverview from './MovieIndexOverview';
 
 const columnPadding = Number.parseInt(dimensions.movieIndexColumnPadding, 10);
@@ -29,6 +29,7 @@ interface MovieIndexOverviewsProps {
 
 function MovieIndexOverviews(props: MovieIndexOverviewsProps) {
   const { items, sortKey, isSelectMode, isSmallScreen } = props;
+  const { useMovieIndexOption } = useMovieIndexStore();
   const { size: posterSize, detailedProgressBar } =
     useMovieIndexOption('overviewOptions');
 

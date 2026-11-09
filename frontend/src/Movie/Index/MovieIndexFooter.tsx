@@ -10,8 +10,10 @@ import translate from 'Utilities/String/translate';
 import { useMovieStats } from './useMovieStats';
 import styles from './MovieIndexFooter.module.css';
 
-export default function MovieIndexFooter() {
-  const { data, error, isError, isFetching } = useMovieStats();
+export default function MovieIndexFooter({
+  itemType = 'movie',
+}: Readonly<{ itemType?: 'movie' | 'jav' }>) {
+  const { data, error, isError, isFetching } = useMovieStats(itemType);
 
   const count = data?.totalCount ?? 0;
   const movieFiles = data?.movieFiles ?? 0;

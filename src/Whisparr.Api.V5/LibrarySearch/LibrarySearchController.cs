@@ -56,7 +56,8 @@ namespace Whisparr.Api.V5.LibrarySearch
                 Performers = ToSection(result.Performers, MapPerformers),
                 Studios = ToSection(result.Studios, MapStudios),
                 Scenes = ToSection(result.Scenes, MapMovies),
-                Movies = ToSection(result.Movies, MapMovies)
+                Movies = ToSection(result.Movies, MapMovies),
+                Jav = ToSection(result.Jav, MapMovies)
             };
         }
 
@@ -66,6 +67,14 @@ namespace Whisparr.Api.V5.LibrarySearch
         public PagingResource<MovieResource> SearchScenes([FromQuery] string term, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             return ToPage(_librarySearchService.SearchMovies(term, ItemType.Scene, page, ClampPageSize(pageSize)), page, pageSize, MapMovies);
+        }
+
+        /// <summary>A page of matching JAV titles.</summary>
+        [HttpGet("jav")]
+        [Produces("application/json")]
+        public PagingResource<MovieResource> SearchJav([FromQuery] string term, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            return ToPage(_librarySearchService.SearchMovies(term, ItemType.Jav, page, ClampPageSize(pageSize)), page, pageSize, MapMovies);
         }
 
         /// <summary>A page of matching movies.</summary>

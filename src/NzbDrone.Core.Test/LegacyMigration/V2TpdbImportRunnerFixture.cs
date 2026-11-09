@@ -32,6 +32,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
         private List<LegacyV2EpisodeFile> _files;
         private Dictionary<int, string> _sites;
         private Dictionary<int, string> _scenes;
+        private Dictionary<int, string> _javScenes;
+        private List<(Func<string, ScenePage> Page, Func<string, Movie> Build)> _walks;
         private Dictionary<string, Studio> _studios;
         private Dictionary<string, Movie> _movies;
         private Mock<ILegacyImportProgress> _progress;
@@ -52,6 +54,8 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _files = new List<LegacyV2EpisodeFile>();
             _sites = new Dictionary<int, string>();
             _scenes = new Dictionary<int, string>();
+            _javScenes = new Dictionary<int, string>();
+            _walks = new List<(Func<string, ScenePage> Page, Func<string, Movie> Build)>();
             _studios = new Dictionary<string, Studio>();
             _movies = new Dictionary<string, Movie>();
             _progress = new Mock<ILegacyImportProgress>();
@@ -83,6 +87,13 @@ namespace NzbDrone.Core.Test.LegacyMigration
                       Ids = ids.Where(_scenes.ContainsKey).ToDictionary(i => i, i => _scenes[i])
                   });
 
+            Mocker.GetMock<ITpdbIdResolver>()
+                  .Setup(r => r.Resolve(TpdbIdKind.Jav, It.IsAny<IReadOnlyCollection<int>>()))
+                  .Returns<TpdbIdKind, IReadOnlyCollection<int>>((_, ids) => new TpdbResolveResult
+                  {
+                      Ids = ids.Where(_javScenes.ContainsKey).ToDictionary(i => i, i => _javScenes[i])
+                  });
+
             Mocker.GetMock<IStudioService>()
                   .Setup(s => s.FindByForeignId(It.IsAny<string>()))
                   .Returns<string>(id => _studios.GetValueOrDefault(id));
@@ -112,7 +123,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Mocker.GetMock<ISceneCatalogImporter>()
                   .Setup(i => i.ImportScenes(It.IsAny<string>(), It.IsAny<Func<string, ScenePage>>(), It.IsAny<Func<string, Movie>>(), It.IsAny<Func<bool>>()))
-                  .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((_, _, build, _) => _buildStub = build)
+                  .Callback<string, Func<string, ScenePage>, Func<string, Movie>, Func<bool>>((_, page, build, _) =>
+                  {
+                      _buildStub = build;
+                      _walks.Add((page, build));
+                  })
                   .Returns(new SceneCatalogImportResult(0, 0));
 
             Mocker.GetMock<ILegacyFileLinker>()
@@ -239,6 +254,108 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _state.SceneSource = SceneMetadataType.Tpdb;
             _state.SourceKind = LegacyKind.Eros;
             Subject.Handles(_state).Should().BeFalse();
+        }
+
+        private LegacyV2Series GivenJavSeries(int legacyId, int siteId, string uuid, bool monitored = true)
+        {
+            var series = GivenSeries(legacyId, siteId, uuid, monitored: monitored);
+
+            series.SeriesType = 1;
+
+            return series;
+        }
+
+        [Test]
+        public void tpdb_jav_series_resolves_with_jav_kind_and_walks_jav_pages()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 5906477, null);
+            _javScenes[5906477] = "jav-1";
+
+            Run();
+
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(TpdbIdKind.Jav, It.Is<IReadOnlyCollection<int>>(i => i.Single() == 5906477)), Times.Once());
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(TpdbIdKind.Scene, It.IsAny<IReadOnlyCollection<int>>()), Times.Never());
+
+            // JAV only: one walk, over the JAV pages
+            var walk = _walks.Should().ContainSingle().Subject;
+
+            walk.Page("cursor");
+            Mocker.GetMock<IProvideMovieInfo>().Verify(m => m.GetStudioJavPage("site-uuid", "cursor"), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(m => m.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            walk.Build("any").MovieMetadata.Value.ItemType.Should().Be(ItemType.Jav);
+            _movies["jav-1"].MovieMetadata.Value.ItemType.Should().Be(ItemType.Jav);
+        }
+
+        [Test]
+        public void tpdb_jav_series_sets_jav_monitored_not_scene_monitored()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 5906477, null);
+            _javScenes[5906477] = "jav-1";
+
+            Run();
+
+            var studio = _studios["site-uuid"];
+
+            studio.JavMonitored.Should().BeTrue();
+            studio.HasJav.Should().BeTrue();
+            studio.Monitored.Should().BeFalse();
+        }
+
+        [Test]
+        public void tpdb_jav_file_links_to_jav_release()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            var file = GivenFile(1, series);
+            GivenEpisode(1, series, 5906477, null, fileId: 1);
+            _javScenes[5906477] = "jav-1";
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "jav-1"), file.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+            file.Done.Should().BeTrue();
+        }
+
+        [Test]
+        public void tpdb_mixed_jav_series_resolves_scene_misses_as_scenes()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid", monitored: true);
+            GivenEpisode(1, series, 5906477, null);
+            GivenEpisode(2, series, 159959, "scene-1");
+            _javScenes[5906477] = "jav-1";
+
+            Run();
+
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(TpdbIdKind.Jav, It.Is<IReadOnlyCollection<int>>(i => i.Count == 2)), Times.Once());
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(TpdbIdKind.Scene, It.Is<IReadOnlyCollection<int>>(i => i.Single() == 159959)), Times.Once());
+
+            _walks.Should().HaveCount(2);
+            _movies["jav-1"].MovieMetadata.Value.ItemType.Should().Be(ItemType.Jav);
+            _movies["scene-1"].MovieMetadata.Value.ItemType.Should().NotBe(ItemType.Jav);
+
+            var studio = _studios["site-uuid"];
+
+            studio.Monitored.Should().BeTrue();
+            studio.JavMonitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void non_jav_series_unchanged()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 101, "scene-1");
+
+            Run();
+
+            Mocker.GetMock<ITpdbIdResolver>().Verify(r => r.Resolve(TpdbIdKind.Jav, It.IsAny<IReadOnlyCollection<int>>()), Times.Never());
+            _walks.Should().ContainSingle();
+
+            var studio = _studios["site-uuid"];
+
+            studio.Monitored.Should().BeTrue();
+            studio.JavMonitored.Should().BeFalse();
+            studio.HasJav.Should().BeFalse();
         }
 
         [Test]
@@ -672,6 +789,55 @@ namespace NzbDrone.Core.Test.LegacyMigration
             series.Attempts.Should().Be(0);
             VerifyReport(LegacyReportCategory.NeedsAttention, "Studios", series.Title, "TPDB did not finish resolving ids within 24 hours", Times.Once());
             Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", It.IsAny<string>()), Times.Once());
+        }
+
+        [Test]
+        public void mixed_jav_series_given_up_before_resolving_keeps_its_v2_monitoring()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid", monitored: true);
+            GivenEpisode(1, series, 5906477, null);
+            GivenEpisode(2, series, 159959, "scene-1");
+            _javScenes[5906477] = "jav-1";
+            _studios["site-uuid"] = new Studio { ForeignId = "site-uuid", Monitored = false };
+            _scenePending = true;
+            series.WaitingSince = _now.AddHours(-24).AddMinutes(-1);
+
+            Run();
+
+            series.Done.Should().BeTrue();
+            _studios["site-uuid"].Monitored.Should().BeTrue();
+            _studios["site-uuid"].JavMonitored.Should().BeTrue();
+        }
+
+        [Test]
+        public void file_whose_v2_tpdb_id_no_longer_resolves_is_parked_as_not_found()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 5906477, null, fileId: 5);
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "TPDB release not found"), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "No TPDB scene link in v2"), Times.Never());
+        }
+
+        [Test]
+        public void file_of_a_resolved_release_that_was_not_added_is_not_parked_as_having_no_link()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid");
+            var file = GivenFile(5, series);
+            GivenEpisode(1, series, 5906477, null, fileId: 5);
+            _javScenes[5906477] = "jav-1";
+
+            Mocker.GetMock<IAddMovieService>()
+                  .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                  .Returns(new List<Movie>());
+
+            Run();
+
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "Release could not be added to the library"), Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, 4, "Files", "No TPDB scene link in v2"), Times.Never());
         }
 
         [Test]

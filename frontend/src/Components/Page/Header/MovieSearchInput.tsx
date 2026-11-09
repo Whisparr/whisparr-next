@@ -177,6 +177,10 @@ function MovieSearchInput() {
         title: translate('Movies'),
         suggestions: moviesToSuggestions(data?.movies.records ?? []),
       },
+      {
+        title: translate('Jav'),
+        suggestions: moviesToSuggestions(data?.jav?.records ?? []),
+      },
     ];
 
     return sections.filter((section) => section.suggestions.length);

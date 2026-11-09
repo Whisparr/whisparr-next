@@ -321,6 +321,9 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
 
             config.StandardSceneFormat.Should().Be("{Studio Title} - {Scene Title}");
             config.SceneFolderFormat.Should().Be("{Studio Title}");
+            config.JavFolderFormat.Should().Be(config.SceneFolderFormat);
+            config.StandardJavFormat.Should().Be(NamingConfig.Default.StandardJavFormat);
+            config.RenameJav.Should().BeFalse();
             config.ColonReplacementFormat.Should().Be(ColonReplacementFormat.Dash);
             config.ReplaceIllegalCharacters.Should().BeFalse();
             config.RenameScenes.Should().BeFalse();

@@ -7,6 +7,7 @@ using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Organizer;
@@ -28,7 +29,10 @@ namespace Whisparr.Api.V5.Search
         private readonly IImportListExclusionService _exclusionService;
         private readonly IMovieService _movieService;
         private readonly IStudioService _studioService;
+        private readonly IProvideMovieInfo _movieInfo;
+        private readonly IJavAvailability _javAvailability;
 
+        [global::System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
         public SearchController(ISearchForNewMovie searchProxy,
                                 IBuildFileNames fileNameBuilder,
                                 INamingConfigService namingService,
@@ -36,8 +40,12 @@ namespace Whisparr.Api.V5.Search
                                 IConfigService configService,
                                 IImportListExclusionService exclusionService,
                                 IMovieService movieService,
-                                IStudioService studioService)
+                                IStudioService studioService,
+                                IProvideMovieInfo movieInfo,
+                                IJavAvailability javAvailability)
         {
+            _movieInfo = movieInfo;
+            _javAvailability = javAvailability;
             _searchProxy = searchProxy;
             _fileNameBuilder = fileNameBuilder;
             _namingService = namingService;
@@ -82,6 +90,19 @@ namespace Whisparr.Api.V5.Search
             return MapToResource(searchResults).ToList();
         }
 
+        // Search results don't carry HasJav, so the add dialogs ask for it per item.
+        [HttpGet("studio/{foreignId}/hasjav")]
+        public HasJavResource StudioHasJav(string foreignId)
+        {
+            return new HasJavResource { HasJav = _javAvailability.IsAvailable() && _movieInfo.GetStudioHasJav(foreignId) == true };
+        }
+
+        [HttpGet("performer/{foreignId}/hasjav")]
+        public HasJavResource PerformerHasJav(string foreignId)
+        {
+            return new HasJavResource { HasJav = _javAvailability.IsAvailable() && _movieInfo.GetPerformerHasJav(foreignId) == true };
+        }
+
         private void MapToExistingMovies(List<SearchResource> searchResources)
         {
             var matches = _movieService.FindByForeignIds(searchResources.Select(m => m.ForeignId).ToList());
@@ -120,9 +141,8 @@ namespace Whisparr.Api.V5.Search
                 var resource = new SearchResource();
                 resource.Id = id++;
 
-                if (result is Movie)
+                if (result is Movie movie)
                 {
-                    var movie = (Movie)result;
                     var movieResource = movie.ToResource(availDelay);
 
                     _coverMapper.ConvertToLocalUrls(movieResource.Id, movieResource.Images, movieResource.Added);
@@ -142,9 +162,8 @@ namespace Whisparr.Api.V5.Search
 
                     resource.ForeignId = movie.ForeignId;
                 }
-                else if (result is Performer)
+                else if (result is Performer performer)
                 {
-                    var performer = (Performer)result;
                     var performerResource = performer.ToResource();
                     _coverMapper.ConvertToLocalUrls(performerResource.Id, performerResource.Images);
 
@@ -157,9 +176,8 @@ namespace Whisparr.Api.V5.Search
                     resource.Performer = performerResource;
                     resource.ForeignId = performer.ForeignId;
                 }
-                else if (result is Studio)
+                else if (result is Studio studio)
                 {
-                    var studio = (Studio)result;
                     var studioResource = studio.ToResource();
                     _coverMapper.ConvertToLocalUrls(studioResource.Id, studioResource.Images);
 

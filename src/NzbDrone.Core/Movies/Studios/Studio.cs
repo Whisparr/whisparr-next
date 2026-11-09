@@ -30,6 +30,11 @@ namespace NzbDrone.Core.Movies.Studios
         public DateTime Added { get; set; }
         public bool Monitored { get; set; }
         public bool MoviesMonitored { get; set; }
+        public bool JavMonitored { get; set; }
+        public bool HasJav { get; set; }
+
+        /// <summary>What Skyhook reported for HasJav; null when its body predates the field. Not stored.</summary>
+        public bool? HasJavReported { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public StudioStatus Status { get; set; }
         public DateTime? AfterDate { get; set; }
@@ -41,6 +46,8 @@ namespace NzbDrone.Core.Movies.Studios
         public int SceneCount { get; set; }
         public int TotalMovieCount { get; set; }
         public int TotalSceneCount { get; set; }
+        public int JavCount { get; set; }
+        public int TotalJavCount { get; set; }
         public long SizeOnDisk { get; set; }
 
         public void ApplyChanges(Studio otherStudio)
@@ -51,6 +58,7 @@ namespace NzbDrone.Core.Movies.Studios
             SearchOnAdd = otherStudio.SearchOnAdd;
             Monitored = otherStudio.Monitored;
             MoviesMonitored = otherStudio.MoviesMonitored;
+            JavMonitored = otherStudio.JavMonitored;
             WhisparrMonitorNewItems = otherStudio.WhisparrMonitorNewItems;
             Status = otherStudio.Status;
             AfterDate = otherStudio.AfterDate;

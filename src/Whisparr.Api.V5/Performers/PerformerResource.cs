@@ -102,6 +102,9 @@ namespace Whisparr.Api.V5.Performers
         /// <summary>Whether movies featuring this performer are monitored</summary>
         public bool MoviesMonitored { get; set; }
 
+        /// <summary>Whether JAV featuring this performer is monitored</summary>
+        public bool JavMonitored { get; set; }
+
         /// <summary>Whether newly discovered works are added monitored</summary>
         public bool WhisparrMonitorNewItems { get; set; } = true;
 
@@ -163,6 +166,15 @@ namespace Whisparr.Api.V5.Performers
         /// <summary>Number of scenes (on disk) from this performer</summary>
         public int SceneCount { get; set; }
 
+        /// <summary>Indicates if the performer has any associated JAV</summary>
+        public bool HasJav { get; set; }
+
+        /// <summary>Total number of JAV titles associated with this performer</summary>
+        public int TotalJavCount { get; set; }
+
+        /// <summary>Number of JAV titles (on disk) from this performer</summary>
+        public int JavCount { get; set; }
+
         /// <summary>Total size in bytes of all files on disk associated with this performer/// </summary>
         public long SizeOnDisk { get; set; }
     }
@@ -215,6 +227,10 @@ namespace Whisparr.Api.V5.Performers
                 Aliases = model.Aliases,
                 Monitored = model.Monitored,
                 MoviesMonitored = model.MoviesMonitored,
+                JavMonitored = model.JavMonitored,
+                HasJav = model.HasJav,
+                JavCount = model.JavCount,
+                TotalJavCount = model.TotalJavCount,
                 WhisparrMonitorNewItems = model.WhisparrMonitorNewItems,
                 Visibility = model.Visibility,
                 AfterDate = model.AfterDate?.ToString("yyyy-MM-dd"),
@@ -276,6 +292,7 @@ namespace Whisparr.Api.V5.Performers
                 Name = resource.FullName,
                 Monitored = resource.Monitored,
                 MoviesMonitored = resource.MoviesMonitored,
+                JavMonitored = resource.JavMonitored,
                 WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems,
                 Visibility = resource.Visibility ?? PerformerVisibility.Visible,
                 AfterDate = ParseAfterDate(resource.AfterDate),

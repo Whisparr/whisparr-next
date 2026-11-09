@@ -32,11 +32,11 @@ namespace NzbDrone.Core.Validation.Paths
 
             context.MessageFormatter.AppendArgument("path", value);
 
-            var instanceIsScene = ValidatedItemType.IsScene(instance);
+            var instanceUsesSceneLayout = ValidatedItemType.UsesSceneLayout(instance);
 
-            // Skip the path for this movie and any invalid paths. Scenes may share a path with other scenes.
+            // Skip the path for this movie and any invalid paths. Scene and JAV items may share a path with each other.
             return !_moviesService.AllMoviePathEntries().Any(s => s.Id != instanceId &&
-                                                                  !(instanceIsScene && s.ItemType == ItemType.Scene) &&
+                                                                  !(instanceUsesSceneLayout && s.ItemType.UsesSceneLayout()) &&
                                                                   s.Path.IsPathValid(PathValidationType.CurrentOs) &&
                                                                   s.Path.PathEquals(value));
         }

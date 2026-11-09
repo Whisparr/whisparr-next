@@ -19,6 +19,7 @@ namespace Whisparr.Api.V5.Statistics
         public int DeletedMovieCount { get; set; }
         public int MovieItemCount { get; set; }
         public int SceneItemCount { get; set; }
+        public int JavItemCount { get; set; }
         public int MovieFileCount { get; set; }
         public long SizeOnDisk { get; set; }
         public List<QualityProfileStatisticsResource> QualityProfiles { get; set; }
@@ -51,6 +52,7 @@ namespace Whisparr.Api.V5.Statistics
                 DeletedMovieCount = model.DeletedMovieCount,
                 MovieItemCount = model.MovieItemCount,
                 SceneItemCount = model.SceneItemCount,
+                JavItemCount = model.JavItemCount,
                 MovieFileCount = model.MovieFileCount,
                 SizeOnDisk = model.SizeOnDisk,
                 QualityProfiles = model.QualityProfileStatistics?.Select(p => p.MapToResource()).ToList(),

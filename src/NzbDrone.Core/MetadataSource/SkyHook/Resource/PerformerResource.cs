@@ -31,5 +31,6 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Resource
         public List<string> Piercings { get; set; }
         public PerformerStatus Status { get; set; }
         public string MergedIntoId { get; set; }
+        public bool? HasJav { get; set; }
     }
 }

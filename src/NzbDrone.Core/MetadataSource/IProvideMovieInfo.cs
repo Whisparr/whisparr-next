@@ -20,6 +20,12 @@ namespace NzbDrone.Core.MetadataSource
         Performer GetPerformerInfo(string stashId);
         ScenePage GetStudioScenePage(string stashId, string cursor);
         ScenePage GetPerformerScenePage(string stashId, string cursor);
+        Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetJavInfo(string uuid);
+        ScenePage GetStudioJavPage(string uuid, string cursor);
+        ScenePage GetPerformerJavPage(string uuid, string cursor);
+        HashSet<string> GetChangedJav(DateTime startTime);
+        bool? GetStudioHasJav(string uuid);
+        bool? GetPerformerHasJav(string uuid);
         List<string> PrefetchPerformers(IEnumerable<string> stashIds);
         void ForgetPrefetched(IEnumerable<string> sceneIds, IEnumerable<string> performerIds);
         Studio GetStudioInfo(string stashId);

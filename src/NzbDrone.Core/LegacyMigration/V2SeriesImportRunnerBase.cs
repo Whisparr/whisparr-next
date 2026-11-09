@@ -201,9 +201,20 @@ namespace NzbDrone.Core.LegacyMigration
             pass.NextDue = LegacyRetryPolicy.Earlier(pass.NextDue, LegacyRetryPolicy.DueAt(series.Attempts, series.LastAttemptAt));
         }
 
+        // Legacy ids of JAV series whose episodes all resolved as JAV, so there is no scene catalog to monitor.
+        // A series that gave up before it resolved is not in here: it keeps its v2 monitoring.
+        protected readonly HashSet<int> JavOnlySeries = new();
+
         protected void ApplyV2Settings(LegacyV2Series series, Studio studio)
         {
-            studio.Monitored = series.Monitored;
+            studio.Monitored = series.Monitored && !JavOnlySeries.Contains(series.LegacyId);
+
+            if (series.IsJav)
+            {
+                studio.JavMonitored = series.Monitored;
+                studio.HasJav = true;
+            }
+
             studio.WhisparrMonitorNewItems = series.MonitorNewItems == 0;
             studio.SearchOnAdd = false;
             _studioService.Update(studio);

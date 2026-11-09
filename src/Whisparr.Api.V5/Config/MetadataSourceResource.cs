@@ -9,6 +9,9 @@ namespace Whisparr.Api.V5.Config
         public SceneMetadataType? SceneMetadataSource { get; set; }
         public MovieMetadataType? MovieMetadataSource { get; set; }
         public bool Locked { get; set; }
+
+        // JAV is only served by TPDB
+        public bool JavAvailable { get; set; }
     }
 
     public static class MetadataSourceResourceMapper
@@ -19,7 +22,8 @@ namespace Whisparr.Api.V5.Config
             {
                 SceneMetadataSource = model.Scene,
                 MovieMetadataSource = model.Movie,
-                Locked = model.Locked
+                Locked = model.Locked,
+                JavAvailable = model.Scene == SceneMetadataType.Tpdb
             };
         }
     }

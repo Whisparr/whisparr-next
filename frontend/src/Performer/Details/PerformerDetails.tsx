@@ -29,6 +29,7 @@ import DeletePerformerModal from 'Performer/Delete/DeletePerformerModal';
 import PerformerIndexViewMenu from 'Performer/Index/Menus/PerformerIndexViewMenu';
 import PerformerGenderIcon from 'Performer/PerformerGenderIcon';
 import { getPerformerStatusDetails } from 'Performer/PerformerStatus';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import QualityProfileName from 'Settings/Profiles/Quality/QualityProfileName';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import formatDate from 'Utilities/Date/formatDate';
@@ -70,8 +71,11 @@ function PerformerDetails() {
     onRefreshPress,
     onSearchPress,
     onMonitorTogglePress,
+    onJavTogglePress,
     onYearRefreshPress,
   } = usePerformerDetails(performerForeignId as string);
+
+  const javAvailable = useJavAvailable();
 
   const {
     isSupported: isMovieMonitorSupported,
@@ -401,6 +405,23 @@ function PerformerDetails() {
                         }
                         size={30}
                         onPress={handleMonitorTogglePress}
+                      />
+                    ) : null}
+
+                    {javAvailable && performer.hasJav ? (
+                      <MonitorToggleButton
+                        className={
+                          performer.javMonitored
+                            ? styles.monitorToggleButton
+                            : `${styles.monitorToggleButton} ${styles.unmonitored}`
+                        }
+                        monitored={monitored}
+                        javMonitored={performer.javMonitored}
+                        type="javMonitor"
+                        isSaving={isSaving}
+                        tooltip={translate('MonitorJav')}
+                        size={30}
+                        onPress={onJavTogglePress}
                       />
                     ) : null}
                   </div>

@@ -47,6 +47,11 @@ namespace NzbDrone.Core.Movies.Performers
         public DateTime Added { get; set; }
         public bool Monitored { get; set; }
         public bool MoviesMonitored { get; set; }
+        public bool JavMonitored { get; set; }
+        public bool HasJav { get; set; }
+
+        /// <summary>What Skyhook reported for HasJav; null when its body predates the field. Not stored.</summary>
+        public bool? HasJavReported { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public int QualityProfileId { get; set; }
         public bool SearchOnAdd { get; set; }
@@ -61,6 +66,10 @@ namespace NzbDrone.Core.Movies.Performers
 
         /// <summary> Number of movies in Whisparr with this performer</summary>
         public int TotalMovieCount { get; set; }
+
+        /// <summary>JAV counts, like the scene counts.</summary>
+        public int JavCount { get; set; }
+        public int TotalJavCount { get; set; }
 
         /// <summary>Total size in bytes of all files on disk associated with this performer</summary>
         public long SizeOnDisk { get; set; }
@@ -79,6 +88,7 @@ namespace NzbDrone.Core.Movies.Performers
             SearchOnAdd = otherPerformer.SearchOnAdd;
             Monitored = otherPerformer.Monitored;
             MoviesMonitored = otherPerformer.MoviesMonitored;
+            JavMonitored = otherPerformer.JavMonitored;
             WhisparrMonitorNewItems = otherPerformer.WhisparrMonitorNewItems;
             AfterDate = otherPerformer.AfterDate;
             RootFolderPath = otherPerformer.RootFolderPath;
@@ -95,13 +105,14 @@ namespace NzbDrone.Core.Movies.Performers
                 Visibility = PerformerVisibility.Hidden;
                 Monitored = false;
                 MoviesMonitored = false;
+                JavMonitored = false;
 
                 return;
             }
 
             Visibility = visibility;
 
-            if (Monitored || MoviesMonitored)
+            if (Monitored || MoviesMonitored || JavMonitored)
             {
                 Visibility = PerformerVisibility.Visible;
             }

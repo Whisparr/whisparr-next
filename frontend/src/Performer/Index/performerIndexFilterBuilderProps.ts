@@ -32,6 +32,12 @@ export const PERFORMER_INDEX_FILTER_BUILDER_PROPS: FilterBuilderProp<Performer>[
       valueType: filterBuilderValueTypes.BOOL,
     },
     {
+      name: 'javMonitored',
+      label: () => translate('MonitorJav'),
+      type: filterBuilderTypes.EXACT,
+      valueType: filterBuilderValueTypes.BOOL,
+    },
+    {
       name: 'sceneCount',
       label: () => translate('SceneCount'),
       type: filterBuilderTypes.NUMBER,

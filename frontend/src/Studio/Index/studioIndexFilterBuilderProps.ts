@@ -23,6 +23,12 @@ export const STUDIO_INDEX_FILTER_BUILDER_PROPS: FilterBuilderProp<Studio>[] = [
     valueType: filterBuilderValueTypes.BOOL,
   },
   {
+    name: 'javMonitored',
+    label: () => translate('MonitorJav'),
+    type: filterBuilderTypes.EXACT,
+    valueType: filterBuilderValueTypes.BOOL,
+  },
+  {
     name: 'qualityProfileId',
     label: () => translate('QualityProfile'),
     type: filterBuilderTypes.EXACT,

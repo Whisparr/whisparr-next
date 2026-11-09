@@ -463,6 +463,23 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             result.Single().LocalMovie.Movie.Should().BeSameAs(dbMovie);
         }
 
+        [Test]
+        public void jav_import_uses_movie_folder_rules()
+        {
+            _movie.MovieMetadata.Value.ItemType = ItemType.Jav;
+
+            GivenAugmentationSuccess();
+            GivenSpecifications(_pass1);
+
+            var result = Subject.GetImportDecisions(_videoFiles, _movie).Single();
+
+            result.Approved.Should().BeTrue();
+            result.LocalMovie.Movie.Should().BeSameAs(_movie);
+            result.LocalMovie.MatchTier.Should().Be(MatchTier.Unknown);
+            Mocker.GetMock<IMovieService>().Verify(s => s.GetMovie(It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IFingerprintLookupClient>().Verify(s => s.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
+        }
+
         private Movie GivenSceneInDatabase()
         {
             _movie.MovieMetadata.Value.ItemType = ItemType.Scene;

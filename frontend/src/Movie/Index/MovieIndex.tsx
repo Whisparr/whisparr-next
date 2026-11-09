@@ -21,6 +21,10 @@ import MovieIndexFilterMenu from './Menus/MovieIndexFilterMenu';
 import MovieIndexSortMenu from './Menus/MovieIndexSortMenu';
 import MovieIndexViewMenu from './Menus/MovieIndexViewMenu';
 import MovieIndexFooter from './MovieIndexFooter';
+import {
+  getMovieIndexStore,
+  MovieIndexStoreContext,
+} from './movieIndexOptionsStore';
 import MovieIndexRefreshMovieButton from './MovieIndexRefreshMovieButton';
 import MovieIndexSearchButton from './MovieIndexSearchButton';
 import MovieIndexSearchMenuItem from './MovieIndexSearchMenuItem';
@@ -38,7 +42,9 @@ import MovieIndexTableOptions from './Table/MovieIndexTableOptions';
 import { useMovieIndex } from './useMovieIndex';
 import styles from './MovieIndex.module.css';
 
-function MovieIndex() {
+function MovieIndex({
+  itemType = 'movie',
+}: Readonly<{ itemType?: 'movie' | 'jav' }>) {
   const {
     items,
     totalItems,
@@ -65,7 +71,7 @@ function MovieIndex() {
     handleViewSelect,
     handleTableOptionChange,
     handleSelectModePress,
-  } = useMovieIndex();
+  } = useMovieIndex(itemType);
 
   const isRssSyncExecuting = useCommandExecuting(RSS_SYNC);
   const isSmallScreen = useAppDimension('isSmallScreen');
@@ -112,196 +118,201 @@ function MovieIndex() {
   );
 
   return (
-    <SelectProvider items={items}>
-      <PageContent title={translate('Movies')}>
-        <PageToolbar>
-          <PageToolbarSection>
-            <MovieIndexRefreshMovieButton
-              isSelectMode={isSelectMode}
-              selectedFilterKey={selectedFilterKey}
-              items={items}
-            />
+    <MovieIndexStoreContext.Provider value={getMovieIndexStore(itemType)}>
+      <SelectProvider items={items}>
+        <PageContent title={translate(itemType === 'jav' ? 'Jav' : 'Movies')}>
+          <PageToolbar>
+            <PageToolbarSection>
+              <MovieIndexRefreshMovieButton
+                isSelectMode={isSelectMode}
+                selectedFilterKey={selectedFilterKey}
+                items={items}
+              />
 
-            <PageToolbarButton
-              label={translate('RssSync')}
-              iconName={icons.RSS}
-              isSpinning={isRssSyncExecuting}
-              isDisabled={isRssSyncExecuting}
-              onPress={handleRssSyncPress}
-            />
+              <PageToolbarButton
+                label={translate('RssSync')}
+                iconName={icons.RSS}
+                isSpinning={isRssSyncExecuting}
+                isDisabled={isRssSyncExecuting}
+                onPress={handleRssSyncPress}
+              />
 
-            <PageToolbarSeparator />
+              <PageToolbarSeparator />
 
-            <MovieIndexSearchButton
-              isSelectMode={isSelectMode}
-              selectedFilterKey={selectedFilterKey}
-              overflowComponent={MovieIndexSearchMenuItem}
-              items={items}
-            />
+              <MovieIndexSearchButton
+                isSelectMode={isSelectMode}
+                selectedFilterKey={selectedFilterKey}
+                overflowComponent={MovieIndexSearchMenuItem}
+                items={items}
+              />
 
-            <PageToolbarButton
-              label={translate('ManualImport')}
-              iconName={icons.INTERACTIVE}
-              onPress={handleInteractiveImportPress}
-            />
+              <PageToolbarButton
+                label={translate('ManualImport')}
+                iconName={icons.INTERACTIVE}
+                onPress={handleInteractiveImportPress}
+              />
 
-            <PageToolbarSeparator />
+              <PageToolbarSeparator />
 
-            <MovieIndexSelectModeButton
-              label={
-                isSelectMode
-                  ? translate('StopSelecting')
-                  : translate('EditMovies')
-              }
-              iconName={isSelectMode ? icons.SERIES_ENDED : icons.EDIT}
-              isSelectMode={isSelectMode}
-              isDisabled={hasNoMovie}
-              overflowComponent={MovieIndexSelectModeMenuItem}
-              onPress={handleSelectModePress}
-            />
+              <MovieIndexSelectModeButton
+                label={
+                  isSelectMode
+                    ? translate('StopSelecting')
+                    : translate('EditMovies')
+                }
+                iconName={isSelectMode ? icons.SERIES_ENDED : icons.EDIT}
+                isSelectMode={isSelectMode}
+                isDisabled={hasNoMovie}
+                overflowComponent={MovieIndexSelectModeMenuItem}
+                onPress={handleSelectModePress}
+              />
 
-            <MovieIndexSelectAllButton
-              label={translate('SelectAll')}
-              isSelectMode={isSelectMode}
-              overflowComponent={MovieIndexSelectAllMenuItem}
-            />
-          </PageToolbarSection>
+              <MovieIndexSelectAllButton
+                label={translate('SelectAll')}
+                isSelectMode={isSelectMode}
+                overflowComponent={MovieIndexSelectAllMenuItem}
+              />
+            </PageToolbarSection>
 
-          <PageToolbarSection
-            alignContent={align.RIGHT}
-            collapseButtons={false}
-          >
-            {view === 'table' ? (
-              <TableOptionsModalWrapper
-                columns={columns}
-                optionsComponent={MovieIndexTableOptions}
-                onTableOptionChange={handleTableOptionChange}
-              >
+            <PageToolbarSection
+              alignContent={align.RIGHT}
+              collapseButtons={false}
+            >
+              {view === 'table' ? (
+                <TableOptionsModalWrapper
+                  columns={columns}
+                  optionsComponent={MovieIndexTableOptions}
+                  onTableOptionChange={handleTableOptionChange}
+                >
+                  <PageToolbarButton
+                    label={translate('Options')}
+                    iconName={icons.TABLE}
+                  />
+                </TableOptionsModalWrapper>
+              ) : (
                 <PageToolbarButton
                   label={translate('Options')}
-                  iconName={icons.TABLE}
+                  iconName={view === 'posters' ? icons.POSTER : icons.OVERVIEW}
+                  isDisabled={hasNoMovie}
+                  onPress={handleOptionsPress}
                 />
-              </TableOptionsModalWrapper>
-            ) : (
-              <PageToolbarButton
-                label={translate('Options')}
-                iconName={view === 'posters' ? icons.POSTER : icons.OVERVIEW}
+              )}
+
+              <PageToolbarSeparator />
+
+              <MovieIndexViewMenu
+                view={view}
                 isDisabled={hasNoMovie}
-                onPress={handleOptionsPress}
+                onViewSelect={handleViewSelect}
               />
-            )}
 
-            <PageToolbarSeparator />
+              <MovieIndexSortMenu
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                isDisabled={false}
+                onSortSelect={handleSortPress}
+              />
 
-            <MovieIndexViewMenu
-              view={view}
-              isDisabled={hasNoMovie}
-              onViewSelect={handleViewSelect}
-            />
+              <MovieIndexFilterMenu
+                selectedFilterKey={selectedFilterKey}
+                filters={filters}
+                customFilters={customFilters}
+                isDisabled={false}
+                onFilterSelect={handleFilterSelect}
+              />
+            </PageToolbarSection>
+          </PageToolbar>
 
-            <MovieIndexSortMenu
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              isDisabled={false}
-              onSortSelect={handleSortPress}
-            />
+          <PageContentBody
+            ref={scrollerRef}
+            className={styles.contentBody}
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            innerClassName={styles[`${view}InnerContentBody`]}
+          >
+            {isLoading ? <LoadingIndicator /> : null}
 
-            <MovieIndexFilterMenu
-              selectedFilterKey={selectedFilterKey}
-              filters={filters}
-              customFilters={customFilters}
-              isDisabled={false}
-              onFilterSelect={handleFilterSelect}
-            />
-          </PageToolbarSection>
-        </PageToolbar>
+            {!isLoading && isError ? (
+              <Alert kind={kinds.DANGER}>
+                {translate('UnableToLoadMovies')}
+              </Alert>
+            ) : null}
 
-        <PageContentBody
-          ref={scrollerRef}
-          className={styles.contentBody}
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          innerClassName={styles[`${view}InnerContentBody`]}
-        >
-          {isLoading ? <LoadingIndicator /> : null}
+            {!isLoading && !isError && items.length > 0 ? (
+              <div className={styles.contentBodyContainer}>
+                {view === 'table' ? (
+                  <>
+                    <MovieIndexTable
+                      items={items}
+                      sortKey={sortKey}
+                      sortDirection={sortDirection}
+                      isSelectMode={isSelectMode}
+                      isSmallScreen={isSmallScreen}
+                    />
+                    {pager}
+                  </>
+                ) : null}
 
-          {!isLoading && isError ? (
-            <Alert kind={kinds.DANGER}>{translate('UnableToLoadMovies')}</Alert>
-          ) : null}
+                {view === 'posters' ? (
+                  <>
+                    <MovieIndexPosters
+                      itemType={itemType}
+                      items={items}
+                      sortKey={sortKey}
+                      scrollerRef={scrollerRef}
+                      isSelectMode={isSelectMode}
+                      isSmallScreen={isSmallScreen}
+                    />
+                    {pager}
+                  </>
+                ) : null}
 
-          {!isLoading && !isError && items.length > 0 ? (
-            <div className={styles.contentBodyContainer}>
-              {view === 'table' ? (
-                <>
-                  <MovieIndexTable
-                    items={items}
-                    sortKey={sortKey}
-                    sortDirection={sortDirection}
-                    isSelectMode={isSelectMode}
-                    isSmallScreen={isSmallScreen}
-                  />
-                  {pager}
-                </>
-              ) : null}
+                {view === 'overview' ? (
+                  <>
+                    <MovieIndexOverviews
+                      items={items}
+                      sortKey={sortKey}
+                      sortDirection={sortDirection}
+                      scrollerRef={scrollerRef}
+                      isSelectMode={isSelectMode}
+                      isSmallScreen={isSmallScreen}
+                    />
+                    {pager}
+                  </>
+                ) : null}
 
-              {view === 'posters' ? (
-                <>
-                  <MovieIndexPosters
-                    items={items}
-                    sortKey={sortKey}
-                    scrollerRef={scrollerRef}
-                    isSelectMode={isSelectMode}
-                    isSmallScreen={isSmallScreen}
-                  />
-                  {pager}
-                </>
-              ) : null}
+                <MovieIndexFooter itemType={itemType} />
+              </div>
+            ) : null}
 
-              {view === 'overview' ? (
-                <>
-                  <MovieIndexOverviews
-                    items={items}
-                    sortKey={sortKey}
-                    sortDirection={sortDirection}
-                    scrollerRef={scrollerRef}
-                    isSelectMode={isSelectMode}
-                    isSmallScreen={isSmallScreen}
-                  />
-                  {pager}
-                </>
-              ) : null}
+            {!isLoading && !isError && items.length === 0 ? (
+              <NoMovie totalItems={totalItems} itemType={itemType} />
+            ) : null}
+          </PageContentBody>
 
-              <MovieIndexFooter />
-            </div>
-          ) : null}
+          {isSelectMode ? <MovieIndexSelectFooter items={items} /> : null}
 
-          {!isLoading && !isError && items.length === 0 ? (
-            <NoMovie totalItems={totalItems} />
-          ) : null}
-        </PageContentBody>
-
-        {isSelectMode ? <MovieIndexSelectFooter items={items} /> : null}
-
-        <InteractiveImportModal
-          isOpen={isInteractiveImportModalOpen}
-          onModalClose={handleInteractiveImportModalClose}
-        />
-
-        {view === 'posters' ? (
-          <MovieIndexPosterOptionsModal
-            isOpen={isOptionsModalOpen}
-            onModalClose={handleOptionsModalClose}
+          <InteractiveImportModal
+            isOpen={isInteractiveImportModalOpen}
+            onModalClose={handleInteractiveImportModalClose}
           />
-        ) : null}
 
-        {view === 'overview' ? (
-          <MovieIndexOverviewOptionsModal
-            isOpen={isOptionsModalOpen}
-            onModalClose={handleOptionsModalClose}
-          />
-        ) : null}
-      </PageContent>
-    </SelectProvider>
+          {view === 'posters' ? (
+            <MovieIndexPosterOptionsModal
+              isOpen={isOptionsModalOpen}
+              onModalClose={handleOptionsModalClose}
+            />
+          ) : null}
+
+          {view === 'overview' ? (
+            <MovieIndexOverviewOptionsModal
+              isOpen={isOptionsModalOpen}
+              onModalClose={handleOptionsModalClose}
+            />
+          ) : null}
+        </PageContent>
+      </SelectProvider>
+    </MovieIndexStoreContext.Provider>
   );
 }
 

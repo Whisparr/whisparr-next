@@ -20,6 +20,9 @@ namespace NzbDrone.Core.LegacyMigration
         // JSON, as stored on Series
         public string Tags { get; set; }
         public int SeriesType { get; set; }
+
+        // v2 flags a series JAV when its site's types include JAV, so it may hold scenes too
+        public bool IsJav => SeriesType == 1;
         public DateTime? Added { get; set; }
         public bool Done { get; set; }
         public int Attempts { get; set; }

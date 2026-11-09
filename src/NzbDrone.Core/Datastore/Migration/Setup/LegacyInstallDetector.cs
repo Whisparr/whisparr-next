@@ -385,6 +385,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         private static void InspectV2(IDbConnection connection, LegacyInstall install)
         {
             install.Studios = Count(connection, "SELECT COUNT(*) FROM \"Series\"");
+            install.JavStudios = Count(connection, "SELECT COUNT(*) FROM \"Series\" WHERE \"SeriesType\" = 1");
             install.Scenes = Count(connection, "SELECT COUNT(*) FROM \"Episodes\"");
             install.Files = Count(connection, "SELECT COUNT(*) FROM \"EpisodeFiles\"");
             install.PreviousSceneSource = SceneMetadataType.Tpdb;

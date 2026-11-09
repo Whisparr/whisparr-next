@@ -12,9 +12,11 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Performers.Events;
 using NzbDrone.Core.MovieStats;
@@ -70,6 +72,8 @@ namespace Whisparr.Api.V5.Performers
                                    IImportListExclusionService exclusionService,
                                    ICacheManager cacheManager,
                                    IConfigService configService,
+                                   IJavAvailability javAvailability,
+                                   ILocalizationService localizationService,
                                    QualityProfileExistsValidator<PerformerResource> qualityProfileExistsValidator,
                                    RootFolderExistsValidator<PerformerResource> rootFolderExistsValidator,
                                    Logger logger,
@@ -95,6 +99,10 @@ namespace Whisparr.Api.V5.Performers
                 .IsValidPath()
                 .SetValidator(rootFolderExistsValidator)
                 .When(s => s.RootFolderPath.IsNotNullOrWhiteSpace());
+
+            SharedValidator.RuleFor(s => s.JavMonitored)
+                .Must(monitored => !monitored || javAvailability.IsAvailable())
+                .WithMessage(_ => localizationService.GetLocalizedString("JavRequiresTpdbSceneSource"));
 
             if (configService.WhisparrMovieMetadataSource == MovieMetadataType.TMDB)
             {
@@ -420,6 +428,10 @@ namespace Whisparr.Api.V5.Performers
                 .Sum(stat => stat.MovieFileCount);
             resource.TotalMovieCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Movie);
             resource.TotalSceneCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Scene);
+            resource.JavCount = movieStats
+                .Where(stat => movies.Any(m => m.Id == stat.MovieId && m.MovieMetadata.Value.ItemType == ItemType.Jav))
+                .Sum(stat => stat.MovieFileCount);
+            resource.TotalJavCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Jav);
             resource.SizeOnDisk = movieStats.Sum(x => x.SizeOnDisk);
         }
 

@@ -15,7 +15,7 @@ namespace NzbDrone.Core.Organizer
     public interface ISceneFolderLayout
     {
         bool IsFlatFormat(string sceneFolderFormat);
-        bool IsFlat();
+        bool IsFlat(ItemType itemType);
         bool IsShared(Movie movie);
         List<MoviePathEntry> GetItemsInFolder(string folder);
 
@@ -88,19 +88,34 @@ namespace NzbDrone.Core.Organizer
             return FormatIsFlat(sceneFolderFormat);
         }
 
-        public bool IsFlat()
+        // Scenes read SceneFolderFormat, JAV reads JavFolderFormat; any other type has no scene layout.
+        public bool IsFlat(ItemType itemType)
         {
-            return _flatCache.Get("flat", () => FormatIsFlat(_namingConfigService.GetConfig().SceneFolderFormat), TimeSpan.FromMinutes(5));
-        }
-
-        public bool IsShared(Movie movie)
-        {
-            if (movie.MovieMetadata.Value.ItemType != ItemType.Scene)
+            if (!itemType.UsesSceneLayout())
             {
                 return false;
             }
 
-            if (IsFlat())
+            return _flatCache.Get(itemType.ToString(), () => FormatIsFlat(FolderFormatFor(itemType)), TimeSpan.FromMinutes(5));
+        }
+
+        private string FolderFormatFor(ItemType itemType)
+        {
+            var config = _namingConfigService.GetConfig();
+
+            return itemType == ItemType.Jav ? config.JavFolderFormat : config.SceneFolderFormat;
+        }
+
+        public bool IsShared(Movie movie)
+        {
+            var itemType = movie.MovieMetadata.Value.ItemType;
+
+            if (!itemType.UsesSceneLayout())
+            {
+                return false;
+            }
+
+            if (IsFlat(itemType))
             {
                 return true;
             }

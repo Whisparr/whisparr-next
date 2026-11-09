@@ -36,6 +36,7 @@ function AddNewPerformerModalContent({
     isWindows,
     safeForWorkMode,
     settings,
+    showJav,
     validationErrors,
     validationWarnings,
     onInputChange,
@@ -46,6 +47,7 @@ function AddNewPerformerModalContent({
     rootFolderPath,
     monitored,
     moviesMonitored,
+    javMonitored,
     whisparrMonitorNewItems,
     qualityProfileId,
     searchForMovie,
@@ -128,6 +130,19 @@ function AddNewPerformerModalContent({
                   onChange={onInputChange}
                 />
               </FormGroup>
+
+              {showJav ? (
+                <FormGroup>
+                  <FormLabel>{translate('MonitorJav')}</FormLabel>
+
+                  <FormInputGroup
+                    type={inputTypes.CHECK}
+                    name="javMonitored"
+                    {...javMonitored}
+                    onChange={onInputChange}
+                  />
+                </FormGroup>
+              ) : null}
 
               <FormGroup>
                 <FormLabel>{translate('WhisparrMonitorNewItems')}</FormLabel>

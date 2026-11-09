@@ -27,6 +27,7 @@ interface TogglePerformerInput {
   foreignId: string;
   monitored: boolean;
   moviesMonitored: boolean;
+  javMonitored?: boolean;
 }
 
 // `PUT /performer/{id}` takes the whole performer, but callers only hold the two
@@ -37,7 +38,7 @@ export function useTogglePerformerMonitored() {
   return useApiMutation<Performer, TogglePerformerInput, Performer>({
     method: 'PUT',
     path: ({ performerId }) => `/performer/${performerId}`,
-    body: async ({ foreignId, monitored, moviesMonitored }) => {
+    body: async ({ foreignId, monitored, moviesMonitored, javMonitored }) => {
       const performerPath = `/performer/${foreignId}`;
       // Fetch from cache first; falls back to network if not cached
       const performer = await queryClient.fetchQuery<Performer>({
@@ -51,7 +52,12 @@ export function useTogglePerformerMonitored() {
             },
           }),
       });
-      return { ...performer, monitored, moviesMonitored };
+      return {
+        ...performer,
+        monitored,
+        moviesMonitored,
+        javMonitored: javMonitored ?? performer.javMonitored,
+      };
     },
     mutationOptions: {
       onSuccess: (data) => {

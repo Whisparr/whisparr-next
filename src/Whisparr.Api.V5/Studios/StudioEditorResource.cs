@@ -14,6 +14,9 @@ namespace Whisparr.Api.V5.Studios
         /// <summary>Whether the studios' movies are monitored</summary>
         public bool? MoviesMonitored { get; set; }
 
+        /// <summary>Whether the studios' JAV is monitored</summary>
+        public bool? JavMonitored { get; set; }
+
         /// <summary>Whether newly discovered works added by refreshing the studios are monitored</summary>
         public bool? WhisparrMonitorNewItems { get; set; }
 

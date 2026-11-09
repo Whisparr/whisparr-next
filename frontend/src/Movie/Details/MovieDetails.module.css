@@ -55,6 +55,12 @@
   object-fit: cover;
 }
 
+/* A JAV cover is a wide spread; the front is its right half. */
+.javPoster {
+  width: 276px;
+  object-position: right;
+}
+
 .screenshot {
   z-index: 2;
   flex-shrink: 0;

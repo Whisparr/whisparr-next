@@ -112,7 +112,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
         {
             GivenUnknownFiles("a.mp4");
 
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(false);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(false);
             Mocker.GetMock<ISceneFolderLayout>()
                   .Setup(s => s.GetItemsInFolder(Folder))
                   .Returns(new List<MoviePathEntry> { new() { Id = 1, Path = Folder }, new() { Id = 2, Path = Folder } });
@@ -129,10 +129,28 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
         {
             GivenUnknownFiles("a.mp4");
 
-            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat()).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Scene)).Returns(true);
 
             Subject.GetMediaFiles(Folder, null, null, true).Should().ContainSingle().Which.Movie.Should().BeNull();
             Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void movie_folder_still_resolves_by_path_when_only_the_jav_layout_is_flat()
+        {
+            GivenUnknownFiles("a.mp4");
+
+            var movie = new Movie { Id = 1, Path = Folder };
+
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsFlat(ItemType.Jav)).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(Folder))
+                  .Returns(new List<MoviePathEntry> { new() { Id = 1, Path = Folder, ItemType = ItemType.Movie } });
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByPath(Folder)).Returns(movie);
+
+            Subject.GetMediaFiles(Folder, null, null, true);
+
+            Mocker.GetMock<IMovieService>().Verify(v => v.FindByPath(Folder), Times.Once());
         }
 
         private static readonly string Folder = @"C:\Test\Unknown".AsOsAgnostic();

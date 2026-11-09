@@ -69,6 +69,10 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
         : '';
     }
 
+    // No JAV page URL is known to the frontend, and the TMDb link below would
+    // be wrong for it.
+    if (itemType === 'jav') return '';
+
     if (foreignId.startsWith('tpdbid:')) {
       return `https://www.theporndb.net/movies/${foreignId.replace(
         'tpdbid:',

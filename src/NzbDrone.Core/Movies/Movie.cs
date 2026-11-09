@@ -109,6 +109,14 @@ namespace NzbDrone.Core.Movies
                     metadata.MetadataSource is Movies.MetadataSource.Stash or Movies.MetadataSource.TpdbScene);
         }
 
+        public bool IsJavLookup()
+        {
+            var metadata = MovieMetadata?.Value;
+
+            return metadata != null &&
+                   (metadata.ItemType == ItemType.Jav || metadata.MetadataSource == Movies.MetadataSource.TpdbJav);
+        }
+
         public DateTime? GetReleaseDate()
         {
             return MovieMetadata.Value.ReleaseDateUtc;
@@ -123,6 +131,13 @@ namespace NzbDrone.Core.Movies
                 if (MovieMetadata.Value.Title != null)
                 {
                     result += string.Format("{0} - {1} - {2}", MovieMetadata.Value.StudioTitle.NullSafe(), MovieMetadata.Value.ReleaseDate.NullSafe(), MovieMetadata.Value.Title.NullSafe());
+                }
+            }
+            else if (MovieMetadata.Value.ItemType == ItemType.Jav)
+            {
+                if (MovieMetadata.Value.Title != null)
+                {
+                    result += string.Format("{0} - {1}", MovieMetadata.Value.Code.NullSafe(), MovieMetadata.Value.Title.NullSafe());
                 }
             }
             else

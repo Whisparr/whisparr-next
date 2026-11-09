@@ -113,14 +113,19 @@ function AddNewMovieSearchResult(
 
   // A scene's foreign id comes from the locked scene source; hold its link
   // back until that source is known.
-  const providerProps =
-    itemType === 'movie'
-      ? { tmdbId, tpdbId, website }
-      : {
-          stashId: sceneSource ? foreignId : undefined,
-          sceneSource,
-          website,
-        };
+  const isJav = itemType === 'jav';
+  let providerProps: React.ComponentProps<typeof MovieDetailsLinks> = {
+    stashId: sceneSource ? foreignId : undefined,
+    sceneSource,
+    website,
+  };
+
+  if (itemType === 'movie') {
+    providerProps = { tmdbId, tpdbId, website };
+  } else if (isJav) {
+    // JAV has no TMDb or scene-source page to link to.
+    providerProps = { website };
+  }
 
   let ImageItem: React.ComponentType<Record<string, unknown>> =
     MoviePoster as unknown as React.ComponentType<Record<string, unknown>>;
@@ -143,10 +148,16 @@ function AddNewMovieSearchResult(
     posterHeight = 250;
   }
 
+  // A JAV cover is a wide spread; keep the front (right half) in a 3:4 tile.
+  if (isJav) {
+    posterWidth = 188;
+  }
+
   const elementStyle = {
     width: `${posterWidth}px`,
     height: `${posterHeight}px`,
-    objectFit: 'contain' as const,
+    objectFit: isJav ? ('cover' as const) : ('contain' as const),
+    objectPosition: isJav ? 'right' : undefined,
   };
 
   return (

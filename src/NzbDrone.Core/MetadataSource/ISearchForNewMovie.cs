@@ -9,6 +9,7 @@ namespace NzbDrone.Core.MetadataSource
     {
         List<Movie> SearchForNewMovie(string title);
         List<Movie> SearchForNewScene(string title);
+        List<Movie> SearchForNewJav(string term);
         List<Performer> SearchForNewPerformer(string title);
         List<Studio> SearchForNewStudio(string title);
         List<object> SearchForNewEntity(string title, ItemType? itemType = null);

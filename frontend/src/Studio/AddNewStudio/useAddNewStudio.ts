@@ -6,6 +6,7 @@ import { ValidationMessage } from 'Components/Form/FormInputGroup';
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
 import useInitialTermParam from 'Helpers/Hooks/useInitialTermParam';
+import useLookupHasJav from 'Helpers/Hooks/useLookupHasJav';
 import selectSettings from 'Helpers/selectSettings';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import Studio from 'Studio/Studio';
@@ -35,6 +36,7 @@ interface AddStudioSettings {
   rootFolderPath: SettingValue<string>;
   monitored: SettingValue<boolean>;
   moviesMonitored: SettingValue<boolean>;
+  javMonitored: SettingValue<boolean>;
   whisparrMonitorNewItems: SettingValue<boolean>;
   qualityProfileId: SettingValue<number>;
   searchForMovie: SettingValue<boolean>;
@@ -128,6 +130,7 @@ export function useAddNewStudioModalContent(studio: Studio) {
   const safeForWorkMode = useSafeForWorkMode();
 
   const studioDefaults = useAddStudioDefaults();
+  const showJav = useLookupHasJav('studio', studio.foreignId);
 
   const mutation = useApiMutation<Studio, Studio>({
     method: 'POST',
@@ -163,6 +166,7 @@ export function useAddNewStudioModalContent(studio: Studio) {
         rootFolderPath: settings.rootFolderPath.value,
         monitored: settings.monitored.value === true,
         moviesMonitored: settings.moviesMonitored.value === true,
+        javMonitored: showJav && settings.javMonitored.value === true,
         whisparrMonitorNewItems:
           settings.whisparrMonitorNewItems.value === true,
         qualityProfileId: settings.qualityProfileId.value,
@@ -171,12 +175,13 @@ export function useAddNewStudioModalContent(studio: Studio) {
       }),
       id: 0,
     });
-  }, [studio, settings, mutation]);
+  }, [studio, settings, mutation, showJav]);
 
   return {
     addError: mutation.error,
     isAdding: mutation.isPending,
     isSmallScreen,
+    showJav,
     isWindows: systemStatus.isWindows,
     safeForWorkMode,
     settings,

@@ -18,7 +18,7 @@ namespace NzbDrone.Core.Movies.Performers
 
         public void Handle(PerformerAddedEvent message)
         {
-            if (message.Performer.Monitored || message.Performer.MoviesMonitored)
+            if (message.Performer.Monitored || message.Performer.MoviesMonitored || message.Performer.JavMonitored)
             {
                 _commandQueueManager.Push(new RefreshPerformersCommand(new List<int> { message.Performer.Id }));
             }
@@ -30,7 +30,7 @@ namespace NzbDrone.Core.Movies.Performers
             // Their metadata is already fetched by AddPerformerService, and SyncPerformerItems
             // would bail out immediately for unmonitored performers anyway.
             var performersToRefresh = message.Performers
-                .Where(s => s.Monitored || s.MoviesMonitored)
+                .Where(s => s.Monitored || s.MoviesMonitored || s.JavMonitored)
                 .ToList();
 
             if (performersToRefresh.Any())

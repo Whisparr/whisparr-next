@@ -255,8 +255,8 @@ namespace NzbDrone.Core.MediaFiles
 
                 RemoveEmptyMovieFolder(movie);
 
-                // Check if movie is a scene, then cleanup the unmapped scene
-                if (movie.MovieMetadata.Value.ItemType == ItemType.Scene)
+                // Check if movie is in the scene layout, then cleanup the unmapped file
+                if (movie.MovieMetadata.Value.ItemType.UsesSceneLayout())
                 {
                     var existingUnmappedFiles = _mediaFileRepository.GetUnmappedFiles();
                     if (existingUnmappedFiles != null)
@@ -270,7 +270,7 @@ namespace NzbDrone.Core.MediaFiles
                         {
                             var owned = shared
                                 ? importedPaths.Contains(unmappedFile.OriginalFilePath, PathEqualityComparer.Instance)
-                                : unmappedFile.OriginalFilePath.Contains(movie.Path);
+                                : unmappedFile.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(unmappedFile.OriginalFilePath);
 
                             if (owned)
                             {

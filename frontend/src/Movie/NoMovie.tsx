@@ -6,16 +6,31 @@ import styles from './NoMovie.module.css';
 
 interface NoMovieProps {
   totalItems: number;
+  itemType?: 'movie' | 'jav';
 }
 
-function NoMovie(props: NoMovieProps) {
-  const { totalItems } = props;
+function NoMovie(props: Readonly<NoMovieProps>) {
+  const { totalItems, itemType = 'movie' } = props;
 
   if (totalItems > 0) {
     return (
       <div>
         <div className={styles.message}>
           {translate('AllMoviesHiddenDueToFilter')}
+        </div>
+      </div>
+    );
+  }
+
+  if (itemType === 'jav') {
+    return (
+      <div>
+        <div className={styles.message}>{translate('NoJav')}</div>
+
+        <div className={styles.buttonContainer}>
+          <Button to="/add/new/jav" kind={kinds.PRIMARY}>
+            {translate('AddNew')}
+          </Button>
         </div>
       </div>
     );

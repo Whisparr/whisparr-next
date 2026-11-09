@@ -226,6 +226,10 @@ namespace NzbDrone.Core.Movies.Studios
                 .Sum(stat => stat.MovieFileCount);
             message.Studio.TotalMovieCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Movie);
             message.Studio.TotalSceneCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Scene);
+            message.Studio.JavCount = movieStats
+                .Where(stat => movies.Any(m => m.Id == stat.MovieId && m.MovieMetadata.Value.ItemType == ItemType.Jav))
+                .Sum(stat => stat.MovieFileCount);
+            message.Studio.TotalJavCount = movies.Count(x => x.MovieMetadata.Value.ItemType == ItemType.Jav);
             message.Studio.SizeOnDisk = movieStats.Sum(x => x.SizeOnDisk);
 
             _studioRepo.Update(message.Studio);

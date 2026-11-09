@@ -40,6 +40,7 @@ import { useMovieMonitorAvailability } from 'Helpers/Hooks/useMovieMonitorAvaila
 import { align, icons, kinds, sizes, tooltipPositions } from 'Helpers/Props';
 import OrganizePreviewModal from 'Organize/OrganizePreviewModal';
 import useOrganizeAvailability from 'Organize/useOrganizeAvailability';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import QualityProfileName from 'Settings/Profiles/Quality/QualityProfileName';
 import DeleteStudioModal from 'Studio/Delete/DeleteStudioModal';
 import EditStudioModal from 'Studio/Edit/EditStudioModal';
@@ -133,6 +134,7 @@ function StudioDetails() {
     handleExpandPress,
     handleTitleMeasure,
     onMonitorTogglePress,
+    onJavTogglePress,
     onRefreshPress,
     onSearchPress,
     onYearRefreshPress,
@@ -149,6 +151,8 @@ function StudioDetails() {
   // value the server now rejects on every save.
   const isMovieMonitorDisabled =
     !isMovieMonitorLinked && !studio?.moviesMonitored;
+
+  const javAvailable = useJavAvailable();
 
   const studioTags = useStudioTags(studio?.tags || []);
   const studioId = studio?.id;
@@ -443,6 +447,25 @@ function StudioDetails() {
                             }
                             size={30}
                             onPress={onMonitorTogglePress}
+                          />
+                        </div>
+                      ) : null}
+
+                      {javAvailable && studio.hasJav ? (
+                        <div className={styles.toggleMoviesMonitoredContainer}>
+                          <MonitorToggleButton
+                            className={
+                              studio.javMonitored
+                                ? styles.monitorToggleButton
+                                : `${styles.monitorToggleButton} ${styles.unmonitored}`
+                            }
+                            monitored={studio.monitored}
+                            javMonitored={studio.javMonitored}
+                            type="javMonitor"
+                            isSaving={isSaving}
+                            tooltip={translate('MonitorJav')}
+                            size={30}
+                            onPress={onJavTogglePress}
                           />
                         </div>
                       ) : null}

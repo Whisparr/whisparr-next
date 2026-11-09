@@ -35,6 +35,8 @@ namespace Whisparr.Api.V5.Config
             SharedValidator.RuleFor(c => c.SceneFolderFormat).ValidMainSceneFolderFormat();
             SharedValidator.RuleFor(c => c.SceneFolderFormat).NotCollidingWithMainFolders(c => c.MovieFolderFormat, c => c.SceneImportFolderFormat);
             SharedValidator.RuleFor(c => c.StandardSceneFormat).FlatSceneFolderKeepsFileNamesUnique(c => c.SceneFolderFormat).AsWarning();
+            SharedValidator.RuleFor(c => c.StandardJavFormat).ValidJavFormat();
+            SharedValidator.RuleFor(c => c.JavFolderFormat).ValidMainSceneFolderFormat();
             SharedValidator.RuleFor(c => c.SceneImportFolderFormat).ValidSceneImportFolderFormat();
         }
 
@@ -93,6 +95,14 @@ namespace Whisparr.Api.V5.Config
             sampleResource.SceneFolderExample = nameSpec.SceneFolderFormat.IsNullOrWhiteSpace()
                 ? "Invalid format"
                 : _filenameSampleService.GetSceneFolderSample(nameSpec);
+
+            sampleResource.JavExample = nameSpec.StandardJavFormat.IsNullOrWhiteSpace()
+                ? "Invalid Format"
+                : _filenameSampleService.GetJavSample(nameSpec).FileName;
+
+            sampleResource.JavFolderExample = nameSpec.JavFolderFormat.IsNullOrWhiteSpace()
+                ? "Invalid format"
+                : _filenameSampleService.GetJavFolderSample(nameSpec);
 
             sampleResource.MainSceneFolderExample = nameSpec.SceneFolderFormat.IsNullOrWhiteSpace()
                 ? "Invalid format"

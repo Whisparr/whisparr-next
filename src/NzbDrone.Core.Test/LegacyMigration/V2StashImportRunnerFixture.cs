@@ -261,6 +261,25 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
+        public void stash_jav_series_parks_all_files_and_reports_one_row()
+        {
+            var series = GivenSeries(1, "Jav Studio");
+
+            series.SeriesType = 1;
+
+            var file = GivenFile(1, series);
+            GivenEpisode(1, series, "Wanted", "2024-01-01");
+            GivenEpisode(2, series, "Have", "2024-01-02", fileId: 1);
+
+            Run();
+
+            VerifyReport(LegacyReportCategory.NeedsAttention, "Studios", "Jav Studio", "JAV needs the TPDB scene source; 1 wanted, 1 files parked", Times.Once());
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Park(file.Path, It.IsAny<int>(), "Files", "JAV needs the TPDB scene source"), Times.Once());
+            Mocker.GetMock<IAddStudioService>().Verify(s => s.AddStudio(It.IsAny<Studio>(), It.IsAny<bool>()), Times.Never());
+            series.Done.Should().BeTrue();
+        }
+
+        [Test]
         public void site_id_zero_still_asks_the_mapper_for_a_title_match()
         {
             var series = GivenSeries(1, "Titled Studio");

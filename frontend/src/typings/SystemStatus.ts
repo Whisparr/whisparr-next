@@ -33,6 +33,7 @@ interface SystemStatus {
   version: string;
   movieCount: number;
   sceneCount: number;
+  javCount: number;
   performerCount: number;
   studioCount: number;
 }

@@ -7,9 +7,13 @@ export interface MetadataSources {
   sceneMetadataSource: 'stashDb' | 'tpdb';
   movieMetadataSource: 'tmdb' | 'tpdb' | 'none';
   locked: boolean;
+  javAvailable: boolean;
 }
 
-export type MetadataSourcesChoice = Omit<MetadataSources, 'locked'>;
+export type MetadataSourcesChoice = Omit<
+  MetadataSources,
+  'locked' | 'javAvailable'
+>;
 
 const PATH = '/config/metadatasource';
 
@@ -32,6 +36,18 @@ export function useSceneMetadataSource() {
   const { data } = useMetadataSources();
 
   return data?.sceneMetadataSource;
+}
+
+export function useJavAvailable() {
+  const { data } = useMetadataSources();
+  return data?.javAvailable ?? false;
+}
+
+// True only once the sources have loaded and JAV is off, so a deep link isn't
+// bounced while `useJavAvailable()` is still false or after a failed fetch.
+export function useJavUnavailable() {
+  const { data } = useMetadataSources();
+  return data?.javAvailable === false;
 }
 
 export function useChooseMetadataSources() {
