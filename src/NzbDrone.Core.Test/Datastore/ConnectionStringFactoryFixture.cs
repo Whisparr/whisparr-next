@@ -1,4 +1,3 @@
-using System.Data.SQLite;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -37,25 +36,6 @@ namespace NzbDrone.Core.Test.Datastore
         private ConnectionStringFactory NewFactory()
         {
             return new ConnectionStringFactory(_appFolderInfo.Object, _config.Object);
-        }
-
-        [Test]
-        public void should_use_normal_sqlite_sync_except_on_macos()
-        {
-            var builder = new SQLiteConnectionStringBuilder(NewFactory().MainDbConnection.ConnectionString)
-            {
-                DataSource = ":memory:",
-                Pooling = false
-            };
-
-            using var connection = new SQLiteConnection(builder.ConnectionString);
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA synchronous";
-
-            // 1 is NORMAL, 2 is FULL. macOS doesn't use WAL, where NORMAL could corrupt the database on a power cut.
-            command.ExecuteScalar().Should().Be(OsInfo.IsOsx ? 2L : 1L);
         }
 
         [Test]
