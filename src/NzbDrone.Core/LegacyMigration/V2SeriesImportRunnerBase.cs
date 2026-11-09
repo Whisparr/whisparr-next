@@ -85,9 +85,13 @@ namespace NzbDrone.Core.LegacyMigration
             var failures = new List<SeriesFailure>();
             var succeeded = 0;
             var now = _pacer.UtcNow;
+            var studiosLeft = (long)pendingSeries.Count;
 
             foreach (var series in pendingSeries)
             {
+                // A studio's catalog walk can run for minutes before its Advance, so show the step as it starts
+                progress.Status(StudioArea, studiosLeft--);
+
                 // A series backing off from an earlier failure waits for its own turn
                 if (!LegacyRetryPolicy.IsDue(series.Attempts, series.LastAttemptAt, now))
                 {
