@@ -88,6 +88,10 @@ namespace NzbDrone.Common.Test
         [TestCase("https://api.whisparr.com/v3/{route}")]
         [TestCase("https://api.whisparr.com/v4/{route}")]
         [TestCase("HTTPS://API.WHISPARR.COM/V4/{route}")]
+        [TestCase("https://api.whisparr.com/v3")]
+        [TestCase("https://api.whisparr.com/v3/")]
+        [TestCase(" https://api.whisparr.com/v2 ")]
+        [TestCase("http://api.whisparr.com/v4/{route}/")]
         public void should_use_v5_metadata_for_missing_or_legacy_values(string saved)
         {
             if (saved != null)
@@ -102,6 +106,15 @@ namespace NzbDrone.Common.Test
         public void should_keep_a_custom_metadata_override()
         {
             Subject.SetValue("WhisparrMetadata", "http://localhost:5000/{route}");
+
+            Subject.WhisparrMetadata.Should().Be("http://localhost:5000/{route}");
+        }
+
+        [TestCase("http://localhost:5000")]
+        [TestCase("http://localhost:5000/")]
+        public void should_add_route_to_a_custom_metadata_override_without_one(string saved)
+        {
+            Subject.SetValue("WhisparrMetadata", saved);
 
             Subject.WhisparrMetadata.Should().Be("http://localhost:5000/{route}");
         }

@@ -401,6 +401,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ILegacyV2SeriesRepository>().Verify(r => r.Update(It.Is<LegacyV2Series>(s => s.Done)), Times.Once());
             _episodes.Should().OnlyContain(e => e.Done);
             _progress.Verify(p => p.Total(1), Times.Once());
+            _progress.Verify(p => p.Status("Studios", 1), Times.Once());
             _progress.Verify(p => p.Advance("Studios", 1), Times.Once());
         }
 
