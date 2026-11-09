@@ -429,6 +429,66 @@ namespace NzbDrone.Core.Test.LegacyMigration
             none.Done.Should().BeTrue();
         }
 
+        [Test]
+        public void unmonitored_studio_adds_only_owned_and_monitored_scenes()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", monitored: false);
+            var file = GivenFile(1, series);
+
+            GivenEpisode(1, series, 101, "owned", monitored: false, fileId: 1);
+            GivenEpisode(2, series, 102, "wanted", monitored: true);
+            GivenEpisode(3, series, 103, "neither", monitored: false);
+
+            Run();
+
+            _walks.Should().BeEmpty();
+            _movies.Keys.Should().BeEquivalentTo("owned", "wanted");
+            Mocker.GetMock<ILegacyFileLinker>().Verify(l => l.Link(It.Is<Movie>(m => m.ForeignId == "owned"), file.Path, It.IsAny<Action<MovieFile>>(), It.IsAny<MatchTier>()), Times.Once());
+            Mocker.GetMock<IRefreshNewScenes>().Verify(r => r.RefreshNewScenes(It.Is<List<Movie>>(m => m.Count == 2)), Times.Once());
+            series.Done.Should().BeTrue();
+        }
+
+        [Test]
+        public void unmonitored_studio_keeps_a_scene_when_only_a_later_episode_for_it_has_the_file()
+        {
+            var series = GivenSeries(1, 11, "site-uuid", monitored: false);
+            GivenFile(1, series);
+
+            GivenEpisode(1, series, 101, "shared-scene", monitored: false);
+            GivenEpisode(2, series, 101, null, monitored: false, fileId: 1);
+
+            Run();
+
+            _movies.Keys.Should().Equal("shared-scene");
+        }
+
+        [Test]
+        public void unmonitored_jav_studio_does_not_walk_either_catalog()
+        {
+            var series = GivenJavSeries(1, 11, "site-uuid", monitored: false);
+            GivenEpisode(1, series, 5906477, null, fileId: 1);
+            GivenEpisode(2, series, 159959, "scene-1", monitored: false);
+            _javScenes[5906477] = "jav-1";
+
+            Run();
+
+            _walks.Should().BeEmpty();
+            _movies.Keys.Should().Equal("jav-1");
+            _movies["jav-1"].MovieMetadata.Value.ItemType.Should().Be(ItemType.Jav);
+        }
+
+        [Test]
+        public void monitored_studio_still_walks_the_catalog_and_adds_every_v2_scene()
+        {
+            var series = GivenSeries(1, 11, "site-uuid");
+            GivenEpisode(1, series, 101, "neither", monitored: false);
+
+            Run();
+
+            _walks.Should().ContainSingle();
+            _movies.Keys.Should().Equal("neither");
+        }
+
         // Re-runs a single-series pass so the importer hands over that series' stub builder
         private Func<string, Movie> BuildStubsFor(string siteUuid)
         {

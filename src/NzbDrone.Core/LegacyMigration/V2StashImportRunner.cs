@@ -23,6 +23,7 @@ namespace NzbDrone.Core.LegacyMigration
         private readonly ILegacyHashMatcher _hashMatcher;
         private readonly IAddStudioService _addStudioService;
         private readonly ISceneCatalogImporter _catalogImporter;
+        private readonly IScenePageWalker _pageWalker;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IAddMovieService _addMovieService;
         private readonly IRefreshNewScenes _refreshNewScenes;
@@ -38,6 +39,7 @@ namespace NzbDrone.Core.LegacyMigration
                                    IAddStudioService addStudioService,
                                    IStudioService studioService,
                                    ISceneCatalogImporter catalogImporter,
+                                   IScenePageWalker pageWalker,
                                    IProvideMovieInfo movieInfo,
                                    IAddMovieService addMovieService,
                                    IRefreshNewScenes refreshNewScenes,
@@ -52,6 +54,7 @@ namespace NzbDrone.Core.LegacyMigration
             _hashMatcher = hashMatcher;
             _addStudioService = addStudioService;
             _catalogImporter = catalogImporter;
+            _pageWalker = pageWalker;
             _movieInfo = movieInfo;
             _addMovieService = addMovieService;
             _refreshNewScenes = refreshNewScenes;
@@ -122,7 +125,12 @@ namespace NzbDrone.Core.LegacyMigration
                 };
             }
 
-            var imported = _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(stashId, cursor), BuildStub, () => true);
+            var owners = files.ToDictionary(f => f, f => episodes.Where(e => e.LegacyEpisodeFileId == f.LegacyId).OrderBy(e => e.LegacyId).FirstOrDefault());
+
+            // An unmonitored studio only brings what the user owned or wanted in v2; a studio refresh doesn't fill its catalog either
+            var gaveUp = series.Monitored
+                ? _catalogImporter.ImportScenes(series.Title, cursor => _movieInfo.GetStudioScenePage(stashId, cursor), BuildStub, () => true).GaveUp
+                : AddOwnedAndWanted(stashId, episodes, owners.Values, BuildStub);
 
             var catalog = new Dictionary<string, Movie>();
 
@@ -133,9 +141,7 @@ namespace NzbDrone.Core.LegacyMigration
 
             var keys = catalog.Values.Select(m => new SceneKey(m.ForeignId, m.Title, m.MovieMetadata.Value.ReleaseDateUtc)).ToList();
             var claimed = new HashSet<string>();
-            var owners = files.ToDictionary(f => f, f => episodes.Where(e => e.LegacyEpisodeFileId == f.LegacyId).OrderBy(e => e.LegacyId).FirstOrDefault());
-
-            var catalogComplete = imported.GaveUp == 0;
+            var catalogComplete = gaveUp == 0;
 
             LinkFiles(series, files, owners, new CatalogLink(stashId, catalog, keys, claimed, BuildStub, catalogComplete), progress);
 
@@ -143,7 +149,7 @@ namespace NzbDrone.Core.LegacyMigration
             // refresh, which adds them with the studio's monitoring settings
             if (!catalogComplete)
             {
-                throw new CatalogIncompleteException(series.Title, imported.GaveUp);
+                throw new CatalogIncompleteException(series.Title, gaveUp);
             }
 
             // Whatever a pending file did not claim gets its twin by title and date alone. An episode whose file was
@@ -187,6 +193,34 @@ namespace NzbDrone.Core.LegacyMigration
             CreatedStudioIds.Remove(series.LegacyId);
 
             MarkSeriesDone(series, episodes, progress);
+        }
+
+        // The catalog is only read, and just the scenes a v2 file or a wanted episode names by title and date are added;
+        // the matching below then finds them in the library like any other. Returns the pages given up on.
+        private int AddOwnedAndWanted(string stashId, List<LegacyV2Episode> episodes, IEnumerable<LegacyV2Episode> owners, Func<string, Movie> buildStub)
+        {
+            var keys = new List<SceneKey>();
+            var walk = _pageWalker.Walk(
+                cursor => _movieInfo.GetStudioScenePage(stashId, cursor),
+                page => keys.AddRange((page.Items ?? new List<ScenePageItem>()).Select(i => new SceneKey(i.SceneId, i.Title, i.ReleaseDate))),
+                () => true);
+
+            var missing = owners
+                .Where(e => e != null)
+                .Concat(episodes.Where(e => e.Monitored && e.LegacyEpisodeFileId == 0))
+                .Select(e => LegacySceneMatcher.FindExact(keys, e.Title, ParsedAirDate(e)))
+                .Where(id => id != null)
+                .Distinct()
+                .Where(id => _movieService.FindByForeignId(id) == null)
+                .ToList();
+
+            if (missing.Count > 0)
+            {
+                // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+                _refreshNewScenes.RefreshNewScenes(_addMovieService.AddMovies(missing.Select(buildStub).ToList(), true, refreshInline: true));
+            }
+
+            return walk.GaveUp.Count;
         }
 
         // What matching a series' files needs from the catalog; Claimed fills in as files take their scenes
