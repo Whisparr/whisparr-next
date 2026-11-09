@@ -7,9 +7,11 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
@@ -379,6 +381,32 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>(), It.IsAny<int>()), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(s => s.SavePHashes(It.IsAny<List<MovieFile>>()), Times.Never());
             Mocker.GetMock<IImportlFileService>().Verify(s => s.SavePHashes(It.IsAny<List<ImportFile>>()), Times.Never());
+        }
+
+        [Test]
+        public void phash_should_not_run_on_schedule_during_migration()
+        {
+            GivenPHashEnabled();
+            GivenPHashMovieFiles(MovieFiles(1));
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(g => g.AutomationPaused).Returns(true);
+
+            Subject.Execute(new GenerateVideoHashesCommand { Trigger = CommandTrigger.Scheduled });
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>(), It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IImportlFileService>().Verify(s => s.GetFilesNeedingPHash(It.IsAny<int>(), It.IsAny<int>()), Times.Never());
+            _pHashMovieFileSaves.Should().BeEmpty();
+        }
+
+        [Test]
+        public void phash_should_run_when_triggered_manually_during_migration()
+        {
+            GivenPHashEnabled();
+            GivenPHashMovieFiles(MovieFiles(1));
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(g => g.AutomationPaused).Returns(true);
+
+            Subject.Execute(new GenerateVideoHashesCommand { Trigger = CommandTrigger.Manual });
+
+            _pHashMovieFileSaves.Should().HaveCount(1);
         }
 
         [Test]
