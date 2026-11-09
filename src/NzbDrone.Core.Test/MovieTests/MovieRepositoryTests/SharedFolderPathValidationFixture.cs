@@ -25,6 +25,10 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
                   .Setup(s => s.AllMoviePathEntries())
                   .Returns(() => Subject.AllMoviePathEntries());
 
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.NonScenePathEntries())
+                  .Returns(() => Subject.NonScenePathEntries());
+
             _validator = new InlineValidator<Movie>();
             _validator.RuleFor(m => m.Path)
                       .SetValidator(Mocker.Resolve<MoviePathValidator<Movie>>())

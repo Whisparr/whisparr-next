@@ -38,6 +38,7 @@ namespace NzbDrone.Core.Movies
         Movie FindByPath(string path);
         Dictionary<int, string> AllMoviePaths();
         List<MoviePathEntry> AllMoviePathEntries();
+        List<MoviePathEntry> NonScenePathEntries();
         List<int> AllMovieIds();
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
@@ -403,6 +404,20 @@ namespace NzbDrone.Core.Movies
                 return conn.Query<MoviePathEntry>(
                     "SELECT \"Movies\".\"Id\", \"Movies\".\"Path\", \"MovieMetadata\".\"ItemType\" " +
                     "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\"").ToList();
+            }
+        }
+
+        public List<MoviePathEntry> NonScenePathEntries()
+        {
+            // IN rather than NOT IN so the ItemType index is used. Written out because Dapper only expands IN @list on SQLite, not Postgres.
+            var itemTypes = string.Join(", ", Enum.GetValues<ItemType>().Where(t => !t.UsesSceneLayout()).Select(t => (int)t));
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<MoviePathEntry>(
+                    "SELECT \"Movies\".\"Id\", \"Movies\".\"Path\", \"MovieMetadata\".\"ItemType\" " +
+                    "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
+                    $"WHERE \"MovieMetadata\".\"ItemType\" IN ({itemTypes})").ToList();
             }
         }
 
