@@ -96,6 +96,7 @@ namespace NzbDrone.Core.Configuration
 
         private readonly string _configFile;
         private static readonly Regex HiddenCharacterRegex = new Regex("[^a-z0-9]", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+        private static readonly Regex LegacyMetadataUrlRegex = new(@"^https?://api\.whisparr\.com/v[1-4](/(\{route\})?)?/?$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
 
         private static readonly object Mutex = new object();
 
@@ -197,15 +198,16 @@ namespace NzbDrone.Core.Configuration
                 const string defaultValue = "https://api.whisparr.com/v5/{route}";
                 var whisparrMetadata = GetValue("WhisparrMetadata", defaultValue);
 
-                // Saved v3 and v4 URLs fall back to the v5 default; any other value is a custom override
-                if (string.IsNullOrWhiteSpace(whisparrMetadata) ||
-                    whisparrMetadata.Equals("https://api.whisparr.com/v3/{route}", StringComparison.InvariantCultureIgnoreCase) ||
-                    whisparrMetadata.Equals("https://api.whisparr.com/v4/{route}", StringComparison.InvariantCultureIgnoreCase))
+                // Saved official v2-v4 URLs (with or without {route}) fall back to the v5 default; any other value is a custom override
+                if (string.IsNullOrWhiteSpace(whisparrMetadata) || LegacyMetadataUrlRegex.IsMatch(whisparrMetadata.Trim()))
                 {
                     return defaultValue;
                 }
 
-                return whisparrMetadata;
+                // Every request fills {route}, so a custom URL without it would fail them all
+                return whisparrMetadata.Contains("{route}")
+                    ? whisparrMetadata
+                    : whisparrMetadata.Trim().TrimEnd('/') + "/{route}";
             }
         }
 
