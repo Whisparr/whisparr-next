@@ -57,10 +57,11 @@ namespace NzbDrone.Core.Test.MovieTests
 
             const string studioFolder = "/data/Studio";
 
+            var entries = new List<MoviePathEntry> { new() { Id = 100, Path = studioFolder, ItemType = existing } };
+
             Mocker.GetMock<IJavAvailability>().Setup(s => s.IsAvailable()).Returns(true);
-            Mocker.GetMock<IMovieService>()
-                  .Setup(s => s.AllMoviePathEntries())
-                  .Returns(new List<MoviePathEntry> { new() { Id = 100, Path = studioFolder, ItemType = existing } });
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMoviePathEntries()).Returns(entries);
+            Mocker.GetMock<IMovieService>().Setup(s => s.NonScenePathEntries()).Returns(entries.Where(e => !e.ItemType.UsesSceneLayout()).ToList());
             Mocker.GetMock<IRootFolderService>().Setup(s => s.All()).Returns(new List<RootFolder>());
 
             var movie = new Movie { Path = studioFolder };

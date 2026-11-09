@@ -38,6 +38,7 @@ namespace NzbDrone.Core.Movies
         Movie FindByPath(string path);
         Dictionary<int, string> AllMoviePaths();
         List<MoviePathEntry> AllMoviePathEntries();
+        List<MoviePathEntry> NonScenePathEntries();
         List<int> AllMovieIds();
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
@@ -403,6 +404,21 @@ namespace NzbDrone.Core.Movies
                 return conn.Query<MoviePathEntry>(
                     "SELECT \"Movies\".\"Id\", \"Movies\".\"Path\", \"MovieMetadata\".\"ItemType\" " +
                     "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\"").ToList();
+            }
+        }
+
+        public List<MoviePathEntry> NonScenePathEntries()
+        {
+            // IN rather than NOT IN so the ItemType index is used
+            var itemTypes = Enum.GetValues<ItemType>().Where(t => !t.UsesSceneLayout()).Select(t => (int)t).ToArray();
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<MoviePathEntry>(
+                    "SELECT \"Movies\".\"Id\", \"Movies\".\"Path\", \"MovieMetadata\".\"ItemType\" " +
+                    "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
+                    "WHERE \"MovieMetadata\".\"ItemType\" IN @itemTypes",
+                    new { itemTypes }).ToList();
             }
         }
 

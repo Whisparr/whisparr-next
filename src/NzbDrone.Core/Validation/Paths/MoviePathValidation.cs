@@ -34,11 +34,14 @@ namespace NzbDrone.Core.Validation.Paths
 
             var instanceUsesSceneLayout = ValidatedItemType.UsesSceneLayout(instance);
 
-            // Skip the path for this movie and any invalid paths. Scene and JAV items may share a path with each other.
-            return !_moviesService.AllMoviePathEntries().Any(s => s.Id != instanceId &&
-                                                                  !(instanceUsesSceneLayout && s.ItemType.UsesSceneLayout()) &&
-                                                                  s.Path.IsPathValid(PathValidationType.CurrentOs) &&
-                                                                  s.Path.PathEquals(value));
+            // Scene and JAV items may share a path with each other, so they only need checking against other items.
+            // This runs for every item added, so loading every scene here makes bulk adds slower as the library grows.
+            var existing = instanceUsesSceneLayout ? _moviesService.NonScenePathEntries() : _moviesService.AllMoviePathEntries();
+
+            // Skip the path for this movie and any invalid paths.
+            return !existing.Any(s => s.Id != instanceId &&
+                                      s.Path.IsPathValid(PathValidationType.CurrentOs) &&
+                                      s.Path.PathEquals(value));
         }
     }
 }

@@ -49,6 +49,7 @@ namespace NzbDrone.Core.Movies
         Movie FindByPath(string path);
         Dictionary<int, string> AllMoviePaths();
         List<MoviePathEntry> AllMoviePathEntries();
+        List<MoviePathEntry> NonScenePathEntries();
         List<int> AllMovieIds();
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
@@ -347,6 +348,12 @@ namespace NzbDrone.Core.Movies
         public List<MoviePathEntry> AllMoviePathEntries()
         {
             return _movieRepository.AllMoviePathEntries();
+        }
+
+        /// <summary> Get the id, path and item type of every item that doesn't use the scene folder layout. </summary>
+        public List<MoviePathEntry> NonScenePathEntries()
+        {
+            return _movieRepository.NonScenePathEntries();
         }
 
         /// <summary> Get a list of all movie IDs in the repository. </summary>

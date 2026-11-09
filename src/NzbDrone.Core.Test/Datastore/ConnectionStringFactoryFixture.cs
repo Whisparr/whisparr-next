@@ -1,3 +1,4 @@
+using System.Data.SQLite;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -36,6 +37,25 @@ namespace NzbDrone.Core.Test.Datastore
         private ConnectionStringFactory NewFactory()
         {
             return new ConnectionStringFactory(_appFolderInfo.Object, _config.Object);
+        }
+
+        [Test]
+        public void should_not_force_every_sqlite_commit_to_disk()
+        {
+            var builder = new SQLiteConnectionStringBuilder(NewFactory().MainDbConnection.ConnectionString)
+            {
+                DataSource = ":memory:",
+                Pooling = false
+            };
+
+            using var connection = new SQLiteConnection(builder.ConnectionString);
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA synchronous";
+
+            // 1 is NORMAL, 2 is FULL
+            command.ExecuteScalar().Should().Be(1L);
         }
 
         [Test]

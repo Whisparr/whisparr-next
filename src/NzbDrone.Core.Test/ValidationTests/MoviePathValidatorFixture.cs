@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Test.Framework;
@@ -28,12 +30,29 @@ namespace NzbDrone.Core.Test.ValidationTests
 
         private void GivenExisting(ItemType itemType, string path = SharedPath)
         {
+            var entries = new List<MoviePathEntry>
+                          {
+                              new() { Id = 100, Path = path, ItemType = itemType }
+                          };
+
             Mocker.GetMock<IMovieService>()
                   .Setup(s => s.AllMoviePathEntries())
-                  .Returns(new List<MoviePathEntry>
-                           {
-                               new() { Id = 100, Path = path, ItemType = itemType }
-                           });
+                  .Returns(entries);
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.NonScenePathEntries())
+                  .Returns(entries.Where(e => !e.ItemType.UsesSceneLayout()).ToList());
+        }
+
+        [TestCase(ItemType.Scene)]
+        [TestCase(ItemType.Jav)]
+        public void scene_layout_item_should_not_load_every_path(ItemType itemType)
+        {
+            GivenExisting(ItemType.Scene);
+
+            _validator.Validate(NewItem(itemType));
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Never());
         }
 
         private static Movie NewItem(ItemType itemType, string path = SharedPath)

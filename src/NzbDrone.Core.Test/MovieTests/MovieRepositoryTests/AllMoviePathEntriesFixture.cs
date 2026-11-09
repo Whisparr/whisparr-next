@@ -25,6 +25,21 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
             entries.Single(e => e.Id == movie.Id).Path.Should().Be("/media/movies/A");
         }
 
+        [Test]
+        public void non_scene_entries_should_leave_out_scene_layout_items()
+        {
+            GivenItem("metadata-1", "/media/scenes/Studio", ItemType.Scene);
+            GivenItem("metadata-2", "/media/jav/Studio", ItemType.Jav);
+            var movie = GivenItem("metadata-3", "/media/movies/A", ItemType.Movie);
+
+            var entries = Subject.NonScenePathEntries();
+
+            entries.Should().ContainSingle();
+            entries.Single().Id.Should().Be(movie.Id);
+            entries.Single().Path.Should().Be("/media/movies/A");
+            entries.Single().ItemType.Should().Be(ItemType.Movie);
+        }
+
         private Movie GivenItem(string foreignId, string path, ItemType itemType)
         {
             var metadata = Db.Insert(Builder<MovieMetadata>.CreateNew()
