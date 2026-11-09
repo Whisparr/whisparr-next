@@ -53,6 +53,7 @@ namespace NzbDrone.Core.Test.ValidationTests
             _validator.Validate(NewItem(itemType));
 
             Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePathEntries(), Times.Never());
+            Mocker.GetMock<IMovieService>().Verify(s => s.NonScenePathEntries(), Times.Once());
         }
 
         private static Movie NewItem(ItemType itemType, string path = SharedPath)
