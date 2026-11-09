@@ -6,6 +6,7 @@ using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Instrumentation.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Movies;
@@ -38,6 +39,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         private readonly IMovieService _movieService;
         private readonly IVideoHashService _videoHashService;
         private readonly IDiskProvider _diskProvider;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         // Missing files are skipped without a phash stamp, so these cursors keep them from coming back within a pass
@@ -59,6 +61,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                                        IMovieService movieService,
                                        IVideoHashService videoHashService,
                                        IDiskProvider diskProvider,
+                                       ILegacyMigrationGate migrationGate,
                                        Logger logger)
         {
             UtcNow = () => DateTime.UtcNow;
@@ -70,6 +73,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             _movieService = movieService;
             _videoHashService = videoHashService;
             _diskProvider = diskProvider;
+            _migrationGate = migrationGate;
             _logger = logger;
         }
 
@@ -153,6 +157,14 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
         {
             if (!_configService.EnablePerceptualHashing || !_videoHashService.CanComputePHash)
             {
+                return;
+            }
+
+            // Decoding video competes with the migration for CPU, and unhashed files are picked up by a later run
+            if (message.Trigger != CommandTrigger.Manual && _migrationGate.AutomationPaused)
+            {
+                _logger.Debug("Perceptual hashing is paused until the library migration completes");
+
                 return;
             }
 
