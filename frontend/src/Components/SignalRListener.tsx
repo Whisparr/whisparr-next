@@ -1,5 +1,6 @@
 // TODO: Standardize the "when" on React Query Key invalidation to avoid rapid-fire reloads during bulk operations.
 import * as signalR from '@microsoft/signalr';
+import { InvalidateQueryFilters, Query } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { setAppValue, setVersion } from 'App/appStore';
 import { queryClient } from 'App/queryClient';
@@ -22,6 +23,7 @@ import {
   UNMAPPED_FILES_PATH,
   UnmappedFile,
 } from 'UnmappedFiles/useUnmappedFiles';
+import limitRefresh from 'Utilities/limitRefresh';
 import SignalRLogger from 'Utilities/SignalRLogger';
 
 type SignalRAction = 'sync' | 'created' | 'updated' | 'deleted';
@@ -30,8 +32,6 @@ interface MovieResource {
   id: number;
   titleSlug: string;
   foreignId?: string;
-  studioForeignId?: string;
-  performerForeignIds?: string[];
 }
 
 interface ForeignResource {
@@ -54,122 +54,6 @@ interface SignalRMessage {
   // Stamped by the server: the API version of the controller that broadcast it.
   // Absent on hub-level messages such as `version`.
   version?: number;
-}
-
-// Helper to ensure updated data when a movie is updated in the background
-function updateMovieDetailsQueryCache(updatedMovie: MovieResource) {
-  const queryKey = `/movie/${updatedMovie.titleSlug}`;
-
-  // Don't trigger a re-fetch, as this method can be called rapid-fire
-  queryClient.invalidateQueries({
-    queryKey: [queryKey],
-    refetchType: 'none',
-  });
-}
-
-// Helper to update a nested movie in performer.years[].movies[] in React Query cache
-// Update Performer React Query cache helper
-// The collections page asks `POST /movie/list` for the library movies behind the
-// collection posters. Patched rather than invalidated so toggling monitored on a
-// poster does not re-fetch every movie on the page.
-function updateMovieInCollectionListQueryCache(updatedMovie: MovieResource) {
-  queryClient
-    .getQueryCache()
-    .findAll({ queryKey: [EXISTING_MOVIES_PATH] })
-    .forEach(({ queryKey }) => {
-      queryClient.setQueryData(
-        queryKey,
-        (oldData: ReadonlyArray<MovieResource>) => {
-          if (!Array.isArray(oldData)) {
-            return oldData;
-          }
-
-          const idx = oldData.findIndex(
-            (movie) => movie.id === updatedMovie.id
-          );
-
-          if (idx === -1) {
-            return oldData;
-          }
-
-          const newData = [...oldData];
-          newData[idx] = { ...oldData[idx], ...updatedMovie };
-
-          return newData;
-        }
-      );
-    });
-}
-
-function updateMovieInPerformerWorksQueryCache(updatedMovie: MovieResource) {
-  // Find all queries for performer works
-  const queryCache = queryClient.getQueryCache().findAll();
-  queryCache.forEach(({ queryKey }) => {
-    // Look for keys like "/performer/{performerId}/works"
-    const performerForeignId =
-      Array.isArray(queryKey) && typeof queryKey[0] === 'string'
-        ? /performer\/([^/]+)\/works$/.exec(queryKey[0])?.[1]
-        : undefined;
-
-    if (performerForeignId) {
-      queryClient.setQueryData(
-        queryKey,
-        (oldData: ReadonlyArray<MovieResource>) => {
-          if (!Array.isArray(oldData)) {
-            return oldData;
-          }
-
-          const idx = oldData.findIndex(
-            (movie) => movie.id === updatedMovie.id
-          );
-
-          // A scene added during a performer add belongs in the list once it
-          // credits this performer
-          if (idx === -1) {
-            return updatedMovie.performerForeignIds?.includes(
-              performerForeignId
-            )
-              ? [...oldData, updatedMovie]
-              : oldData;
-          }
-
-          const newData = [...oldData];
-          newData[idx] = { ...oldData[idx], ...updatedMovie };
-          return newData;
-        }
-      );
-    }
-  });
-}
-
-// Helper to update a nested movie in performer.years[].movies[] in React Query cache
-// To avoid invalidating the entire list when a single movie is updated, we need to find the movie in the cache and update it directly.
-function updateMovieInStudioWorksQueryCache(updatedMovie: MovieResource) {
-  if (!updatedMovie?.studioForeignId) {
-    return;
-  }
-
-  const studioKey = `/studio/${updatedMovie.studioForeignId}/works`;
-  queryClient.setQueryData(
-    [studioKey],
-    (oldData: ReadonlyArray<MovieResource>) => {
-      if (!Array.isArray(oldData)) {
-        return oldData;
-      }
-
-      const idx = oldData.findIndex((movie) => movie.id === updatedMovie.id);
-
-      // The key is the movie's own studio, so a scene added during a studio
-      // add belongs in the list
-      if (idx === -1) {
-        return [...oldData, updatedMovie];
-      }
-
-      const newData = [...oldData];
-      newData[idx] = { ...oldData[idx], ...updatedMovie };
-      return newData;
-    }
-  );
 }
 
 // Merges updates in React Query cache instead of a re-fetch
@@ -243,10 +127,44 @@ function removeStudioQueryCache(updatedStudio: ForeignResource) {
   });
 }
 
-function invalidateMoviePagedQueryCache() {
-  queryClient.invalidateQueries({
-    queryKey: ['/movie/paged'],
-  });
+// Lets a running refetch finish rather than cancelling and re-sending it
+function invalidateWithoutCancel(filters: InvalidateQueryFilters) {
+  return queryClient.invalidateQueries(filters, { cancelRefetch: false });
+}
+
+const moviePagedRefresh = limitRefresh(() =>
+  invalidateWithoutCancel({ queryKey: ['/movie/paged'] })
+);
+
+function isWorksQuery(query: Query) {
+  const [path] = query.queryKey;
+
+  return (
+    typeof path === 'string' &&
+    /^\/(performer|studio)\/[^/]+\/works$/.test(path)
+  );
+}
+
+// Details are keyed by slug, so the updated movies are collected until the next refresh.
+// Only mounted queries refetch; the rest are just marked stale.
+const updatedMovieSlugs = new Set<string>();
+
+const movieCachesRefresh = limitRefresh(() => {
+  const slugs = [...updatedMovieSlugs];
+  updatedMovieSlugs.clear();
+
+  return Promise.all([
+    ...slugs.map((slug) =>
+      invalidateWithoutCancel({ queryKey: [`/movie/${slug}`] })
+    ),
+    invalidateWithoutCancel({ queryKey: [EXISTING_MOVIES_PATH] }),
+    invalidateWithoutCancel({ predicate: isWorksQuery }),
+  ]);
+});
+
+function invalidateUpdatedMovieQueries(movies: MovieResource[]) {
+  movies.forEach((movie) => updatedMovieSlugs.add(movie.titleSlug));
+  movieCachesRefresh.request();
 }
 
 // The by-id list behind the tag details modal, now its only caller -- the queued
@@ -293,13 +211,21 @@ function invalidateStudioPagedQueryCache() {
 // Both Wanted lists are derived: a movie's monitored state or file status decides
 // whether it belongs on them at all, so a changed movie means refetching rather
 // than patching. Invalidating stales every cached page, not just the visible one.
-function invalidateWantedQueries() {
-  queryClient.invalidateQueries({ queryKey: ['/wanted/missing'] });
-  queryClient.invalidateQueries({ queryKey: ['/wanted/cutoff'] });
+const wantedRefresh = limitRefresh(() =>
+  Promise.all([
+    invalidateWithoutCancel({ queryKey: ['/wanted/missing'] }),
+    invalidateWithoutCancel({ queryKey: ['/wanted/cutoff'] }),
+  ])
+);
+
+function flushLimitedRefreshes() {
+  moviePagedRefresh.flush();
+  movieCachesRefresh.flush();
+  wantedRefresh.flush();
 }
 
 function invalidateFileDependentQueries() {
-  invalidateWantedQueries();
+  wantedRefresh.request();
   queryClient.invalidateQueries({ queryKey: ['/calendar'] });
 }
 
@@ -427,7 +353,13 @@ function SignalRListener() {
       // reports completed or failed, fires its finished callback. Failed commands need
       // that too, or their button spins until it times out.
       if (body.resource) {
-        updateCommand(body.resource as unknown as Command);
+        const command = body.resource as unknown as Command;
+
+        updateCommand(command);
+
+        if (command.status === 'completed' || command.status === 'failed') {
+          flushLimitedRefreshes();
+        }
       }
 
       return;
@@ -475,22 +407,19 @@ function SignalRListener() {
       if (Array.isArray(body.resources) && body.resources.length > 0) {
         // Batched update
         if (body.action === 'updated') {
-          body.resources.forEach(updateMovieInPerformerWorksQueryCache);
-          body.resources.forEach(updateMovieInStudioWorksQueryCache);
-          body.resources.forEach(updateMovieDetailsQueryCache);
-          body.resources.forEach(updateMovieInCollectionListQueryCache);
+          invalidateUpdatedMovieQueries(body.resources);
         } else if (body.action === 'deleted') {
           body.resources.forEach(removeMovieQueryCache);
         }
 
-        invalidateMoviePagedQueryCache();
+        moviePagedRefresh.request();
 
         if (body.action === 'deleted') {
           invalidateMovieBulkQueryCache();
         }
 
         if (body.action === 'updated') {
-          invalidateWantedQueries();
+          wantedRefresh.request();
         }
 
         return;
@@ -498,22 +427,19 @@ function SignalRListener() {
 
       // Fallback: single resource
       if (body.action === 'updated' && body.resource) {
-        updateMovieInPerformerWorksQueryCache(body.resource);
-        updateMovieInStudioWorksQueryCache(body.resource);
-        updateMovieDetailsQueryCache(body.resource);
-        updateMovieInCollectionListQueryCache(body.resource);
+        invalidateUpdatedMovieQueries([body.resource]);
       } else if (body.action === 'deleted' && body.resource) {
         removeMovieQueryCache(body.resource);
       }
 
-      invalidateMoviePagedQueryCache();
+      moviePagedRefresh.request();
 
       if (body.action === 'deleted') {
         invalidateMovieBulkQueryCache();
       }
 
       if (body.action === 'updated') {
-        invalidateWantedQueries();
+        wantedRefresh.request();
       }
 
       return;
