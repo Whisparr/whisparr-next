@@ -81,7 +81,11 @@ namespace NzbDrone.Core.Movies.Performers
 
             var added = DateTime.UtcNow;
             var performersToAdd = new List<Performer>();
-            var existingPerformerForeignIds = new HashSet<string>(_performerService.AllPerformerForeignIds());
+
+            // Runs once per scene during a refresh, so it can't load every performer in the library.
+            var existingPerformerForeignIds = _performerService.FindByForeignIds(newPerformers.Select(p => p.ForeignId).Distinct().ToList())
+                                                               .Select(p => p.ForeignId)
+                                                               .ToHashSet();
 
             foreach (var m in newPerformers)
             {

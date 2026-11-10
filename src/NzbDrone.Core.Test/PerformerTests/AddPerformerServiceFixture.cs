@@ -115,12 +115,40 @@ namespace NzbDrone.Core.Test.PerformerTests
         public void should_lock_metadata_sources_once_per_batch()
         {
             Mocker.GetMock<IPerformerService>()
-                  .Setup(s => s.AllPerformerForeignIds())
-                  .Returns(new List<string>());
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns(new List<Performer>());
 
             Subject.AddPerformers(new List<Performer> { GivenNewPerformer(true), GivenNewPerformer(true) });
 
             Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
+        [Test]
+        public void should_only_look_up_the_performers_in_the_batch()
+        {
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns(new List<Performer>());
+
+            Subject.AddPerformers(new List<Performer> { GivenNewPerformer(true), GivenNewPerformer(true) });
+
+            Mocker.GetMock<IPerformerService>()
+                  .Verify(v => v.FindByForeignIds(It.Is<List<string>>(l => l.Count == 1 && l[0] == ForeignId)), Times.Once());
+            Mocker.GetMock<IPerformerService>().Verify(v => v.AllPerformerForeignIds(), Times.Never());
+        }
+
+        [Test]
+        public void should_skip_a_performer_already_in_the_library_when_adding_a_batch()
+        {
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns(new List<Performer> { _existing });
+
+            Subject.AddPerformers(new List<Performer> { GivenNewPerformer(true) });
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetPerformerInfo(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IPerformerService>()
+                  .Verify(v => v.AddPerformers(It.Is<List<Performer>>(l => l.Count == 0)), Times.Once());
         }
 
         [Test]
@@ -129,8 +157,8 @@ namespace NzbDrone.Core.Test.PerformerTests
             const string missingId = "missing-performer";
 
             Mocker.GetMock<IPerformerService>()
-                  .Setup(s => s.AllPerformerForeignIds())
-                  .Returns(new List<string>());
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns(new List<Performer>());
 
             Mocker.GetMock<IProvideMovieInfo>()
                   .Setup(s => s.GetPerformerInfo(missingId))
