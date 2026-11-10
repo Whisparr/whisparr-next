@@ -314,6 +314,57 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void should_prefetch_scenes_and_return_the_pending_ones()
+        {
+            var scene = Scene("a", "p1");
+
+            Mocker.GetMock<IHttpClient>()
+                .Setup(v => v.Post<SceneBulkResource>(It.IsAny<HttpRequest>()))
+                .Returns((HttpRequest request) => Response<SceneBulkResource>(
+                    request,
+                    HttpStatusCode.Accepted,
+                    new SceneBulkResource { Scenes = new List<MovieResource> { scene }, Pending = new List<string> { "b" } }.ToJson(),
+                    new HttpHeader()));
+
+            Subject.PrefetchScenes(new[] { "a", "b" }).Should().Equal("b");
+
+            Subject.GetSceneInfo("a");
+
+            Mocker.GetMock<IHttpClient>().Verify(v => v.Get<MovieResource>(It.IsAny<HttpRequest>()), Times.Never());
+            Mocker.GetMock<IHttpClient>().Verify(v => v.Post<SceneBulkResource>(It.Is<HttpRequest>(r => r.Url.Path.EndsWith("scene/bulk"))), Times.Once());
+        }
+
+        [Test]
+        public void should_return_every_scene_as_not_cached_when_the_bulk_route_fails()
+        {
+            Mocker.GetMock<IHttpClient>()
+                .Setup(v => v.Post<SceneBulkResource>(It.IsAny<HttpRequest>()))
+                .Returns((HttpRequest request) => Response<SceneBulkResource>(request, HttpStatusCode.NotFound, "", new HttpHeader()));
+
+            Subject.PrefetchScenes(new[] { "a", "b" }).Should().BeEquivalentTo(new[] { "a", "b" });
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
+        public void should_prefetch_scenes_in_batches_of_100()
+        {
+            var sizes = new List<int>();
+
+            Mocker.GetMock<IHttpClient>()
+                .Setup(v => v.Post<SceneBulkResource>(It.IsAny<HttpRequest>()))
+                .Returns((HttpRequest request) =>
+                {
+                    sizes.Add(Json.Deserialize<List<string>>(System.Text.Encoding.UTF8.GetString(request.ContentData)).Count);
+
+                    return Response<SceneBulkResource>(request, HttpStatusCode.OK, new SceneBulkResource { Scenes = new List<MovieResource>() }.ToJson(), new HttpHeader());
+                });
+
+            Subject.PrefetchScenes(Enumerable.Range(0, 250).Select(i => $"s{i}").Concat(new[] { "s0" }));
+
+            sizes.Should().Equal(100, 100, 50);
+        }
+
+        [Test]
         public void should_page_tpdb_site_scenes_from_tpdb_route()
         {
             GivenSceneSource(SceneMetadataType.Tpdb);

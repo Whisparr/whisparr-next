@@ -148,6 +148,12 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IMovieService>()
                   .Setup(s => s.FindByForeignId(It.IsAny<string>()))
                   .Returns<string>(id => _movies.GetValueOrDefault(id));
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllSceneForeignIds()).Returns(() => _movies.Keys.ToList());
+            Mocker.GetMock<IPerformerService>().Setup(s => s.AllPerformerForeignIds()).Returns(new List<string>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(i => i.PrefetchScenes(It.IsAny<IEnumerable<string>>())).Returns(new List<string>());
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(i => i.GetSceneInfo(It.IsAny<string>()))
+                  .Returns(Tuple.Create<MovieMetadata, Studio, List<Performer>, List<NzbDrone.Core.Movies.Credits.Credit>>(null, null, new List<Performer> { new Performer { ForeignId = "tpdb-p1" } }, null));
             Mocker.GetMock<IAddMovieService>()
                   .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), It.IsAny<bool>(), It.IsAny<bool>()))
                   .Returns<List<Movie>, bool, bool>((movies, _, _) =>
@@ -1026,6 +1032,52 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
             Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
+        }
+
+        [Test]
+        public void scenes_are_prefetched_a_window_at_a_time_and_forgotten_after_each_seed()
+        {
+            _movies["tpdb-scene-0"] = new Movie { Id = 1, ForeignId = "tpdb-scene-0" };
+
+            for (var i = 0; i < 250; i++)
+            {
+                var seed = GivenSceneSeed(fileId: 1000 + i);
+                _hashes[FilePath(seed)] = new HashMatch($"tpdb-scene-{i}", $"h{i}", false);
+            }
+
+            var windows = new List<int>();
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(i => i.PrefetchScenes(It.IsAny<IEnumerable<string>>()))
+                  .Callback<IEnumerable<string>>(ids => windows.Add(ids.Count()))
+                  .Returns(new List<string>());
+
+            Run();
+
+            // 249 are new; the one already in the library is not fetched
+            windows.Should().Equal(100, 100, 49);
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.PrefetchScenes(It.Is<IEnumerable<string>>(ids => ids.Contains("tpdb-scene-0"))), Times.Never());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.PrefetchPerformers(It.Is<IEnumerable<string>>(ids => ids.Single() == "tpdb-p1")), Times.Exactly(3));
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.ForgetPrefetched(It.Is<IEnumerable<string>>(ids => ids.Count() == 1), It.IsAny<IEnumerable<string>>()), Times.Exactly(249));
+        }
+
+        [Test]
+        public void scenes_still_resolve_one_by_one_when_the_bulk_prefetch_fails()
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                var seed = GivenSceneSeed(fileId: 1000 + i);
+                _hashes[FilePath(seed)] = new HashMatch($"tpdb-scene-{i}", $"h{i}", false);
+            }
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(i => i.PrefetchScenes(It.IsAny<IEnumerable<string>>()))
+                  .Returns<IEnumerable<string>>(ids => ids.ToList());
+
+            Run();
+
+            _order.Should().Equal("tpdb-scene-0", "tpdb-scene-1", "tpdb-scene-2");
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetSceneInfo(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.PrefetchPerformers(It.IsAny<IEnumerable<string>>()), Times.Never());
         }
 
         [Test]

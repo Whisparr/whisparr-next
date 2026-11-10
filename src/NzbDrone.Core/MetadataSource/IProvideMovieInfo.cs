@@ -27,6 +27,7 @@ namespace NzbDrone.Core.MetadataSource
         bool? GetStudioHasJav(string uuid);
         bool? GetPerformerHasJav(string uuid);
         List<string> PrefetchPerformers(IEnumerable<string> stashIds);
+        List<string> PrefetchScenes(IEnumerable<string> sceneIds);
         void ForgetPrefetched(IEnumerable<string> sceneIds, IEnumerable<string> performerIds);
         Studio GetStudioInfo(string stashId);
         (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) GetPerformerWorks(string stashId);

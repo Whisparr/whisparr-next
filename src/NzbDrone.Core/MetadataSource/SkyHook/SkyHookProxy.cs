@@ -570,6 +570,58 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return notCached.Distinct().ToList();
         }
 
+        public List<string> PrefetchScenes(IEnumerable<string> sceneIds)
+        {
+            var sceneSource = _configService.WhisparrSceneMetadataSource;
+            var notCached = new List<string>();
+
+            foreach (var batch in sceneIds.Where(i => i.IsNotNullOrWhiteSpace()).Distinct().Chunk(PerformerBulkBatchSize))
+            {
+                try
+                {
+                    var httpRequest = _whisparrMetadata.Create()
+                                                     .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, "scene/bulk"))
+                                                     .Build();
+
+                    httpRequest.AllowAutoRedirect = true;
+                    httpRequest.SuppressHttpError = true;
+                    httpRequest.Headers.ContentType = "application/json";
+                    httpRequest.SetContent(batch.ToJson());
+
+                    var httpResponse = _httpClient.Post<SceneBulkResource>(httpRequest);
+
+                    if (httpResponse.StatusCode != HttpStatusCode.OK && httpResponse.StatusCode != HttpStatusCode.Accepted)
+                    {
+                        throw new HttpException(httpRequest, httpResponse);
+                    }
+
+                    var cachedIds = new HashSet<string>();
+
+                    foreach (var scene in httpResponse.Resource?.Scenes ?? new List<MovieResource>())
+                    {
+                        var id = SceneSourceIds.Key(sceneSource, scene?.ForeignIds);
+
+                        if (id == null)
+                        {
+                            continue;
+                        }
+
+                        _scenePrefetch.Set(id, scene, PrefetchLifetime);
+                        cachedIds.Add(id);
+                    }
+
+                    notCached.AddRange(batch.Where(i => !cachedIds.Contains(i)));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Scene bulk prefetch failed for {0} scenes", batch.Length);
+                    notCached.AddRange(batch);
+                }
+            }
+
+            return notCached.Distinct().ToList();
+        }
+
         public void ForgetPrefetched(IEnumerable<string> sceneIds, IEnumerable<string> performerIds)
         {
             foreach (var id in (sceneIds ?? Enumerable.Empty<string>()).Where(i => i.IsNotNullOrWhiteSpace()))
