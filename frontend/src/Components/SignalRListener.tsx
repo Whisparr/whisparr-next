@@ -243,11 +243,48 @@ function removeStudioQueryCache(updatedStudio: ForeignResource) {
   });
 }
 
-function invalidateMoviePagedQueryCache() {
-  queryClient.invalidateQueries({
-    queryKey: ['/movie/paged'],
-  });
+const LIMITED_REFRESH_GAP_MS = 5000;
+
+// A bulk operation sends an event per record, and on a large library these queries
+// take many seconds. Replacing a running refresh doesn't stop the server working
+// on it, so requests pile up and starve the operation that sent the events. Run
+// one at a time, and once more afterwards if events arrived while it was running.
+function limitRefresh(queryKeys: string[]) {
+  let isRefreshing = false;
+  let isRefreshOwed = false;
+
+  return async () => {
+    if (isRefreshing) {
+      isRefreshOwed = true;
+
+      return;
+    }
+
+    isRefreshing = true;
+
+    try {
+      do {
+        isRefreshOwed = false;
+
+        await Promise.all([
+          ...queryKeys.map((key) =>
+            queryClient.invalidateQueries(
+              { queryKey: [key] },
+              { cancelRefetch: false }
+            )
+          ),
+          new Promise((resolve) => {
+            window.setTimeout(resolve, LIMITED_REFRESH_GAP_MS);
+          }),
+        ]);
+      } while (isRefreshOwed);
+    } finally {
+      isRefreshing = false;
+    }
+  };
 }
+
+const invalidateMoviePagedQueryCache = limitRefresh(['/movie/paged']);
 
 // The by-id list behind the tag details modal, now its only caller -- the queued
 // task rows read the command's own progress message instead. It is keyed on the
@@ -293,10 +330,10 @@ function invalidateStudioPagedQueryCache() {
 // Both Wanted lists are derived: a movie's monitored state or file status decides
 // whether it belongs on them at all, so a changed movie means refetching rather
 // than patching. Invalidating stales every cached page, not just the visible one.
-function invalidateWantedQueries() {
-  queryClient.invalidateQueries({ queryKey: ['/wanted/missing'] });
-  queryClient.invalidateQueries({ queryKey: ['/wanted/cutoff'] });
-}
+const invalidateWantedQueries = limitRefresh([
+  '/wanted/missing',
+  '/wanted/cutoff',
+]);
 
 function invalidateFileDependentQueries() {
   invalidateWantedQueries();
