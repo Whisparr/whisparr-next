@@ -11,6 +11,7 @@
     "types:css": "tcm frontend/src --pattern \"**/*.module.css\"",
     "typecheck": "yarn types:css && tsc --noEmit -p frontend/tsconfig.json",
     "lint": "eslint frontend/",
+    "test": "node --test \"frontend/src/**/*.test.ts\"",
     "lint-fix": "yarn lint --fix",
     "stylelint-linux": "stylelint $(find frontend -name '*.css') --config frontend/.stylelintrc",
     "stylelint-windows": "stylelint \"frontend/**/*.css\" --config frontend/.stylelintrc"

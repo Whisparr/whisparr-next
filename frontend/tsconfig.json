@@ -9,6 +9,7 @@
       "allowSyntheticDefaultImports": true,
       "forceConsistentCasingInFileNames": true,
       "noEmit": true,
+      "allowImportingTsExtensions": true,
       "noUnusedLocals": true,
       "noUnusedParameters": true,
       "noImplicitAny": true,
