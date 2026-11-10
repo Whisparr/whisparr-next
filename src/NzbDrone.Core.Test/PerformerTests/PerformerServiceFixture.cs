@@ -59,5 +59,22 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IPerformerRepository>()
                 .Verify(v => v.VisiblePerformerNames(It.Is<List<string>>(l => l.Count == 2 && l.Contains("a") && l.Contains("b"))), Times.Once());
         }
+
+        [Test]
+        public void should_only_insert_performers_not_already_in_the_library()
+        {
+            var existing = new Performer { ForeignId = "existing" };
+            var added = new Performer { ForeignId = "new" };
+
+            Mocker.GetMock<IPerformerRepository>()
+                .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                .Returns(new List<Performer> { existing });
+
+            _subject.AddPerformers(new List<Performer> { existing, added });
+
+            Mocker.GetMock<IPerformerRepository>()
+                .Verify(v => v.InsertMany(It.Is<IList<Performer>>(l => l.Count == 1 && l[0] == added)), Times.Once());
+            Mocker.GetMock<IPerformerRepository>().Verify(v => v.AllPerformerForeignIds(), Times.Never());
+        }
     }
 }
