@@ -34,8 +34,8 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_collapse_duplicate_ids_into_one_message()
         {
-            Subject.Queue("movie", ModelAction.Updated, new[] { 1, 2 });
-            Subject.Queue("movie", ModelAction.Updated, new[] { 2, 3, 1 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1, 2 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 2, 3, 1 });
 
             Subject.Flush();
 
@@ -49,9 +49,9 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_send_separate_messages_per_name_and_action()
         {
-            Subject.Queue("movie", ModelAction.Updated, new[] { 1 });
-            Subject.Queue("movie", ModelAction.Deleted, new[] { 2 });
-            Subject.Queue("moviefile", ModelAction.Updated, new[] { 3 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1 });
+            Subject.Queue("movie", 5, ModelAction.Deleted, new[] { 2 });
+            Subject.Queue("moviefile", 5, ModelAction.Updated, new[] { 3 });
 
             Subject.Flush();
 
@@ -62,11 +62,24 @@ namespace NzbDrone.Api.Test.Http
         }
 
         [Test]
+        public void should_send_each_version_separately_with_its_own_version()
+        {
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1 });
+            Subject.Queue("movie", 6, ModelAction.Updated, new[] { 2 });
+
+            Subject.Flush();
+
+            _sent.Should().HaveCount(2);
+            _sent.Single(m => m.Version == 5).Should().Match<SignalRMessage>(m => Ids(m).SequenceEqual(new[] { 1 }));
+            _sent.Single(m => m.Version == 6).Should().Match<SignalRMessage>(m => Ids(m).SequenceEqual(new[] { 2 }));
+        }
+
+        [Test]
         public void should_send_nothing_and_drop_pending_when_disconnected()
         {
             Mocker.GetMock<IBroadcastSignalRMessage>().Setup(s => s.IsConnected).Returns(false);
 
-            Subject.Queue("movie", ModelAction.Updated, new[] { 1 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1 });
             Subject.Flush();
 
             Mocker.GetMock<IBroadcastSignalRMessage>().Setup(s => s.IsConnected).Returns(true);
@@ -78,7 +91,7 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_clear_pending_after_flush()
         {
-            Subject.Queue("movie", ModelAction.Updated, new[] { 1 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1 });
             Subject.Flush();
             Subject.Flush();
 
@@ -88,7 +101,7 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_flush_by_itself_after_the_interval()
         {
-            Subject.Queue("movie", ModelAction.Updated, new[] { 1 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 1 });
 
             var deadline = System.DateTime.UtcNow.AddSeconds(5);
             while (_sent.Count == 0 && System.DateTime.UtcNow < deadline)
@@ -102,7 +115,7 @@ namespace NzbDrone.Api.Test.Http
         [Test]
         public void should_serialise_ids_like_other_resources()
         {
-            Subject.Queue("movie", ModelAction.Updated, new[] { 7 });
+            Subject.Queue("movie", 5, ModelAction.Updated, new[] { 7 });
             Subject.Flush();
 
             System.Text.Json.JsonSerializer.Serialize(((ResourceChangeMessage<IdResource>)_sent[0].Body).Resources[0], new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))

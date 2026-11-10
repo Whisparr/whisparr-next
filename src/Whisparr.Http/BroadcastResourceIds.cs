@@ -9,7 +9,7 @@ namespace Whisparr.Http
 {
     public interface IBroadcastResourceIds
     {
-        void Queue(string name, ModelAction action, IEnumerable<int> ids);
+        void Queue(string name, int? version, ModelAction action, IEnumerable<int> ids);
         void Flush();
     }
 
@@ -28,7 +28,10 @@ namespace Whisparr.Http
         private readonly IBroadcastSignalRMessage _signalRBroadcaster;
         private readonly Timer _timer;
         private readonly object _lock = new();
-        private Dictionary<(string Name, ModelAction Action), HashSet<int>> _pending = new();
+
+        // Held across swap and send, so a flush a caller waits on can't overtake one the timer started
+        private readonly object _sendLock = new();
+        private Dictionary<(string Name, int? Version, ModelAction Action), HashSet<int>> _pending = new();
         private bool _armed;
 
         public BroadcastResourceIds(IBroadcastSignalRMessage signalRBroadcaster)
@@ -37,11 +40,11 @@ namespace Whisparr.Http
             _timer = new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
         }
 
-        public void Queue(string name, ModelAction action, IEnumerable<int> ids)
+        public void Queue(string name, int? version, ModelAction action, IEnumerable<int> ids)
         {
             lock (_lock)
             {
-                var key = (name, action);
+                var key = (name, version, action);
 
                 if (!_pending.TryGetValue(key, out var set))
                 {
@@ -60,29 +63,32 @@ namespace Whisparr.Http
 
         public void Flush()
         {
-            Dictionary<(string Name, ModelAction Action), HashSet<int>> batch;
-
-            lock (_lock)
+            lock (_sendLock)
             {
-                batch = _pending;
-                _pending = new();
-                _armed = false;
-            }
+                Dictionary<(string Name, int? Version, ModelAction Action), HashSet<int>> batch;
 
-            if (!_signalRBroadcaster.IsConnected)
-            {
-                return;
-            }
-
-            foreach (var ((name, action), ids) in batch)
-            {
-                _signalRBroadcaster.BroadcastMessage(new SignalRMessage
+                lock (_lock)
                 {
-                    Name = name,
-                    Body = new ResourceChangeMessage<IdResource>(ids.Select(id => new IdResource { Id = id }), action),
-                    Version = 5,
-                    Action = action
-                });
+                    batch = _pending;
+                    _pending = new();
+                    _armed = false;
+                }
+
+                if (!_signalRBroadcaster.IsConnected)
+                {
+                    return;
+                }
+
+                foreach (var ((name, version, action), ids) in batch)
+                {
+                    _signalRBroadcaster.BroadcastMessage(new SignalRMessage
+                    {
+                        Name = name,
+                        Body = new ResourceChangeMessage<IdResource>(ids.Select(id => new IdResource { Id = id }), action),
+                        Version = version,
+                        Action = action
+                    });
+                }
             }
         }
     }

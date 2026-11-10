@@ -118,7 +118,7 @@ namespace Whisparr.Api.V5.Commands
                 _pendingUpdates.Clear();
 
                 // The UI flushes its held-back refreshes on a finished command, so the command's last batched ids must reach it first
-                if (pendingUpdates.Any(u => u.Status is CommandStatus.Completed or CommandStatus.Failed))
+                if (pendingUpdates.Any(u => u.Status is CommandStatus.Completed or CommandStatus.Failed or CommandStatus.Aborted or CommandStatus.Cancelled or CommandStatus.Orphaned))
                 {
                     _idBroadcaster.Flush();
                 }

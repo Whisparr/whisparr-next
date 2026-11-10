@@ -135,28 +135,40 @@ function isWorksQuery(query: Query) {
   );
 }
 
-// Movie events carry only ids and details are keyed by slug, so every `/movie/{slug}`
-// detail is staled; only mounted queries refetch. `/movie/paged` has its own limiter,
-// `/movie/lookup` is a metadata-server search, and `/movie/bulk` is left to deletes.
-function isMovieDetailQuery(query: Query) {
+// Movie events carry only ids and details are keyed by slug, so the changed ids are
+// collected until the next refresh and matched against each cached detail's own id.
+const changedMovieIds = new Set<number>();
+
+function isChangedMovieDetailQuery(ids: ReadonlySet<number>, query: Query) {
   const [path] = query.queryKey;
+  const data = query.state.data as { id?: unknown } | undefined;
 
   return (
     typeof path === 'string' &&
     path.startsWith('/movie/') &&
-    !['/movie/paged', '/movie/lookup', '/movie/bulk'].some((excluded) =>
-      path.startsWith(excluded)
-    )
+    typeof data?.id === 'number' &&
+    ids.has(data.id)
   );
 }
 
-const movieCachesRefresh = limitRefresh(() =>
-  Promise.all([
-    invalidateWithoutCancel({ predicate: isMovieDetailQuery }),
+// Works lists are refreshed whole: a new scene isn't in the cached list to match by id
+const movieCachesRefresh = limitRefresh(() => {
+  const ids = new Set(changedMovieIds);
+  changedMovieIds.clear();
+
+  return Promise.all([
+    invalidateWithoutCancel({
+      predicate: (query) => isChangedMovieDetailQuery(ids, query),
+    }),
     invalidateWithoutCancel({ queryKey: [EXISTING_MOVIES_PATH] }),
     invalidateWithoutCancel({ predicate: isWorksQuery }),
-  ])
-);
+  ]);
+});
+
+function refreshChangedMovies(resources: { id: number }[] | undefined) {
+  resources?.forEach(({ id }) => changedMovieIds.add(id));
+  movieCachesRefresh.request();
+}
 
 // The by-id list behind the tag details modal, now its only caller -- the queued
 // task rows read the command's own progress message instead. It is keyed on the
@@ -361,7 +373,11 @@ function SignalRListener() {
 
         updateCommand(command);
 
-        if (command.status === 'completed' || command.status === 'failed') {
+        if (
+          ['completed', 'failed', 'aborted', 'cancelled', 'orphaned'].includes(
+            command.status
+          )
+        ) {
           flushLimitedRefreshes();
         }
       }
@@ -407,14 +423,15 @@ function SignalRListener() {
     }
 
     if (name === 'movie') {
-      // The server sends batched ids only, so every view refetches rather than patches
-      if (body.action === 'updated') {
-        moviePagedRefresh.request();
-        movieCachesRefresh.request();
-        wantedRefresh.request();
-      } else if (body.action === 'deleted') {
-        moviePagedRefresh.request();
+      // The server sends batched ids only, so every view refetches rather than patches.
+      // A deleted movie's detail page refetches too, and shows as not found.
+      moviePagedRefresh.request();
+      refreshChangedMovies(body.resources);
+
+      if (body.action === 'deleted') {
         invalidateMovieBulkQueryCache();
+      } else {
+        wantedRefresh.request();
       }
 
       return;

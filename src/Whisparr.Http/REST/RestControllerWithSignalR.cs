@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -71,7 +72,9 @@ namespace Whisparr.Http.REST
         {
             if (CanBroadcast)
             {
-                _idBroadcaster.Queue(Resource, action, ids);
+                var idBroadcaster = _idBroadcaster ?? throw new InvalidOperationException($"{GetType().Name} queues id changes but was built without an {nameof(IBroadcastResourceIds)}");
+
+                idBroadcaster.Queue(Resource, Version, action, ids);
             }
         }
 

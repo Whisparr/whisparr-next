@@ -46,21 +46,6 @@ namespace Whisparr.Api.V5.Movies
             _coverMapper = coverMapper;
         }
 
-        protected MovieControllerWithSignalR(IBroadcastSignalRMessage signalR,
-                                           IMovieService movieService,
-                                           IMovieStatisticsService movieStatisticsService,
-                                           IUpgradableSpecification upgradableSpecification,
-                                           ICustomFormatCalculationService formatCalculator,
-                                           IBroadcastSignalRMessage signalRBroadcaster,
-                                           string resource)
-            : base(signalRBroadcaster)
-        {
-            _movieService = movieService;
-            _movieStatisticsService = movieStatisticsService;
-            _upgradableSpecification = upgradableSpecification;
-            _formatCalculator = formatCalculator;
-        }
-
         protected override MovieResource GetResourceById(int id)
         {
             var movie = _movieService.GetMovie(id);
