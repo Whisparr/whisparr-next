@@ -11,6 +11,7 @@ using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.MovieStats;
 using NzbDrone.SignalR;
+using Whisparr.Http;
 using Whisparr.Http.REST;
 
 namespace Whisparr.Api.V5.Movies
@@ -33,8 +34,9 @@ namespace Whisparr.Api.V5.Movies
                                            ICustomFormatCalculationService formatCalculator,
                                            IConfigService configService,
                                            IMapCoversToLocal coverMapper,
-                                           IBroadcastSignalRMessage signalRBroadcaster)
-            : base(signalRBroadcaster)
+                                           IBroadcastSignalRMessage signalRBroadcaster,
+                                           IBroadcastResourceIds idBroadcaster)
+            : base(signalRBroadcaster, idBroadcaster)
         {
             _movieService = movieService;
             _movieStatisticsService = movieStatisticsService;
@@ -128,13 +130,13 @@ namespace Whisparr.Api.V5.Movies
         [NonAction]
         public void Handle(MovieFileImportedEvent message)
         {
-            BroadcastResourceChange(ModelAction.Updated, message.ImportedMovie.Movie.Id);
+            QueueResourceChange(ModelAction.Updated, message.ImportedMovie.Movie.Id);
         }
 
         [NonAction]
         public void Handle(MovieFileDeletedEvent message)
         {
-            BroadcastResourceChange(ModelAction.Updated, message.MovieFile.Movie.Id);
+            QueueResourceChange(ModelAction.Updated, message.MovieFile.Movie.Id);
         }
     }
 }

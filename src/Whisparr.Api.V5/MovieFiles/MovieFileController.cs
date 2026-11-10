@@ -39,8 +39,9 @@ namespace Whisparr.Api.V5.MovieFiles
                                IDeleteMediaFiles mediaFileDeletionService,
                                IMovieService movieService,
                                ICustomFormatCalculationService formatCalculator,
-                               IUpgradableSpecification upgradableSpecification)
-            : base(signalRBroadcaster)
+                               IUpgradableSpecification upgradableSpecification,
+                               IBroadcastResourceIds idBroadcaster)
+            : base(signalRBroadcaster, idBroadcaster)
         {
             _mediaFileService = mediaFileService;
             _mediaFileDeletionService = mediaFileDeletionService;
@@ -207,7 +208,7 @@ namespace Whisparr.Api.V5.MovieFiles
         [NonAction]
         public void Handle(MovieFileAddedEvent message)
         {
-            BroadcastResourceChange(ModelAction.Updated, message.MovieFile.Id);
+            QueueResourceChange(ModelAction.Updated, message.MovieFile.Id);
         }
 
         [NonAction]
@@ -215,13 +216,13 @@ namespace Whisparr.Api.V5.MovieFiles
         {
             ArgumentNullException.ThrowIfNull(message);
             ArgumentNullException.ThrowIfNull(message.MovieFile);
-            BroadcastResourceChange(ModelAction.Updated, message.MovieFile.Id);
+            QueueResourceChange(ModelAction.Updated, message.MovieFile.Id);
         }
 
         [NonAction]
         public void Handle(MovieFileDeletedEvent message)
         {
-            BroadcastResourceChange(ModelAction.Deleted, message.MovieFile.Id);
+            QueueResourceChange(ModelAction.Deleted, message.MovieFile.Id);
         }
 
         protected override MovieFileResource GetResourceById(int id)

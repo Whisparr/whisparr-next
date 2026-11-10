@@ -89,16 +89,6 @@ function updateStudioQueryCache(updatedStudio: ForeignResource) {
   });
 }
 
-function removeMovieQueryCache(updatedMovie: MovieResource & ForeignResource) {
-  if (!updatedMovie?.foreignId) {
-    return;
-  }
-
-  queryClient.removeQueries({
-    queryKey: [`/movie/${updatedMovie.titleSlug}`],
-  });
-}
-
 function removePerformerQueryCache(updatedPerformer: ForeignResource) {
   if (!updatedPerformer?.foreignId) {
     return;
@@ -145,27 +135,28 @@ function isWorksQuery(query: Query) {
   );
 }
 
-// Details are keyed by slug, so the updated movies are collected until the next refresh.
-// Only mounted queries refetch; the rest are just marked stale.
-const updatedMovieSlugs = new Set<string>();
+// Movie events carry only ids and details are keyed by slug, so every `/movie/{slug}`
+// detail is staled; only mounted queries refetch. `/movie/paged` has its own limiter,
+// `/movie/lookup` is a metadata-server search, and `/movie/bulk` is left to deletes.
+function isMovieDetailQuery(query: Query) {
+  const [path] = query.queryKey;
 
-const movieCachesRefresh = limitRefresh(() => {
-  const slugs = [...updatedMovieSlugs];
-  updatedMovieSlugs.clear();
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/movie/') &&
+    !['/movie/paged', '/movie/lookup', '/movie/bulk'].some((excluded) =>
+      path.startsWith(excluded)
+    )
+  );
+}
 
-  return Promise.all([
-    ...slugs.map((slug) =>
-      invalidateWithoutCancel({ queryKey: [`/movie/${slug}`] })
-    ),
+const movieCachesRefresh = limitRefresh(() =>
+  Promise.all([
+    invalidateWithoutCancel({ predicate: isMovieDetailQuery }),
     invalidateWithoutCancel({ queryKey: [EXISTING_MOVIES_PATH] }),
     invalidateWithoutCancel({ predicate: isWorksQuery }),
-  ]);
-});
-
-function invalidateUpdatedMovieQueries(movies: MovieResource[]) {
-  movies.forEach((movie) => updatedMovieSlugs.add(movie.titleSlug));
-  movieCachesRefresh.request();
-}
+  ])
+);
 
 // The by-id list behind the tag details modal, now its only caller -- the queued
 // task rows read the command's own progress message instead. It is keyed on the
@@ -218,15 +209,25 @@ const wantedRefresh = limitRefresh(() =>
   ])
 );
 
+const movieFileRefresh = limitRefresh(() =>
+  invalidateWithoutCancel({ queryKey: ['/moviefile'] })
+);
+
+const calendarRefresh = limitRefresh(() =>
+  invalidateWithoutCancel({ queryKey: ['/calendar'] })
+);
+
 function flushLimitedRefreshes() {
   moviePagedRefresh.flush();
   movieCachesRefresh.flush();
   wantedRefresh.flush();
+  movieFileRefresh.flush();
+  calendarRefresh.flush();
 }
 
 function invalidateFileDependentQueries() {
   wantedRefresh.request();
-  queryClient.invalidateQueries({ queryKey: ['/calendar'] });
+  calendarRefresh.request();
 }
 
 // Patches one record across every cached page of a `usePagedApiQuery` list. The
@@ -336,8 +337,11 @@ function SignalRListener() {
     const { name, body } = message;
 
     if (name === 'calendar') {
+      // A grab still sends its full resource, which a refetch can't reproduce
       if (body.action === 'updated' && body.resource) {
         updateCalendarQueryCache(body.resource);
+      } else {
+        calendarRefresh.request();
       }
 
       return;
@@ -367,7 +371,7 @@ function SignalRListener() {
 
     if (name === 'moviefile') {
       if (body.action === 'updated' || body.action === 'deleted') {
-        queryClient.invalidateQueries({ queryKey: ['/moviefile'] });
+        movieFileRefresh.request();
 
         // Gaining or losing a file moves a movie on and off both Wanted lists
         // and changes its calendar row.
@@ -403,43 +407,14 @@ function SignalRListener() {
     }
 
     if (name === 'movie') {
-      // Support batch payloads (Resources) and single (resource)
-      if (Array.isArray(body.resources) && body.resources.length > 0) {
-        // Batched update
-        if (body.action === 'updated') {
-          invalidateUpdatedMovieQueries(body.resources);
-        } else if (body.action === 'deleted') {
-          body.resources.forEach(removeMovieQueryCache);
-        }
-
-        moviePagedRefresh.request();
-
-        if (body.action === 'deleted') {
-          invalidateMovieBulkQueryCache();
-        }
-
-        if (body.action === 'updated') {
-          wantedRefresh.request();
-        }
-
-        return;
-      }
-
-      // Fallback: single resource
-      if (body.action === 'updated' && body.resource) {
-        invalidateUpdatedMovieQueries([body.resource]);
-      } else if (body.action === 'deleted' && body.resource) {
-        removeMovieQueryCache(body.resource);
-      }
-
-      moviePagedRefresh.request();
-
-      if (body.action === 'deleted') {
-        invalidateMovieBulkQueryCache();
-      }
-
+      // The server sends batched ids only, so every view refetches rather than patches
       if (body.action === 'updated') {
+        moviePagedRefresh.request();
+        movieCachesRefresh.request();
         wantedRefresh.request();
+      } else if (body.action === 'deleted') {
+        moviePagedRefresh.request();
+        invalidateMovieBulkQueryCache();
       }
 
       return;
@@ -544,17 +519,12 @@ function SignalRListener() {
       return;
     }
 
-    if (name === 'wanted/cutoff') {
+    if (name === 'wanted/cutoff' || name === 'wanted/missing') {
+      // A grab still sends its full resource, which a refetch can't reproduce
       if (body.action === 'updated' && body.resource) {
-        updatePagedItem('/wanted/cutoff', body.resource);
-      }
-
-      return;
-    }
-
-    if (name === 'wanted/missing') {
-      if (body.action === 'updated' && body.resource) {
-        updatePagedItem('/wanted/missing', body.resource);
+        updatePagedItem(`/${name}`, body.resource);
+      } else {
+        wantedRefresh.request();
       }
 
       return;
