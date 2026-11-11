@@ -42,7 +42,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         private const string SinceConst = "since";
         private const string StashPrefixConst = "stash:";
         private const string StashIdPrefixConst = "stashid:";
-        private const int PerformerBulkBatchSize = 100;
+        private const int BulkBatchSize = 100;
         private static readonly string[] TpdbLookupPrefixes = { StashPrefixConst, StashIdPrefixConst, TpdbPrefix, TpdbIdPrefix };
         private static readonly TimeSpan PrefetchLifetime = TimeSpan.FromHours(2);
         private static readonly TimeSpan MinRetryAfter = TimeSpan.FromSeconds(1);
@@ -520,67 +520,47 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         public List<string> PrefetchPerformers(IEnumerable<string> stashIds)
         {
             var sceneSource = _configService.WhisparrSceneMetadataSource;
-            var notCached = new List<string>();
 
-            foreach (var batch in stashIds.Where(i => i.IsNotNullOrWhiteSpace()).Distinct().Chunk(PerformerBulkBatchSize))
-            {
-                try
-                {
-                    var httpRequest = _whisparrMetadata.Create()
-                                                     .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, "performer/bulk"))
-                                                     .Build();
-
-                    httpRequest.AllowAutoRedirect = true;
-                    httpRequest.SuppressHttpError = true;
-                    httpRequest.Headers.ContentType = "application/json";
-                    httpRequest.SetContent(batch.ToJson());
-
-                    var httpResponse = _httpClient.Post<PerformerBulkResource>(httpRequest);
-
-                    if (httpResponse.StatusCode != HttpStatusCode.OK && httpResponse.StatusCode != HttpStatusCode.Accepted)
-                    {
-                        throw new HttpException(httpRequest, httpResponse);
-                    }
-
-                    var resource = httpResponse.Resource;
-                    var cachedIds = new HashSet<string>();
-
-                    foreach (var performer in resource?.Performers ?? new List<PerformerResource>())
-                    {
-                        var id = SceneSourceIds.Key(sceneSource, performer?.ForeignIds);
-
-                        if (id == null)
-                        {
-                            continue;
-                        }
-
-                        _performerPrefetch.Set(id, performer, PrefetchLifetime);
-                        cachedIds.Add(id);
-                    }
-
-                    notCached.AddRange(batch.Where(i => !cachedIds.Contains(i)));
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warn(ex, "Performer bulk prefetch failed for {0} performers", batch.Length);
-                    notCached.AddRange(batch);
-                }
-            }
-
-            return notCached.Distinct().ToList();
+            return PrefetchBulk<PerformerBulkResource, PerformerResource>(
+                stashIds,
+                SceneSourceIds.Route(sceneSource, "performer/bulk"),
+                "performers",
+                r => r.Performers,
+                p => SceneSourceIds.Key(sceneSource, p?.ForeignIds),
+                _performerPrefetch);
         }
 
         public List<string> PrefetchScenes(IEnumerable<string> sceneIds)
         {
             var sceneSource = _configService.WhisparrSceneMetadataSource;
+
+            return PrefetchBulk<SceneBulkResource, MovieResource>(
+                sceneIds,
+                SceneSourceIds.Route(sceneSource, "scene/bulk"),
+                "scenes",
+                r => r.Scenes,
+                s => SceneSourceIds.Key(sceneSource, s?.ForeignIds),
+                _scenePrefetch);
+        }
+
+        // Every bulk route shares one contract: ids in, cached items out, the rest pending. Whatever isn't cached
+        // here, failures included, is returned for the caller's own per-item fetch.
+        private List<string> PrefetchBulk<TBulk, TItem>(IEnumerable<string> ids,
+                                                        string route,
+                                                        string kind,
+                                                        Func<TBulk, List<TItem>> items,
+                                                        Func<TItem, string> key,
+                                                        ICached<TItem> cache)
+            where TBulk : class, new()
+        {
             var notCached = new List<string>();
 
-            foreach (var batch in sceneIds.Where(i => i.IsNotNullOrWhiteSpace()).Distinct().Chunk(PerformerBulkBatchSize))
+            foreach (var batch in ids.Where(i => i.IsNotNullOrWhiteSpace()).Distinct().Chunk(BulkBatchSize))
             {
                 try
                 {
                     var httpRequest = _whisparrMetadata.Create()
-                                                     .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, "scene/bulk"))
+                                                     .SetSegment(RouteConst, route)
                                                      .Build();
 
                     httpRequest.AllowAutoRedirect = true;
@@ -588,7 +568,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                     httpRequest.Headers.ContentType = "application/json";
                     httpRequest.SetContent(batch.ToJson());
 
-                    var httpResponse = _httpClient.Post<SceneBulkResource>(httpRequest);
+                    var httpResponse = _httpClient.Post<TBulk>(httpRequest);
 
                     if (httpResponse.StatusCode != HttpStatusCode.OK && httpResponse.StatusCode != HttpStatusCode.Accepted)
                     {
@@ -596,17 +576,18 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                     }
 
                     var cachedIds = new HashSet<string>();
+                    var resource = httpResponse.Resource;
 
-                    foreach (var scene in httpResponse.Resource?.Scenes ?? new List<MovieResource>())
+                    foreach (var item in (resource == null ? null : items(resource)) ?? new List<TItem>())
                     {
-                        var id = SceneSourceIds.Key(sceneSource, scene?.ForeignIds);
+                        var id = key(item);
 
                         if (id == null)
                         {
                             continue;
                         }
 
-                        _scenePrefetch.Set(id, scene, PrefetchLifetime);
+                        cache.Set(id, item, PrefetchLifetime);
                         cachedIds.Add(id);
                     }
 
@@ -614,7 +595,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn(ex, "Scene bulk prefetch failed for {0} scenes", batch.Length);
+                    _logger.Warn(ex, "Bulk prefetch failed for {0} {1}", batch.Length, kind);
                     notCached.AddRange(batch);
                 }
             }
