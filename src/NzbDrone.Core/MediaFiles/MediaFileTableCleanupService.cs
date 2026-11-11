@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using NLog;
 using NzbDrone.Common;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
@@ -26,16 +27,19 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMediaFileService _mediaFileService;
         private readonly IMovieService _movieService;
         private readonly IEventAggregator _eventAggregator;
+        private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
 
         public MediaFileTableCleanupService(IMediaFileService mediaFileService,
                                             IMovieService movieService,
                                             IEventAggregator eventAggregator,
+                                            IDiskProvider diskProvider,
                                             Logger logger)
         {
             _mediaFileService = mediaFileService;
             _movieService = movieService;
             _eventAggregator = eventAggregator;
+            _diskProvider = diskProvider;
             _logger = logger;
         }
 
@@ -51,7 +55,8 @@ namespace NzbDrone.Core.MediaFiles
 
                 try
                 {
-                    if (!filesOnDiskKeys.Contains(movieFilePath))
+                    // A listing can be stale or partial (shared folders), so confirm on disk right before deleting.
+                    if (!filesOnDiskKeys.Contains(movieFilePath) && !_diskProvider.FileExists(movieFilePath))
                     {
                         _logger.Debug("File [{0}] no longer exists on disk, removing from db", movieFilePath);
                         _mediaFileService.Delete(movieFile, DeleteMediaFileReason.MissingFromDisk);

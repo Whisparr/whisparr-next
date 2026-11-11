@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NzbDrone.Common;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
@@ -14,11 +15,13 @@ namespace NzbDrone.Core.Extras
     {
         private readonly IExtraFileService<TExtraFile> _extraFileService;
         private readonly IMediaFileService _mediaFileService;
+        private readonly IDiskProvider _diskProvider;
 
-        public ImportExistingExtraFilesBase(IExtraFileService<TExtraFile> extraFileService, IMediaFileService mediaFileService)
+        public ImportExistingExtraFilesBase(IExtraFileService<TExtraFile> extraFileService, IMediaFileService mediaFileService, IDiskProvider diskProvider)
         {
             _extraFileService = extraFileService;
             _mediaFileService = mediaFileService;
+            _diskProvider = diskProvider;
         }
 
         public abstract int Order { get; }
@@ -72,7 +75,9 @@ namespace NzbDrone.Core.Extras
                 .Select(f => f.Id);
 
             var deletedFiles = movieFiles.ExceptBy(f => Path.Combine(movie.Path, f.RelativePath), filesOnDisk, i => i, PathEqualityComparer.Instance)
-                .Select(f => f.Id);
+                .Where(f => !_diskProvider.FileExists(Path.Combine(movie.Path, f.RelativePath)))
+                .Select(f => f.Id)
+                .ToList();
 
             _extraFileService.DeleteMany(alreadyImportedFileIds);
             _extraFileService.DeleteMany(deletedFiles);

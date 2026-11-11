@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
@@ -24,8 +25,9 @@ namespace NzbDrone.Core.Extras.Others
                                           ISceneFolderLayout sceneFolderLayout,
                                           ISidecarOwnership sidecarOwnership,
                                           IMediaFileService mediaFileService,
+                                          IDiskProvider diskProvider,
                                           Logger logger)
-            : base(otherExtraFileService, mediaFileService)
+            : base(otherExtraFileService, mediaFileService, diskProvider)
         {
             _otherExtraFileService = otherExtraFileService;
             _parsingService = parsingService;

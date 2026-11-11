@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common.Disk;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.Extras.Subtitles;
@@ -27,8 +28,9 @@ namespace NzbDrone.Core.Extras.Metadata
                                         ISceneFolderLayout sceneFolderLayout,
                                         ISidecarOwnership sidecarOwnership,
                                         IMediaFileService mediaFileService,
+                                        IDiskProvider diskProvider,
                                         Logger logger)
-        : base(metadataFileService, mediaFileService)
+        : base(metadataFileService, mediaFileService, diskProvider)
         {
             _metadataFileService = metadataFileService;
             _parsingService = parsingService;

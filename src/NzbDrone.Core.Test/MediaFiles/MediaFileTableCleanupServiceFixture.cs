@@ -74,6 +74,23 @@ namespace NzbDrone.Core.Test.MediaFiles
             Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.Is<MovieFile>(e => e.RelativePath == DELETED_PATH), DeleteMediaFileReason.MissingFromDisk), Times.Exactly(2));
         }
 
+        [TestCase(true, 0)]
+        [TestCase(false, 1)]
+        public void should_only_delete_file_missing_from_listing_when_gone_from_disk(bool onDisk, int deletes)
+        {
+            var movieFile = Builder<MovieFile>.CreateNew().With(c => c.RelativePath = "a.mp4").Build();
+
+            GivenMovieFiles(new[] { movieFile });
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(e => e.FileExists(Path.Combine(_movie.Path, "a.mp4")))
+                  .Returns(onDisk);
+
+            Subject.Clean(_movie, new List<string>());
+
+            Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), DeleteMediaFileReason.MissingFromDisk), Times.Exactly(deletes));
+        }
+
         [Test]
         [Ignore("idc")]
         public void should_delete_files_that_dont_belong_to_any_episodes()
