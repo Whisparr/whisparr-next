@@ -92,8 +92,13 @@ namespace NzbDrone.Core.RootFolders
             var existing = _importFileRepository.FindByRootFolderId(rootFolder.Id);
             var known = new HashSet<string>(existing.Select(f => f.Path), PathEqualityComparer.Instance);
 
-            // Something else linked these since they were listed, such as a scene's own disk scan
-            var linked = existing.Where(f => tracked.Contains(f.Path)).Select(f => f.Id).ToList();
+            var found = new HashSet<string>(files, PathEqualityComparer.Instance);
+
+            // Something else linked these since they were listed, such as a scene's own disk scan, or they're gone from disk
+            var toRemove = existing
+                .Where(f => tracked.Contains(f.Path) || (!found.Contains(f.Path) && !_diskProvider.FileExists(f.Path)))
+                .Select(f => f.Id)
+                .ToList();
 
             var toAdd = files
                 .Where(f => !tracked.Contains(f) && !known.Contains(f))
@@ -106,7 +111,7 @@ namespace NzbDrone.Core.RootFolders
                 })
                 .ToList();
 
-            _importFileRepository.DeleteMany(linked);
+            _importFileRepository.DeleteMany(toRemove);
             _importFileRepository.InsertMany(toAdd);
 
             return toAdd.Count;
