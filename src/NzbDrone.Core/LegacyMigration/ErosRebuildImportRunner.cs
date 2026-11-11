@@ -987,9 +987,10 @@ namespace NzbDrone.Core.LegacyMigration
 
             var studioId = seed.LegacyStudioForeignId.IsNotNullOrWhiteSpace() ? context.StudioIds.GetValueOrDefault(seed.LegacyStudioForeignId) : null;
 
-            if (sceneId == null && studioId.IsNotNullOrWhiteSpace())
+            // An exact match needs the date, so a seed without one has nothing to look up
+            if (sceneId == null && studioId.IsNotNullOrWhiteSpace() && seed.ReleaseDate.HasValue)
             {
-                sceneId = LegacySceneMatcher.FindExact(Catalog(studioId, context), seed.Title, seed.ReleaseDate);
+                sceneId = LegacySceneMatcher.FindExact(ScenesOn(studioId, seed.ReleaseDate.Value.Date, context), seed.Title, seed.ReleaseDate);
             }
 
             // The catalog only holds the studio the scene was resolved to, and the source may file it under another.
@@ -1079,19 +1080,21 @@ namespace NzbDrone.Core.LegacyMigration
             return match.SceneId;
         }
 
-        // The studio's catalog, walked once per pass
-        private List<SceneKey> Catalog(string studioId, SceneContext context)
+        // The studio's scenes on one date, fetched once per pass: the whole catalog would mean waiting on every scene
+        private List<SceneKey> ScenesOn(string studioId, DateTime date, SceneContext context)
         {
-            if (context.Catalogs.TryGetValue(studioId, out var cached))
+            var cacheKey = $"{studioId}|{date:yyyy-MM-dd}";
+
+            if (context.Catalogs.TryGetValue(cacheKey, out var cached))
             {
                 return cached;
             }
 
-            context.Progress.Status("Fetching a studio's catalog", null);
+            context.Progress.Status("Matching by studio and date", null);
 
             var keys = new List<SceneKey>();
             var result = _pageWalker.Walk(
-                cursor => _movieInfo.GetStudioScenePage(studioId, cursor),
+                cursor => _movieInfo.GetStudioScenesOn(studioId, date, cursor),
                 page => keys.AddRange((page.Items ?? new List<ScenePageItem>()).Select(i => new SceneKey(i.SceneId, i.Title, i.ReleaseDate))),
                 () => true);
 
@@ -1101,7 +1104,7 @@ namespace NzbDrone.Core.LegacyMigration
                 throw new TimeoutException($"The scene catalog of studio {studioId} was not complete");
             }
 
-            context.Catalogs[studioId] = keys;
+            context.Catalogs[cacheKey] = keys;
 
             return keys;
         }

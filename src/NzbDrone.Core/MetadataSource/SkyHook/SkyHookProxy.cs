@@ -33,6 +33,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
     public class SkyHookProxy : IProvideMovieInfo, ISearchForNewMovie
     {
         private const string RouteConst = "route";
+        private const string PerformerRoute = "performer";
         private const string TmdbPrefix = "tmdb:";
         private const string TmdbIdPrefix = "tmdbid:";
         private const string TpdbPrefix = "tpdb:";
@@ -502,9 +503,14 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             return GetScenePage("site", stashId, cursor);
         }
 
+        public ScenePage GetStudioScenesOn(string stashId, DateTime date, string cursor)
+        {
+            return GetScenePage("site", stashId, cursor, date: date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        }
+
         public ScenePage GetPerformerScenePage(string stashId, string cursor)
         {
-            return GetScenePage("performer", stashId, cursor);
+            return GetScenePage(PerformerRoute, stashId, cursor);
         }
 
         public ScenePage GetStudioJavPage(string uuid, string cursor)
@@ -514,7 +520,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
         public ScenePage GetPerformerJavPage(string uuid, string cursor)
         {
-            return GetScenePage("performer", uuid, cursor, "jav");
+            return GetScenePage(PerformerRoute, uuid, cursor, "jav");
         }
 
         public List<string> PrefetchPerformers(IEnumerable<string> stashIds)
@@ -617,12 +623,17 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         }
 
         // The jav lane is TPDB-only, so it always takes the tpdb/ route whatever the scene source is.
-        private ScenePage GetScenePage(string route, string stashId, string cursor, string lane = "scenes")
+        private ScenePage GetScenePage(string route, string stashId, string cursor, string lane = "scenes", string date = null)
         {
             var sceneSource = lane == "jav" ? SceneMetadataType.Tpdb : _configService.WhisparrSceneMetadataSource;
             var builder = _whisparrMetadata.Create()
                                            .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, route))
                                            .Resource($"{stashId}/{lane}/full");
+
+            if (date != null)
+            {
+                builder.AddQueryParam("date", date);
+            }
 
             if (cursor.IsNotNullOrWhiteSpace())
             {
@@ -911,7 +922,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             }
 
             var httpRequest = _whisparrMetadata.Create()
-                                             .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, "performer"))
+                                             .SetSegment(RouteConst, SceneSourceIds.Route(sceneSource, PerformerRoute))
                                              .Resource(stashId)
                                              .Build();
 
@@ -971,7 +982,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
         public (List<string> StashdbIds, List<string> TpdbIds, List<int> TmdbIds) GetPerformerWorks(string stashId)
         {
             var httpRequest = _whisparrMetadata.Create()
-                                             .SetSegment(RouteConst, SceneSourceIds.Route(_configService.WhisparrSceneMetadataSource, "performer"))
+                                             .SetSegment(RouteConst, SceneSourceIds.Route(_configService.WhisparrSceneMetadataSource, PerformerRoute))
                                              .Resource($"{stashId}/works")
                                              .Build();
 

@@ -179,6 +179,12 @@ namespace NzbDrone.Core.Test.LegacyMigration
             Mocker.GetMock<IProvideMovieInfo>()
                   .Setup(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()))
                   .Returns<string, string>((id, _) => new ScenePage { Items = _catalogs.GetValueOrDefault(id) ?? new List<ScenePageItem>() });
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(i => i.GetStudioScenesOn(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()))
+                  .Returns<string, DateTime, string>((id, date, _) => new ScenePage
+                  {
+                      Items = (_catalogs.GetValueOrDefault(id) ?? new List<ScenePageItem>()).Where(s => s.ReleaseDate?.Date == date).ToList()
+                  });
 
             Mocker.GetMock<ILegacyHashMatcher>()
                   .Setup(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()))
@@ -1030,7 +1036,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
             _sceneSeeds[0].Resolved.Should().BeFalse();
             _sceneSeeds[0].Attempts.Should().Be(0);
             Mocker.GetMock<ILegacyHashMatcher>().Verify(m => m.Match(It.IsAny<IReadOnlyCollection<HashQuery>>(), It.IsAny<Action<string, long>>()), Times.Never());
-            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenesOn(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()), Times.Never());
             VerifyMoviesAdded(Times.Never());
         }
 
@@ -1173,7 +1179,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
         }
 
         [Test]
-        public void the_studio_catalog_is_walked_once_for_all_its_scenes()
+        public void a_studio_date_is_fetched_once_for_all_its_scenes_and_never_the_whole_catalog()
         {
             GivenStudioSeed("stash-s1");
             var first = GivenSceneSeed("stash-s1");
@@ -1185,8 +1191,21 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage("new-stash-s1", null), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenesOn("new-stash-s1", first.ReleaseDate.Value.Date, null), Times.Once());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
             _movies.Keys.Should().BeEquivalentTo("scene-1", "scene-2");
+        }
+
+        [Test]
+        public void scene_without_a_date_is_not_looked_up_by_studio()
+        {
+            GivenStudioSeed("stash-s1");
+            var seed = GivenSceneSeed("stash-s1");
+            seed.ReleaseDate = null;
+
+            Run();
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenesOn(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()), Times.Never());
         }
 
         [Test]
@@ -1198,7 +1217,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Run();
 
-            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenePage(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IProvideMovieInfo>().Verify(i => i.GetStudioScenesOn(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()), Times.Never());
             VerifyReport("Scenes", "Studio stash-s1: Big Scene (2020-05-01)", "Legacy StashDB id legacy-scene-1", Times.Once());
             seed.Resolved.Should().BeTrue();
         }

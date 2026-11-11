@@ -57,6 +57,22 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
+        public void should_request_one_date_of_site_scenes()
+        {
+            GivenPage(HttpStatusCode.OK, new ScenePageResource { Items = new List<MovieResource>() });
+
+            Subject.GetStudioScenesOn(StudioId, new DateTime(2020, 5, 1, 23, 30, 0, DateTimeKind.Utc), "abc");
+
+            _pageRequest.Url.Path.Should().EndWith($"site/{StudioId}/scenes/full");
+            _pageRequest.Url.Query.Should().Contain("date=2020-05-01");
+            _pageRequest.Url.Query.Should().Contain("cursor=abc");
+
+            Subject.GetStudioScenePage(StudioId, null);
+
+            _pageRequest.Url.Query.Should().NotContain("date");
+        }
+
+        [Test]
         public void should_map_complete_page()
         {
             GivenPage(
@@ -341,7 +357,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
                 .Setup(v => v.Post<SceneBulkResource>(It.IsAny<HttpRequest>()))
                 .Returns((HttpRequest request) => Response<SceneBulkResource>(request, HttpStatusCode.NotFound, "", new HttpHeader()));
 
-            Subject.PrefetchScenes(new[] { "a", "b" }).Should().BeEquivalentTo(new[] { "a", "b" });
+            Subject.PrefetchScenes(new[] { "a", "b" }).Should().BeEquivalentTo("a", "b");
             ExceptionVerification.ExpectedWarns(1);
         }
 
