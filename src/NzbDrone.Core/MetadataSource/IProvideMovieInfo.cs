@@ -19,6 +19,9 @@ namespace NzbDrone.Core.MetadataSource
         MovieCollection GetCollectionInfo(int tmdbId);
         Performer GetPerformerInfo(string stashId);
         ScenePage GetStudioScenePage(string stashId, string cursor);
+
+        // Only the studio's scenes released on date
+        ScenePage GetStudioScenesOn(string stashId, DateTime date, string cursor);
         ScenePage GetPerformerScenePage(string stashId, string cursor);
         Tuple<MovieMetadata, Studio, List<Performer>, List<Credit>> GetJavInfo(string uuid);
         ScenePage GetStudioJavPage(string uuid, string cursor);
