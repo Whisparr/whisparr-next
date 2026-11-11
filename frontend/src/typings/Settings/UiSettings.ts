@@ -1,5 +1,7 @@
+import { ThemeName } from 'Styles/Themes';
+
 export default interface UiSettings {
-  theme: 'auto' | 'dark' | 'light';
+  theme: ThemeName;
   showRelativeDates: boolean;
   shortDateFormat: string;
   longDateFormat: string;

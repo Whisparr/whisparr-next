@@ -14,11 +14,13 @@ import Link from 'Components/Link/Link';
 import OverlayScroller from 'Components/Scroller/OverlayScroller';
 import Scroller from 'Components/Scroller/Scroller';
 import usePrevious from 'Helpers/Hooks/usePrevious';
+import useTheme from 'Helpers/Hooks/useTheme';
 import { icons } from 'Helpers/Props';
 import { VERTICAL } from 'Helpers/Props/scrollDirections';
 import { useMovie } from 'Movie/useMovie';
 import { useGeneralSettings } from 'Settings/General/useGeneralSettings';
 import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
+import { imagesPath } from 'Styles/Themes';
 import dimensions from 'Styles/Variables/dimensions';
 import useMigrationReport from 'System/MigrationReport/useMigrationReport';
 import HealthStatus from 'System/Status/Health/HealthStatus';
@@ -295,6 +297,7 @@ function PageSidebar({
   isSmallScreen,
 }: Readonly<PageSidebarProps>) {
   const location = useLocation();
+  const theme = useTheme();
   const sidebarRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -585,7 +588,7 @@ function PageSidebar({
             <Link className={styles.logoLink} to="/">
               <img
                 className={styles.logo}
-                src={`${window.Whisparr.urlBase}/Content/Images/logo.png`}
+                src={`${imagesPath(theme)}/logo.png`}
                 alt="Whisparr Logo"
               />
             </Link>

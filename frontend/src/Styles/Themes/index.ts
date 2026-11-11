@@ -1,7 +1,15 @@
 import dark from './dark';
 import light from './light';
+import pinkDark from './pinkDark';
+import pinkLight from './pinkLight';
 
-export type ThemeName = 'auto' | 'light' | 'dark';
+export type ThemeName = 'auto' | 'light' | 'dark' | 'pinkLight' | 'pinkDark';
+
+// The pink themes bring V2's logos with them; the rest keep V5's.
+export const isPinkTheme = (theme: string) => theme.startsWith('pink');
+
+export const imagesPath = (theme: string) =>
+  `${window.Whisparr.urlBase}/Content/Images${isPinkTheme(theme) ? '/V2' : ''}`;
 
 // Every variable both palettes define. The two are not key-identical, so this
 // is the intersection rather than either one on its own; the four keys that
@@ -30,4 +38,6 @@ export default {
   auto,
   light,
   dark,
+  pinkLight,
+  pinkDark,
 } satisfies Record<ThemeName, Theme>;
