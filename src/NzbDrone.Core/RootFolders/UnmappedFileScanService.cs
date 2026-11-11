@@ -85,6 +85,14 @@ namespace NzbDrone.Core.RootFolders
                 return 0;
             }
 
+            // An offline share often leaves its mount point behind, empty; scanning it would delete every row, dismissals included
+            if (_diskProvider.FolderEmpty(rootFolder.Path))
+            {
+                _logger.Warn("Skipping root folder {0}: it is empty", rootFolder.Path);
+
+                return 0;
+            }
+
             _logger.ProgressInfo("Scanning {0} for unmapped files", rootFolder.Path);
 
             // Extras stay in: their folder names include "scenes" and "other", and a stray clip can be dismissed but a skipped file is never seen
