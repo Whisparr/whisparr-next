@@ -14,7 +14,7 @@ import PageContentBody from 'Components/Page/PageContentBody';
 import { inputTypes, kinds } from 'Helpers/Props';
 import { useFilteredLanguages } from 'Language/useLanguages';
 import SettingsToolbar from 'Settings/SettingsToolbar';
-import themes from 'Styles/Themes';
+import themes, { isPinkTheme } from 'Styles/Themes';
 import { InputChanged } from 'typings/inputs';
 import UiSettings from 'typings/Settings/UiSettings';
 import timeZoneOptions from 'Utilities/Date/timeZoneOptions';
@@ -111,7 +111,9 @@ function UISettings() {
   const themeOptions = useMemo(() => {
     return Object.keys(themes).map((theme) => ({
       key: theme,
-      value: titleCase(theme),
+      value: isPinkTheme(theme)
+        ? translate(theme === 'pinkDark' ? 'ThemePinkDark' : 'ThemePinkLight')
+        : titleCase(theme),
     }));
   }, []);
 

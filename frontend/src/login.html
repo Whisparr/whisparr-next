@@ -611,9 +611,15 @@
 
     var theme = "_THEME_";
     var defaultDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var finalTheme = theme === 'dark' || (theme === 'auto' && defaultDark) ?
+    var finalTheme = theme === 'dark' || theme === 'pinkDark' || (theme === 'auto' && defaultDark) ?
       dark :
       light;
+
+    // The pink themes carry V2's logo.
+    if (theme.indexOf('pink') === 0) {
+      var logo = document.querySelector('.logo');
+      logo.src = logo.getAttribute('src').replace('/Content/Images/', '/Content/Images/V2/');
+    }
 
     Object.entries(finalTheme).forEach(([key, value]) => {
       document.documentElement.style.setProperty(

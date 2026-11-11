@@ -2416,6 +2416,8 @@
   "TheLogLevelDefault": "The log level defaults to 'Debug' and can be changed in [General Settings](/settings/general)",
   "Theme": "Theme",
   "ThemeHelpText": "Change Application UI Theme, 'Auto' Theme will use your OS Theme to set Light or Dark mode. Inspired by Theme.Park",
+  "ThemePinkDark": "Pink (Dark)",
+  "ThemePinkLight": "Pink (Light)",
   "ThisCannotBeCancelled": "This cannot be cancelled once started without disabling all of your indexers.",
   "Thursday": "Thursday",
   "Time": "Time",

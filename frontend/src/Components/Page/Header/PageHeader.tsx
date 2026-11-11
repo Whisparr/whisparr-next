@@ -3,7 +3,9 @@ import { setIsSidebarVisible, useAppValue } from 'App/appStore';
 import IconButton from 'Components/Link/IconButton';
 import Link from 'Components/Link/Link';
 import useKeyboardShortcuts from 'Helpers/Hooks/useKeyboardShortcuts';
+import useTheme from 'Helpers/Hooks/useTheme';
 import { icons } from 'Helpers/Props';
+import { imagesPath, isPinkTheme } from 'Styles/Themes';
 import translate from 'Utilities/String/translate';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import MovieSearchInput from './MovieSearchInput';
@@ -17,6 +19,9 @@ interface PageHeaderProps {
 
 function PageHeader({ isSmallScreen }: Readonly<PageHeaderProps>) {
   const isSidebarVisible = useAppValue('isSidebarVisible');
+  const theme = useTheme();
+  // V2 has no wide wordmark, so its square logo stands in on every screen size.
+  const showSquareLogo = isSmallScreen || isPinkTheme(theme);
 
   const [isKeyboardShortcutsModalOpen, setIsKeyboardShortcutsModalOpen] =
     useState(false);
@@ -51,12 +56,8 @@ function PageHeader({ isSmallScreen }: Readonly<PageHeaderProps>) {
       <div className={styles.logoContainer}>
         <Link className={styles.logoLink} to="/">
           <img
-            className={isSmallScreen ? styles.logo : styles.logoFull}
-            src={
-              isSmallScreen
-                ? `${window.Whisparr.urlBase}/Content/Images/logo.png`
-                : `${window.Whisparr.urlBase}/Content/Images/logo-full.png`
-            }
+            className={showSquareLogo ? styles.logo : styles.logoFull}
+            src={`${imagesPath(theme)}/${showSquareLogo ? 'logo.png' : 'logo-full.png'}`}
             alt="Whisparr Logo"
           />
         </Link>

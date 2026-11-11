@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
-import themes from 'Styles/Themes';
+import themes, { ThemeName } from 'Styles/Themes';
 
 const systemTheme = () =>
   window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
-const useTheme = (): 'dark' | 'light' => {
+const useTheme = (): Exclude<ThemeName, 'auto'> => {
   // `theme` is undefined until `/config/ui` resolves, and the server hands the
   // page its own copy in `window.Whisparr.theme` for exactly that window.
   const selectedTheme = useUiSettingsValues().theme || window.Whisparr.theme;
