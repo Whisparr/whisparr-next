@@ -42,15 +42,15 @@ namespace NzbDrone.Core.Extras.Metadata
 
         public override int Order => 0;
 
-        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename)
+        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename, IReadOnlyDictionary<string, int> resolvedOwners = null)
         {
             _logger.Debug("Looking for existing metadata in {0}", movie.Path);
 
             var metadataFiles = new List<MetadataFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = _sceneFolderLayout.IsShared(movie);
-            var folderFiles = shared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleMetadataFile in filterResult.FilesOnDisk)
             {
@@ -65,15 +65,15 @@ namespace NzbDrone.Core.Extras.Metadata
 
                 if (shared)
                 {
-                    var owner = _sidecarOwnership.FindOwner(movie, possibleMetadataFile, folderFiles);
+                    var ownerId = FindOwnerFileId(movie, possibleMetadataFile, resolvedOwners, _sidecarOwnership, folderFiles);
 
-                    if (owner == null)
+                    if (ownerId == null)
                     {
                         _logger.Debug("Metadata file: {0} is not owned by {1}", possibleMetadataFile, movie);
                         continue;
                     }
 
-                    movieFileId = owner.Id;
+                    movieFileId = ownerId.Value;
                 }
 
                 foreach (var consumer in _consumers)

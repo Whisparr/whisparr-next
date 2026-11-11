@@ -37,7 +37,19 @@ namespace NzbDrone.Core.Extras
             return files is { Count: 1 } ? files[0].Id : movie.MovieFileId;
         }
 
-        public abstract IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename);
+        // The owning MovieFile.Id of a side file in a shared folder, or null when the movie doesn't own it. The folder
+        // pass resolves owners once (resolvedOwners); without them, the file's ownership is looked up here.
+        protected static int? FindOwnerFileId(Movie movie, string path, IReadOnlyDictionary<string, int> resolvedOwners, ISidecarOwnership sidecarOwnership, List<MovieFile> folderFiles)
+        {
+            if (resolvedOwners != null)
+            {
+                return resolvedOwners.TryGetValue(path, out var id) ? id : null;
+            }
+
+            return sidecarOwnership.FindOwner(movie, path, folderFiles)?.Id;
+        }
+
+        public abstract IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename, IReadOnlyDictionary<string, int> resolvedOwners = null);
 
         public virtual ImportExistingExtraFileFilterResult<TExtraFile> FilterAndClean(Movie movie, List<string> filesOnDisk, List<string> importedFiles, bool keepExistingEntries)
         {

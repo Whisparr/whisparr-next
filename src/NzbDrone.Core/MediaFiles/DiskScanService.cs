@@ -11,6 +11,7 @@ using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
@@ -57,6 +58,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly ISharedFolderScanner _sharedFolderScanner;
         private readonly ILostMovieFileService _lostMovieFileService;
+        private readonly ISharedFolderSideFiles _sharedFolderSideFiles;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
@@ -83,10 +85,12 @@ namespace NzbDrone.Core.MediaFiles
                                ISceneFolderLayout sceneFolderLayout,
                                ISharedFolderScanner sharedFolderScanner,
                                ILostMovieFileService lostMovieFileService,
+                               ISharedFolderSideFiles sharedFolderSideFiles,
                                IEventAggregator eventAggregator,
                                Logger logger)
         {
             _lostMovieFileService = lostMovieFileService;
+            _sharedFolderSideFiles = sharedFolderSideFiles;
             _sceneFolderLayout = sceneFolderLayout;
             _sharedFolderScanner = sharedFolderScanner;
             _diskProvider = diskProvider;
@@ -385,11 +389,22 @@ namespace NzbDrone.Core.MediaFiles
                 RemoveImportedUnmappedFiles(decisions);
             });
 
+            SideFileAssignment sideFiles = null;
+
+            RunInFolderLock(folder, () =>
+            {
+                // Every item in the folder, so a sibling's tracked side file is never parsed; the requested scenes too,
+                // in case the path index doesn't list them yet. Video rows are read after this pass's imports.
+                var itemIds = _sceneFolderLayout.GetItemsInFolder(folder).Select(e => e.Id).Union(requested.Select(m => m.Id)).ToList();
+
+                sideFiles = _sharedFolderSideFiles.Assign(folder, itemIds, possibleExtraFiles, _mediaFileService.GetFilesByMovies(itemIds));
+            });
+
             // A scene whose earlier steps failed isn't finished
             ForEachScene(folder, requested.Where(s => movieFiles.ContainsKey(s.Id)).ToList(), scene =>
             {
                 UpdateExistingFiles(scene, movieFiles[scene.Id], manual);
-                CompletedScanning(scene, possibleExtraFiles.ToList());
+                CompletedScanning(scene, sideFiles.FilesByMovie[scene.Id], sideFiles.OwnerFileIds);
             });
 
             RunInFolderLock(folder, () => RemoveEmptyMovieFolder(requested[0]));
@@ -768,10 +783,10 @@ namespace NzbDrone.Core.MediaFiles
             _mediaFileTableCleanupService.Clean(movie, mediaFileList);
         }
 
-        private void CompletedScanning(Movie movie, List<string> possibleExtraFiles)
+        private void CompletedScanning(Movie movie, List<string> possibleExtraFiles, Dictionary<string, int> sideFileOwners = null)
         {
             _logger.Trace("Completed scanning disk for {0}", movie.Title);
-            _eventAggregator.PublishEvent(new MovieScannedEvent(movie, possibleExtraFiles));
+            _eventAggregator.PublishEvent(new MovieScannedEvent(movie, possibleExtraFiles) { SideFileOwners = sideFileOwners });
         }
 
         public string[] GetVideoFiles(string path, bool allDirectories = true)

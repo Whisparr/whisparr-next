@@ -9,6 +9,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
@@ -60,6 +61,12 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Returns((string _, List<string> files) => files.ToList());
 
             Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.GetItemsInFolder(It.IsAny<string>())).Returns(new List<MoviePathEntry>());
+
+            // Side files are covered by FolderPassFixture and SharedFolderSideFilesFixture
+            Mocker.GetMock<ISharedFolderSideFiles>()
+                  .Setup(s => s.Assign(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Returns(new SideFileAssignment(new Dictionary<int, List<string>>(), new Dictionary<string, int>()));
 
             Mocker.GetMock<IImportApprovedMovie>()
                   .Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>()))

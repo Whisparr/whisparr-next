@@ -17,6 +17,7 @@ namespace NzbDrone.Core.Extras.Files
         where TExtraFile : ExtraFile, new()
     {
         List<TExtraFile> GetFilesByMovie(int movieId);
+        List<TExtraFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<TExtraFile> GetFilesByMovieFile(int movieFileId);
         TExtraFile FindByPath(int movieId, string path);
         void Upsert(TExtraFile extraFile);
@@ -52,6 +53,11 @@ namespace NzbDrone.Core.Extras.Files
         public List<TExtraFile> GetFilesByMovie(int movieId)
         {
             return _repository.GetFilesByMovie(movieId);
+        }
+
+        public List<TExtraFile> GetFilesByMovies(IEnumerable<int> movieIds)
+        {
+            return _repository.GetFilesByMovies(movieIds);
         }
 
         public List<TExtraFile> GetFilesByMovieFile(int movieFileId)

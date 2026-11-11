@@ -7,6 +7,11 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.Extras;
+using NzbDrone.Core.Extras.Files;
+using NzbDrone.Core.Extras.Metadata.Files;
+using NzbDrone.Core.Extras.Others;
+using NzbDrone.Core.Extras.Subtitles;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
@@ -75,6 +80,16 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Mocker.GetMock<ISceneFolderLayout>()
                   .Setup(s => s.GetEntries(It.IsAny<IEnumerable<int>>()))
                   .Returns((IEnumerable<int> ids) => _entries.Where(e => ids.Contains(e.Id)).ToList());
+
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(It.IsAny<string>()))
+                  .Returns((string folder) => _entries.Where(e => e.Path == folder).ToList());
+
+            // The real side-file assignment, over no tracked side files
+            Mocker.GetMock<IExtraFileService<OtherExtraFile>>().Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<OtherExtraFile>());
+            Mocker.GetMock<IExtraFileService<MetadataFile>>().Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<MetadataFile>());
+            Mocker.GetMock<IExtraFileService<SubtitleFile>>().Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<SubtitleFile>());
+            Mocker.SetConstant<ISharedFolderSideFiles>(Mocker.Resolve<SharedFolderSideFiles>());
 
             Mocker.GetMock<IMovieService>()
                   .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
@@ -147,7 +162,39 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Subject.Scan(new[] { 1, 2, 3 });
 
             _scanned.Select(e => e.Movie.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
-            _scanned.Should().OnlyContain(e => e.PossibleExtraFiles.Single() == InFolder("a.nfo"));
+
+            // a.nfo matches no tracked video, so no scene owns it
+            _scanned.Should().OnlyContain(e => e.PossibleExtraFiles.Count == 0);
+        }
+
+        [Test]
+        public void each_scene_event_carries_only_its_side_files()
+        {
+            _rows.Add(new MovieFile { Id = 11, MovieId = _s1.Id, RelativePath = "s1.mp4" });
+            _rows.Add(new MovieFile { Id = 12, MovieId = _s2.Id, RelativePath = "s2.mp4" });
+            GivenFiles(InFolder("s1.mp4"), InFolder("s2.mp4"), InFolder("s1.nfo"), InFolder("s2.nfo"));
+
+            Subject.Scan(new[] { 1, 2, 3 });
+
+            _scanned.Single(e => e.Movie.Id == _s1.Id).PossibleExtraFiles.Should().BeEquivalentTo(new[] { InFolder("s1.nfo") });
+            _scanned.Single(e => e.Movie.Id == _s2.Id).PossibleExtraFiles.Should().BeEquivalentTo(new[] { InFolder("s2.nfo") });
+            _scanned.Single(e => e.Movie.Id == _s3.Id).PossibleExtraFiles.Should().BeEmpty();
+            _scanned.Should().OnlyContain(e => e.SideFileOwners[InFolder("s1.nfo")] == 11 && e.SideFileOwners[InFolder("s2.nfo")] == 12);
+        }
+
+        [Test]
+        public void scene_keeps_its_tracked_side_file_in_its_event()
+        {
+            // Tracked by _s1 but named after no video: it must stay in _s1's list, or the importer would clean it up
+            Mocker.GetMock<IExtraFileService<MetadataFile>>()
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<MetadataFile> { new() { Id = 5, MovieId = _s1.Id, RelativePath = "movie.nfo" } });
+            GivenFiles(InFolder("movie.nfo"));
+
+            Subject.Scan(new[] { 1, 2, 3 });
+
+            _scanned.Single(e => e.Movie.Id == _s1.Id).PossibleExtraFiles.Should().BeEquivalentTo(new[] { InFolder("movie.nfo") });
+            _scanned.Where(e => e.Movie.Id != _s1.Id).Should().OnlyContain(e => e.PossibleExtraFiles.Count == 0);
         }
 
         [Test]
@@ -213,7 +260,8 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Subject.Scan(new[] { 1, 2, 3 });
 
-            Mocker.GetMock<IMediaFileService>().Verify(v => v.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
+            // Once for the requested scenes' rows, once for the folder's videos after imports (side-file owners)
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Exactly(2));
             Mocker.GetMock<IMediaFileService>().Verify(v => v.GetFilesByMovie(It.IsAny<int>()), Times.Never());
 
             // The preloaded rows reach the cleanup (still confirmed on disk) and the existing-file update

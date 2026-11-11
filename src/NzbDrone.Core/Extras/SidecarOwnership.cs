@@ -35,6 +35,15 @@ namespace NzbDrone.Core.Extras
 
             return next == '.' || next == '-';
         }
+
+        // The longest matching base name wins; a tie across different items leaves the file unowned (null)
+        public static MovieFile LongestMatch(List<(MovieFile File, string BaseName)> matches)
+        {
+            var longest = matches.Max(m => m.BaseName.Length);
+            var winners = matches.Where(m => m.BaseName.Length == longest).Select(m => m.File).ToList();
+
+            return winners.Select(f => f.MovieId).Distinct().Count() == 1 ? winners[0] : null;
+        }
     }
 
     public interface ISidecarOwnership
@@ -95,15 +104,9 @@ namespace NzbDrone.Core.Extras
                 return null;
             }
 
-            var longest = matches.Max(m => m.BaseName.Length);
-            var winners = matches.Where(m => m.BaseName.Length == longest).Select(m => m.File).ToList();
+            var winner = SidecarName.LongestMatch(matches);
 
-            if (winners.Select(f => f.MovieId).Distinct().Count() > 1)
-            {
-                return null;
-            }
-
-            return winners[0].MovieId == movie.Id ? winners[0] : null;
+            return winner?.MovieId == movie.Id ? winner : null;
         }
     }
 }

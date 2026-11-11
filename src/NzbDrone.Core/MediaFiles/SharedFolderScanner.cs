@@ -31,7 +31,7 @@ namespace NzbDrone.Core.MediaFiles
 
     public class SharedFolderScanner : ISharedFolderScanner
     {
-        private static readonly TimeSpan UnidentifiedLifetime = TimeSpan.FromMinutes(10);
+        internal static readonly TimeSpan UnidentifiedLifetime = TimeSpan.FromMinutes(10);
 
         private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly IMovieService _movieService;
@@ -293,18 +293,23 @@ namespace NzbDrone.Core.MediaFiles
         // Path + size + last-write: a changed file is identified afresh
         private string CacheKey(string file)
         {
+            return CacheKey(_diskProvider, _logger, file);
+        }
+
+        internal static string CacheKey(IDiskProvider diskProvider, Logger logger, string file)
+        {
             long size = 0;
 
             try
             {
-                size = _diskProvider.GetFileSize(file);
+                size = diskProvider.GetFileSize(file);
             }
             catch (Exception ex)
             {
-                _logger.Debug(ex, "Unable to read size of {0}", file);
+                logger.Debug(ex, "Unable to read size of {0}", file);
             }
 
-            var lastWrite = VideoHashExtensions.TryGetLastWrite(_diskProvider, file, _logger);
+            var lastWrite = VideoHashExtensions.TryGetLastWrite(diskProvider, file, logger);
 
             return $"{file}|{size}|{lastWrite?.Ticks}";
         }
