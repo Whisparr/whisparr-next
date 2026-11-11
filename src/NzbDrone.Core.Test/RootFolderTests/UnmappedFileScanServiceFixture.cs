@@ -85,7 +85,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Subject.Execute(new ScanUnmappedFilesCommand());
 
-            // A scan only inserts new rows and deletes linked ones, so a known row is never rewritten
+            // A scan only inserts new rows and deletes linked or missing ones, so a known row is never rewritten
             VerifyInserted();
             Mocker.GetMock<IImportFileRepository>().Verify(r => r.Update(It.IsAny<ImportFile>()), Times.Never);
             Mocker.GetMock<IImportFileRepository>().Verify(r => r.UpdateMany(It.IsAny<IList<ImportFile>>()), Times.Never);
@@ -106,6 +106,36 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.Execute(new ScanUnmappedFilesCommand());
 
             Mocker.GetMock<IImportFileRepository>().Verify(r => r.DeleteMany(It.Is<List<int>>(l => l.SequenceEqual(new[] { 3 }))));
+        }
+
+        [Test]
+        public void should_remove_rows_for_files_gone_from_disk()
+        {
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.FindByRootFolderId(1)).Returns(new List<ImportFile>
+            {
+                new ImportFile { Id = 3, Path = "/media/Other/deleted.mp4", Dismissed = true },
+                new ImportFile { Id = 4, Path = "/media/Other/still.mp4" }
+            });
+            GivenFiles("/media/Other/still.mp4");
+
+            Subject.Execute(new ScanUnmappedFilesCommand());
+
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.DeleteMany(It.Is<List<int>>(l => l.SequenceEqual(new[] { 3 }))));
+        }
+
+        [Test]
+        public void should_keep_a_row_the_scan_missed_while_its_file_is_on_disk()
+        {
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.FindByRootFolderId(1)).Returns(new List<ImportFile>
+            {
+                new ImportFile { Id = 3, Path = "/media/Other/unlisted.mp4" }
+            });
+            Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists("/media/Other/unlisted.mp4")).Returns(true);
+            GivenFiles();
+
+            Subject.Execute(new ScanUnmappedFilesCommand());
+
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.DeleteMany(It.Is<List<int>>(l => l.Count > 0)), Times.Never);
         }
 
         [Test]
