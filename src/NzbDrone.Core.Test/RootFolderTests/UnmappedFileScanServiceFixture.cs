@@ -158,5 +158,20 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Mocker.GetMock<IDiskScanService>().Verify(d => d.GetVideoFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
         }
+
+        [Test]
+        public void should_keep_rows_when_the_root_folder_is_empty()
+        {
+            Mocker.GetMock<IDiskProvider>().Setup(d => d.FolderEmpty(Root)).Returns(true);
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.FindByRootFolderId(1)).Returns(new List<ImportFile>
+            {
+                new ImportFile { Id = 3, Path = "/media/Other/offline.mp4", Dismissed = true }
+            });
+            GivenFiles();
+
+            Subject.Execute(new ScanUnmappedFilesCommand());
+
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.DeleteMany(It.IsAny<List<int>>()), Times.Never);
+        }
     }
 }
