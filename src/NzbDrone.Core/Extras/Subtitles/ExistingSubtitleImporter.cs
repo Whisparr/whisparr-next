@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
@@ -24,8 +25,9 @@ namespace NzbDrone.Core.Extras.Subtitles
                                         ISceneFolderLayout sceneFolderLayout,
                                         ISidecarOwnership sidecarOwnership,
                                         IMediaFileService mediaFileService,
+                                        IDiskProvider diskProvider,
                                         Logger logger)
-            : base(subtitleFileService, mediaFileService)
+            : base(subtitleFileService, mediaFileService, diskProvider)
         {
             _subtitleFileService = subtitleFileService;
             _parsingService = parsingService;
@@ -36,15 +38,15 @@ namespace NzbDrone.Core.Extras.Subtitles
 
         public override int Order => 1;
 
-        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename)
+        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename, IReadOnlyDictionary<string, int> resolvedOwners = null)
         {
             _logger.Debug("Looking for existing subtitle files in {0}", movie.Path);
 
             var subtitleFiles = new List<SubtitleFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = _sceneFolderLayout.IsShared(movie);
-            var folderFiles = shared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleSubtitleFile in filterResult.FilesOnDisk)
             {
@@ -56,15 +58,15 @@ namespace NzbDrone.Core.Extras.Subtitles
 
                     if (shared)
                     {
-                        var owner = _sidecarOwnership.FindOwner(movie, possibleSubtitleFile, folderFiles);
+                        var ownerId = FindOwnerFileId(movie, possibleSubtitleFile, resolvedOwners, _sidecarOwnership, folderFiles);
 
-                        if (owner == null)
+                        if (ownerId == null)
                         {
                             _logger.Debug("Subtitle file: {0} is not owned by {1}", possibleSubtitleFile, movie);
                             continue;
                         }
 
-                        movieFileId = owner.Id;
+                        movieFileId = ownerId.Value;
                     }
 
                     var minimalInfo = _parsingService.ParseMinimalPathMovieInfo(possibleSubtitleFile);

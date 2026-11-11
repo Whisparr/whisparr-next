@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
@@ -24,8 +25,9 @@ namespace NzbDrone.Core.Extras.Others
                                           ISceneFolderLayout sceneFolderLayout,
                                           ISidecarOwnership sidecarOwnership,
                                           IMediaFileService mediaFileService,
+                                          IDiskProvider diskProvider,
                                           Logger logger)
-            : base(otherExtraFileService, mediaFileService)
+            : base(otherExtraFileService, mediaFileService, diskProvider)
         {
             _otherExtraFileService = otherExtraFileService;
             _parsingService = parsingService;
@@ -36,15 +38,15 @@ namespace NzbDrone.Core.Extras.Others
 
         public override int Order => 2;
 
-        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename)
+        public override IEnumerable<ExtraFile> ProcessFiles(Movie movie, List<string> filesOnDisk, List<string> importedFiles, string fileNameBeforeRename, IReadOnlyDictionary<string, int> resolvedOwners = null)
         {
             _logger.Debug("Looking for existing extra files in {0}", movie.Path);
 
             var extraFiles = new List<OtherExtraFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = _sceneFolderLayout.IsShared(movie);
-            var folderFiles = shared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleExtraFile in filterResult.FilesOnDisk)
             {
@@ -60,15 +62,15 @@ namespace NzbDrone.Core.Extras.Others
 
                 if (shared)
                 {
-                    var owner = _sidecarOwnership.FindOwner(movie, possibleExtraFile, folderFiles);
+                    var ownerId = FindOwnerFileId(movie, possibleExtraFile, resolvedOwners, _sidecarOwnership, folderFiles);
 
-                    if (owner == null)
+                    if (ownerId == null)
                     {
                         _logger.Debug("Extra file: {0} is not owned by {1}", possibleExtraFile, movie);
                         continue;
                     }
 
-                    movieFileId = owner.Id;
+                    movieFileId = ownerId.Value;
                 }
 
                 var minimalInfo = _parsingService.ParseMinimalPathMovieInfo(possibleExtraFile);

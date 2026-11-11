@@ -2,9 +2,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Test.Framework;
@@ -34,6 +36,45 @@ namespace NzbDrone.Core.Test.MediaFiles
             Mocker.GetMock<IMediaFileService>()
                   .Setup(c => c.GetFilesByMovie(It.IsAny<int>()))
                   .Returns(movieFiles.ToList());
+
+            GivenCurrentRows(movieFiles);
+        }
+
+        private void GivenCurrentRows(IEnumerable<MovieFile> movieFiles)
+        {
+            var current = movieFiles.ToList();
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(c => c.GetMovie(It.IsAny<int>()))
+                  .Returns((int id) => current.FirstOrDefault(f => f.Id == id) ?? throw new ModelNotFoundException(typeof(MovieFile), id));
+        }
+
+        [Test]
+        public void should_not_delete_row_relinked_since_snapshot()
+        {
+            var snapshot = new MovieFile { Id = 7, MovieId = _movie.Id, RelativePath = "old.mp4" };
+            GivenCurrentRows(new[] { new MovieFile { Id = 7, MovieId = _movie.Id, RelativePath = "new.mp4" } });
+
+            Mocker.GetMock<IDiskProvider>().Setup(e => e.FileExists(Path.Combine(_movie.Path, "old.mp4"))).Returns(false);
+
+            var removed = Subject.Clean(_movie, new List<string>(), new List<MovieFile> { snapshot });
+
+            removed.Should().BeEmpty();
+            Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_delete_row_already_gone()
+        {
+            var snapshot = new MovieFile { Id = 7, MovieId = _movie.Id, RelativePath = "old.mp4" };
+            GivenCurrentRows(new List<MovieFile>());
+
+            Mocker.GetMock<IDiskProvider>().Setup(e => e.FileExists(Path.Combine(_movie.Path, "old.mp4"))).Returns(false);
+
+            var removed = Subject.Clean(_movie, new List<string>(), new List<MovieFile> { snapshot });
+
+            removed.Should().BeEmpty();
+            Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
         }
 
         private void GivenFilesAreNotAttachedToEpisode()
@@ -72,6 +113,23 @@ namespace NzbDrone.Core.Test.MediaFiles
             Subject.Clean(_movie, FilesOnDisk(movieFiles.Where(e => e.RelativePath != DELETED_PATH)));
 
             Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.Is<MovieFile>(e => e.RelativePath == DELETED_PATH), DeleteMediaFileReason.MissingFromDisk), Times.Exactly(2));
+        }
+
+        [TestCase(true, 0)]
+        [TestCase(false, 1)]
+        public void should_only_delete_file_missing_from_listing_when_gone_from_disk(bool onDisk, int deletes)
+        {
+            var movieFile = Builder<MovieFile>.CreateNew().With(c => c.RelativePath = "a.mp4").Build();
+
+            GivenMovieFiles(new[] { movieFile });
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(e => e.FileExists(Path.Combine(_movie.Path, "a.mp4")))
+                  .Returns(onDisk);
+
+            Subject.Clean(_movie, new List<string>());
+
+            Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), DeleteMediaFileReason.MissingFromDisk), Times.Exactly(deletes));
         }
 
         [Test]

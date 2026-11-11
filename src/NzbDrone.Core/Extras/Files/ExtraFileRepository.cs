@@ -11,6 +11,7 @@ namespace NzbDrone.Core.Extras.Files
         void DeleteForMovies(List<int> movieIds);
         void DeleteForMovieFile(int movieFileId);
         List<TExtraFile> GetFilesByMovie(int movieId);
+        List<TExtraFile> GetFilesByMovies(IEnumerable<int> movieIds);
         List<TExtraFile> GetFilesByMovieFile(int movieFileId);
         TExtraFile FindByPath(int movieId, string path);
     }
@@ -36,6 +37,11 @@ namespace NzbDrone.Core.Extras.Files
         public List<TExtraFile> GetFilesByMovie(int movieId)
         {
             return Query(x => x.MovieId == movieId);
+        }
+
+        public List<TExtraFile> GetFilesByMovies(IEnumerable<int> movieIds)
+        {
+            return Query(x => movieIds.Contains(x.MovieId));
         }
 
         public List<TExtraFile> GetFilesByMovieFile(int movieFileId)

@@ -20,6 +20,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
@@ -85,6 +86,80 @@ namespace NzbDrone.Core.Test.PerformerTests
                     new List<string>(),
                     new List<string>(),
                     new List<int>()));
+        }
+
+        [TestCase(CommandTrigger.Manual, true)]
+        [TestCase(CommandTrigger.Scheduled, false)]
+        public void refresh_scans_performer_scenes_in_one_bulk_call(CommandTrigger trigger, bool manual)
+        {
+            var scenes = Builder<Movie>.CreateListOfSize(3).Build().ToList();
+
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.GetByPerformerForeignId(_successfulPerformer.ForeignId))
+                .Returns(scenes);
+
+            Mocker.GetMock<IRescanAfterRefreshFilter>()
+                .Setup(s => s.ShouldRescan(It.IsAny<Movie>(), false, trigger))
+                .Returns(true);
+
+            var command = new RefreshPerformersCommand(new List<int> { _successfulPerformer.Id }) { Trigger = trigger };
+
+            Subject.Execute(command);
+
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.Count() == 3), manual), Times.Once());
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+
+            ExceptionVerification.IgnoreErrors();
+        }
+
+        [Test]
+        public void refresh_of_several_performers_scans_once()
+        {
+            var scenes = Builder<Movie>.CreateListOfSize(4).Build().ToList();
+
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.GetByPerformerForeignId(_timedOutPerformer.ForeignId))
+                .Returns(scenes.Take(2).ToList());
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.GetByPerformerForeignId(_successfulPerformer.ForeignId))
+                .Returns(scenes.Skip(2).ToList());
+
+            Mocker.GetMock<IRescanAfterRefreshFilter>()
+                .Setup(s => s.ShouldRescan(It.IsAny<Movie>(), false, It.IsAny<CommandTrigger>()))
+                .Returns(true);
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { _timedOutPerformer.Id, _successfulPerformer.Id }));
+
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(scenes.Select(s => s.Id))), It.IsAny<bool>()), Times.Once());
+
+            ExceptionVerification.IgnoreErrors();
+        }
+
+        [Test]
+        public void refresh_still_scans_collected_items_when_a_performer_is_missing()
+        {
+            var scenes = Builder<Movie>.CreateListOfSize(2).Build().ToList();
+
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.GetByPerformerForeignId(_successfulPerformer.ForeignId))
+                .Returns(scenes);
+            Mocker.GetMock<IPerformerService>()
+                .Setup(s => s.GetById(99))
+                .Throws(new InvalidOperationException());
+
+            Mocker.GetMock<IRescanAfterRefreshFilter>()
+                .Setup(s => s.ShouldRescan(It.IsAny<Movie>(), false, It.IsAny<CommandTrigger>()))
+                .Returns(true);
+
+            Assert.Throws<InvalidOperationException>(() => Subject.Execute(new RefreshPerformersCommand(new List<int> { _successfulPerformer.Id, 99 })));
+
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(scenes.Select(s => s.Id))), It.IsAny<bool>()), Times.Once());
+
+            ExceptionVerification.IgnoreErrors();
         }
 
         [Test]

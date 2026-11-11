@@ -9,6 +9,9 @@ namespace NzbDrone.Core.MediaFiles.Events
         public Movie Movie { get; private set; }
         public List<string> PossibleExtraFiles { get; set; }
 
+        // A side file's path to its owner's MovieFile.Id, resolved once by the shared folder pass; null outside it
+        public Dictionary<string, int> SideFileOwners { get; set; }
+
         public MovieScannedEvent(Movie movie, List<string> possibleExtraFiles)
         {
             Movie = movie;

@@ -280,5 +280,18 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Mocker.GetMock<IParsingService>().Verify(v => v.ParseMinimalPathMovieInfo(It.IsAny<string>()), Times.Never());
         }
+
+        [Test]
+        public void folder_overload_trusts_its_already_filtered_input()
+        {
+            GivenNameIdentifies(F("s1.mp4"), _s1);
+            GivenNameIdentifies(F("s2.mp4"), _s2);
+
+            var decisions = Subject.IdentifyOwned(_folder, new List<string> { F("s1.mp4"), F("s2.mp4") });
+
+            decisions.Single(d => d.LocalMovie.Path == F("s1.mp4")).LocalMovie.Movie.Id.Should().Be(1);
+            decisions.Single(d => d.LocalMovie.Path == F("s2.mp4")).LocalMovie.Movie.Id.Should().Be(2);
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.FilterFilesTrackedByAnyItem(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
+        }
     }
 }

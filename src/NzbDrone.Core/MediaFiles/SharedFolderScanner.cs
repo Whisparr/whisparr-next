@@ -21,6 +21,9 @@ namespace NzbDrone.Core.MediaFiles
         // siblings included. Everything else is dropped: nothing is searched online, moved, added or recorded as unmapped.
         List<ImportDecision> IdentifyOwned(Movie movie, List<string> unmappedVideoFiles);
 
+        // The same for a whole folder, for files the caller already filtered to those no item tracks (not re-checked)
+        List<ImportDecision> IdentifyOwned(string folder, List<string> unownedVideoFiles);
+
         // True the first time an unowned file is offered for a lost-file check, then false for 10 minutes (or until it
         // changes on disk), so a file nobody claims is hashed at most once per window.
         bool TryBeginLostFileCheck(string file);
@@ -28,7 +31,7 @@ namespace NzbDrone.Core.MediaFiles
 
     public class SharedFolderScanner : ISharedFolderScanner
     {
-        private static readonly TimeSpan UnidentifiedLifetime = TimeSpan.FromMinutes(10);
+        internal static readonly TimeSpan UnidentifiedLifetime = TimeSpan.FromMinutes(10);
 
         private readonly ISceneFolderLayout _sceneFolderLayout;
         private readonly IMovieService _movieService;
@@ -69,10 +72,20 @@ namespace NzbDrone.Core.MediaFiles
 
         public List<ImportDecision> IdentifyOwned(Movie movie, List<string> unmappedVideoFiles)
         {
-            var result = new List<ImportDecision>();
-
             // Files any item already tracks (movies included) are never candidates; unmapped rows don't count
-            var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedVideoFiles);
+            return IdentifyOwned(movie.Path, _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedVideoFiles), movie);
+        }
+
+        public List<ImportDecision> IdentifyOwned(string folder, List<string> unownedVideoFiles)
+        {
+            return IdentifyOwned(folder, unownedVideoFiles, null);
+        }
+
+        // forced, when given, is always in the scene map even if the path index doesn't list it in the folder yet
+        private List<ImportDecision> IdentifyOwned(string folder, List<string> unownedVideoFiles, Movie forced)
+        {
+            var result = new List<ImportDecision>();
+            var candidates = unownedVideoFiles;
             var keys = candidates.ToDictionary(f => f, CacheKey, PathEqualityComparer.Instance);
 
             candidates = candidates.Where(f => _unidentifiedCache.Find(keys[f]) == null).ToList();
@@ -82,7 +95,7 @@ namespace NzbDrone.Core.MediaFiles
                 return result;
             }
 
-            var scenes = GetScenesInFolder(movie);
+            var scenes = GetScenesInFolder(folder, forced);
             var owners = new Dictionary<string, Movie>(PathEqualityComparer.Instance);
             var needHash = new List<string>();
 
@@ -131,17 +144,22 @@ namespace NzbDrone.Core.MediaFiles
             return true;
         }
 
-        private Dictionary<int, Movie> GetScenesInFolder(Movie movie)
+        private Dictionary<int, Movie> GetScenesInFolder(string folder, Movie forced)
         {
-            var ids = _sceneFolderLayout.GetItemsInFolder(movie.Path)
-                                        .Where(e => e.ItemType.UsesSceneLayout() && e.Id != movie.Id)
+            var forcedId = forced?.Id;
+            var ids = _sceneFolderLayout.GetItemsInFolder(folder)
+                                        .Where(e => e.ItemType.UsesSceneLayout() && e.Id != forcedId)
                                         .Select(e => e.Id)
                                         .ToList();
 
             var scenes = ids.Count == 0 ? new List<Movie>() : _movieService.GetMovies(ids);
 
-            var map = scenes.Where(s => s.Id != movie.Id).ToDictionary(s => s.Id);
-            map[movie.Id] = movie;
+            var map = scenes.Where(s => s.Id != forcedId).ToDictionary(s => s.Id);
+
+            if (forced != null)
+            {
+                map[forced.Id] = forced;
+            }
 
             return map;
         }
@@ -275,18 +293,23 @@ namespace NzbDrone.Core.MediaFiles
         // Path + size + last-write: a changed file is identified afresh
         private string CacheKey(string file)
         {
+            return CacheKey(_diskProvider, _logger, file);
+        }
+
+        internal static string CacheKey(IDiskProvider diskProvider, Logger logger, string file)
+        {
             long size = 0;
 
             try
             {
-                size = _diskProvider.GetFileSize(file);
+                size = diskProvider.GetFileSize(file);
             }
             catch (Exception ex)
             {
-                _logger.Debug(ex, "Unable to read size of {0}", file);
+                logger.Debug(ex, "Unable to read size of {0}", file);
             }
 
-            var lastWrite = VideoHashExtensions.TryGetLastWrite(_diskProvider, file, _logger);
+            var lastWrite = VideoHashExtensions.TryGetLastWrite(diskProvider, file, logger);
 
             return $"{file}|{size}|{lastWrite?.Ticks}";
         }

@@ -9,6 +9,7 @@ using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
@@ -949,11 +950,18 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
             Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<MovieFile>());
+            Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
                   .Returns((string _, List<string> files) => files);
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_movie, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_movie.Path, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.GetItemsInFolder(_movie.Path)).Returns(new List<MoviePathEntry>());
+            Mocker.GetMock<ISharedFolderSideFiles>()
+                  .Setup(s => s.Assign(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Returns(new SideFileAssignment(new Dictionary<int, List<string>>(), new Dictionary<string, int>()));
 
             Subject.Scan(_movie);
 

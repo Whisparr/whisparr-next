@@ -19,6 +19,7 @@ using NzbDrone.Common.Http;
 
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
@@ -163,6 +164,28 @@ namespace NzbDrone.Core.Test.StudioTests
                 .Returns((List<Movie> movies, bool ignoreErrors, bool refreshInline) => movies);
 
             return addedMovies;
+        }
+
+        [Test]
+        public void refresh_scans_studio_scenes_in_one_bulk_call()
+        {
+            var studio = GivenStudio(true);
+            var scenes = Builder<Movie>.CreateListOfSize(3).Build().ToList();
+
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.GetByStudioForeignId(studio.ForeignId))
+                .Returns(scenes);
+
+            Mocker.GetMock<IRescanAfterRefreshFilter>()
+                .Setup(s => s.ShouldRescan(It.IsAny<Movie>(), false, It.IsAny<CommandTrigger>()))
+                .Returns(true);
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.Count() == 3), false), Times.Once());
+            Mocker.GetMock<IDiskScanService>()
+                .Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
         }
 
         [TestCase(true)]

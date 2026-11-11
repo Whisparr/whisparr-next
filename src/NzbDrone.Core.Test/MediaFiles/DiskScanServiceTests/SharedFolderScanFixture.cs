@@ -9,6 +9,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
@@ -49,7 +50,23 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
                   .Returns(new List<MovieFile>());
 
+            // The folder pass loads every scene's rows at once; answer from the per-scene setups
+            var files = Mocker.GetMock<IMediaFileService>();
+            files.Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                 .Returns((IEnumerable<int> ids) => ids.SelectMany(id => files.Object.GetFilesByMovie(id)).ToList());
+
+            // Nothing is tracked unless a test says so
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(It.IsAny<string>(), It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files.ToList());
+
             Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(It.IsAny<Movie>())).Returns(true);
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.GetItemsInFolder(It.IsAny<string>())).Returns(new List<MoviePathEntry>());
+
+            // Side files are covered by FolderPassFixture and SharedFolderSideFilesFixture
+            Mocker.GetMock<ISharedFolderSideFiles>()
+                  .Setup(s => s.Assign(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Returns(new SideFileAssignment(new Dictionary<int, List<string>>(), new Dictionary<string, int>()));
 
             Mocker.GetMock<IImportApprovedMovie>()
                   .Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>()))
@@ -97,7 +114,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             GivenFiles(InFolder("s1.mp4"), InFolder("s2.mp4"));
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(() => new List<ImportDecision> { DecisionFor(_s1, InFolder("s1.mp4")), DecisionFor(_s2, InFolder("s2.mp4")) });
 
             Subject.Scan(_s1);
@@ -116,7 +133,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             GivenFiles(InFolder("unknown.mp4"));
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_s1);
@@ -124,7 +141,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             _imported.Should().BeEmpty();
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Verify(v => v.IdentifyOwned(_s1, It.Is<List<string>>(l => l.Single() == InFolder("unknown.mp4"))), Times.Once());
+                  .Verify(v => v.IdentifyOwned(_folder, It.Is<List<string>>(l => l.Single() == InFolder("unknown.mp4"))), Times.Once());
         }
 
         [Test]
@@ -137,7 +154,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             // The scanner drops scenes whose Path isn't the scanned folder, so S1's scan makes no decision for it
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_s1);
@@ -154,7 +171,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             GivenFiles(Path.Combine(movieFolder, "movie.mp4"), Path.Combine(movieFolder, "movie-extra.mp4"));
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_s1);
@@ -180,6 +197,8 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<ISharedFolderScanner>()
                   .Verify(v => v.IdentifyOwned(It.IsAny<Movie>(), It.IsAny<List<string>>()), Times.Never());
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Verify(v => v.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
         }
 
         [Test]
@@ -197,7 +216,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Returns(new List<MovieFile> { ownRow, siblingRow });
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision> { DecisionFor(_s1, s1File) });
 
             Subject.Scan(_s1);
@@ -223,8 +242,13 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(j1.Id)).Returns(new List<MovieFile> { j1File });
             Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(j2.Id)).Returns(new List<MovieFile> { j2File });
+
+            // Both files are tracked (j1's and j2's rows), as the real any-item filter knows
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files.Where(f => f != InFolder("j1.mp4") && f != InFolder("j2.mp4")).ToList());
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(It.IsAny<Movie>(), It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(j1);
@@ -232,9 +256,9 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             _imported.Should().BeEmpty();
 
-            // Each scan offers only the sibling's file, which the scanner drops as tracked by another row
-            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(j1, It.Is<List<string>>(l => l.Single() == InFolder("j2.mp4"))), Times.Once());
-            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(j2, It.Is<List<string>>(l => l.Single() == InFolder("j1.mp4"))), Times.Once());
+            // Each scan identifies the folder once and offers neither tracked file, its own or the sibling's
+            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(_folder, It.Is<List<string>>(l => l.Count == 0)), Times.Exactly(2));
+            Mocker.GetMock<ISharedFolderScanner>().Verify(v => v.IdentifyOwned(_folder, It.Is<List<string>>(l => l.Count > 0)), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
         }
@@ -284,7 +308,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Returns(new List<MovieFile> { ownRow, siblingRow });
 
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(j1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision> { DecisionFor(j1, j1File) });
 
             Subject.Scan(j1);
@@ -311,7 +335,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
                   .Returns("same");
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_s1);
@@ -339,7 +363,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Setup(s => s.ComputeOsHash(It.IsAny<string>()))
                   .Returns("same");
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_s1, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_folder, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_s1);
@@ -362,7 +386,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             // The file is only handed out until it has been imported, as the real tracked-file filter does
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(It.IsAny<Movie>(), It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()))
                   .Returns(() =>
                   {
                       Interlocked.Increment(ref identifyCalls);
