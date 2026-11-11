@@ -1,10 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using FizzWare.NBuilder;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.AutoTagging;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
@@ -240,8 +242,37 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.RefreshNewScenes(scenes);
 
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[0]), Times.Once());
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[1]), Times.Once());
+            VerifyBulkScan(scenes);
+        }
+
+        [Test]
+        public void new_scenes_are_scanned_in_one_bulk_call()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Subject.RefreshNewScenes(scenes);
+
+            Mocker.GetMock<IDiskScanService>()
+                  .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.Count() == 3), false), Times.Once());
+            Mocker.GetMock<IDiskScanService>()
+                  .Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_scan_in_batches_during_a_long_refresh()
+        {
+            var scenes = GivenNewScenes(RefreshMovieService.ScanBatchSize + 1);
+
+            Subject.RefreshNewScenes(scenes);
+
+            VerifyBulkScan(scenes.Take(RefreshMovieService.ScanBatchSize).ToList());
+            VerifyBulkScan(scenes.Skip(RefreshMovieService.ScanBatchSize).ToList());
+        }
+
+        private void VerifyBulkScan(List<Movie> scenes)
+        {
+            Mocker.GetMock<IDiskScanService>()
+                  .Verify(v => v.Scan(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(scenes.Select(x => x.Id))), false), Times.Once());
         }
 
         [Test]
@@ -272,10 +303,51 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.RefreshNewScenes(scenes);
 
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[0]), Times.Once());
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(scenes[1]), Times.Once());
+            VerifyBulkScan(scenes);
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_still_scan_collected_ids_when_refresh_loop_throws()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Mocker.GetMock<IRescanAfterRefreshFilter>()
+                  .Setup(s => s.ShouldRescan(It.IsAny<Movie>(), It.IsAny<bool>(), It.IsAny<CommandTrigger>()))
+                  .Returns(true);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(scenes[1].Id)).Throws(new IOException());
+
+            Assert.Throws<IOException>(() => Subject.Execute(new RefreshMovieCommand(scenes.Select(s => s.Id).ToList())));
+
+            VerifyBulkScan(scenes.Take(1).ToList());
+        }
+
+        [Test]
+        public void should_still_scan_collected_new_scenes_when_loop_throws()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(scenes[1].Id)).Throws(new IOException());
+
+            Assert.Throws<IOException>(() => Subject.RefreshNewScenes(scenes));
+
+            VerifyBulkScan(scenes.Take(1).ToList());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_scan_new_movies_even_when_never_rescanning_after_refresh()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Mocker.GetMock<IConfigService>().SetupGet(s => s.RescanAfterRefresh).Returns(RescanAfterRefreshType.Never);
+            Mocker.SetConstant<IRescanAfterRefreshFilter>(Mocker.Resolve<RescanAfterRefreshFilter>());
+
+            Subject.Execute(new RefreshMovieCommand(scenes.Select(s => s.Id).ToList(), isNewMovie: true));
+
+            VerifyBulkScan(scenes);
         }
 
         [Test]
@@ -287,7 +359,7 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.RefreshNewScenes(scenes);
 
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<IEnumerable<int>>(), It.IsAny<bool>()), Times.Never());
 
             VerifyScanSkipped(scenes[0]);
             VerifyScanSkipped(scenes[1]);
@@ -306,7 +378,7 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.RefreshNewScenes(scenes);
 
-            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<Movie>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<IEnumerable<int>>(), It.IsAny<bool>()), Times.Never());
 
             VerifyScanSkipped(scenes[0]);
 

@@ -9,9 +9,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaFiles;
-using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Performers.Commands;
@@ -29,7 +27,7 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly IConfigService _configService;
         private readonly IJavAvailability _javAvailability;
         private readonly IDiskScanService _diskScanService;
-        private readonly IEventAggregator _eventAggregator;
+        private readonly IRescanAfterRefreshFilter _rescanAfterRefreshFilter;
         private readonly IImportListExclusionService _importListExclusionService;
 
         private readonly Logger _logger;
@@ -43,7 +41,7 @@ namespace NzbDrone.Core.Movies.Performers
                                         IConfigService configService,
                                         IJavAvailability javAvailability,
                                         IDiskScanService diskScanService,
-                                        IEventAggregator eventAggregator,
+                                        IRescanAfterRefreshFilter rescanAfterRefreshFilter,
                                         ImportListExclusionService importListExclusionsService,
                                         Logger logger)
         {
@@ -56,7 +54,7 @@ namespace NzbDrone.Core.Movies.Performers
             _configService = configService;
             _javAvailability = javAvailability;
             _diskScanService = diskScanService;
-            _eventAggregator = eventAggregator;
+            _rescanAfterRefreshFilter = rescanAfterRefreshFilter;
             _importListExclusionService = importListExclusionsService;
             _logger = logger;
         }
@@ -310,36 +308,20 @@ namespace NzbDrone.Core.Movies.Performers
             }
         }
 
-        private void RescanMovie(Movie movie, bool isNew, CommandTrigger trigger)
+        private void ScanItems(List<int> scanIds, bool manual)
         {
-            var rescanAfterRefresh = _configService.RescanAfterRefresh;
-
-            if (isNew)
+            if (scanIds.Count == 0)
             {
-                _logger.Trace("Forcing rescan of {0}. Reason: New movie", movie);
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.Never)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Never rescan after refresh", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.NeverRescanAfterRefresh));
-
-                return;
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.AfterManual && trigger != CommandTrigger.Manual)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Not after automatic scans", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.RescanAfterManualRefreshOnly));
-
                 return;
             }
 
             try
             {
-                _diskScanService.Scan(movie, trigger == CommandTrigger.Manual);
+                _diskScanService.Scan(scanIds, manual);
             }
             catch (Exception e)
             {
-                _logger.Error(e, "Couldn't rescan movie {0}", movie);
+                _logger.Error(e, "Couldn't rescan {0} item(s)", scanIds.Count);
             }
         }
 
@@ -355,40 +337,48 @@ namespace NzbDrone.Core.Movies.Performers
 
             if (message.PerformerIds.Any())
             {
-                foreach (var performerId in message.PerformerIds)
+                // Collected across performers and scanned once, so a studio folder they share is listed once
+                var scanIds = new List<int>();
+
+                try
                 {
-                    var performer = _performerService.GetById(performerId);
-                    var items = _movieService.GetByPerformerForeignId(performer.ForeignId);
-                    var trigger = message.Trigger;
-                    var isNew = false;
+                    foreach (var performerId in message.PerformerIds)
+                    {
+                        var performer = _performerService.GetById(performerId);
+                        var items = _movieService.GetByPerformerForeignId(performer.ForeignId);
+                        var trigger = message.Trigger;
+                        var isNew = false;
 
-                    try
-                    {
-                        performer = RefreshPerformerInfo(performerId);
-                    }
-                    catch (Exception e)
-                    {
-                        _logger.Error(e, "Couldn't refresh info for {0}", performer.Name);
-                    }
+                        try
+                        {
+                            performer = RefreshPerformerInfo(performerId);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error(e, "Couldn't refresh info for {0}", performer.Name);
+                        }
 
-                    // Rescan before sync since syncing will add a new movie and scan automatically
-                    foreach (var movieItem in items)
-                    {
-                        var movie = _movieService.GetMovie(movieItem.Id);
-                        RescanMovie(movie, isNew, trigger);
-                    }
+                        // Taken before sync, since syncing adds new movies that scan themselves
+                        scanIds.AddRange(items
+                            .Where(movieItem => _rescanAfterRefreshFilter.ShouldRescan(movieItem, isNew, trigger))
+                            .Select(movieItem => movieItem.Id));
 
-                    // The scene import and GetPerformerWorks both let HTTP errors propagate
-                    // (HttpException, or MovieNotFoundException on a 404). Without this,
-                    // either one drops every performer the user selected after the one that failed.
-                    try
-                    {
-                        SyncPerformerItems(performer, syncMovies);
+                        // The scene import and GetPerformerWorks both let HTTP errors propagate
+                        // (HttpException, or MovieNotFoundException on a 404). Without this,
+                        // either one drops every performer the user selected after the one that failed.
+                        try
+                        {
+                            SyncPerformerItems(performer, syncMovies);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error(e, "Couldn't sync items for {0}", performer.Name);
+                        }
                     }
-                    catch (Exception e)
-                    {
-                        _logger.Error(e, "Couldn't sync items for {0}", performer.Name);
-                    }
+                }
+                finally
+                {
+                    ScanItems(scanIds, message.Trigger == CommandTrigger.Manual);
                 }
             }
             else

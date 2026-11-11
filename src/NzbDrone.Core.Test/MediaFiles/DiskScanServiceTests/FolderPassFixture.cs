@@ -444,5 +444,18 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Mocker.GetMock<IMovieService>().Verify(v => v.GetMovies(It.IsAny<IEnumerable<int>>()), Times.Exactly(3));
             _scanned.Select(e => e.Movie.Id).Should().BeEquivalentTo(ids);
         }
+
+        [Test]
+        public void rescan_without_id_scans_every_item_through_the_bulk_pass()
+        {
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieIds()).Returns(new List<int> { 1, 2, 3 });
+
+            Subject.Execute(new Core.MediaFiles.Commands.RescanMovieCommand());
+
+            Mocker.GetMock<ISceneFolderLayout>().Verify(v => v.GetEntries(It.Is<IEnumerable<int>>(i => i.SequenceEqual(new[] { 1, 2, 3 }))), Times.Once());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.GetFiles(_folder, true), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(v => v.GetAllMovies(), Times.Never());
+            _scanned.Select(e => e.Movie.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+        }
     }
 }

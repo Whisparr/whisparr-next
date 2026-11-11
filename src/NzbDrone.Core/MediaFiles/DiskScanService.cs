@@ -866,12 +866,7 @@ namespace NzbDrone.Core.MediaFiles
             }
             else
             {
-                var allMovies = _movieService.GetAllMovies();
-
-                foreach (var movie in allMovies)
-                {
-                    Scan(movie);
-                }
+                Scan(_movieService.AllMovieIds());
             }
         }
     }

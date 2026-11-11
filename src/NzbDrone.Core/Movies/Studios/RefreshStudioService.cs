@@ -8,9 +8,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.MediaFiles;
-using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Movies.Studios.Commands;
@@ -27,7 +25,7 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly IConfigService _configService;
         private readonly IJavAvailability _javAvailability;
         private readonly IDiskScanService _diskScanService;
-        private readonly IEventAggregator _eventAggregator;
+        private readonly IRescanAfterRefreshFilter _rescanAfterRefreshFilter;
         private readonly IImportListExclusionService _importListExclusionService;
 
         private readonly Logger _logger;
@@ -40,7 +38,7 @@ namespace NzbDrone.Core.Movies.Studios
                                         IConfigService configService,
                                         IJavAvailability javAvailability,
                                         IDiskScanService diskScanService,
-                                        IEventAggregator eventAggregator,
+                                        IRescanAfterRefreshFilter rescanAfterRefreshFilter,
                                         IImportListExclusionService importListExclusionService,
                                         Logger logger)
         {
@@ -52,7 +50,7 @@ namespace NzbDrone.Core.Movies.Studios
             _configService = configService;
             _javAvailability = javAvailability;
             _diskScanService = diskScanService;
-            _eventAggregator = eventAggregator;
+            _rescanAfterRefreshFilter = rescanAfterRefreshFilter;
             _importListExclusionService = importListExclusionService;
             _logger = logger;
         }
@@ -266,39 +264,6 @@ namespace NzbDrone.Core.Movies.Studios
             }
         }
 
-        private void RescanMovie(Movie movie, bool isNew, CommandTrigger trigger)
-        {
-            var rescanAfterRefresh = _configService.RescanAfterRefresh;
-
-            if (isNew)
-            {
-                _logger.Trace("Forcing rescan of {0}. Reason: New movie", movie);
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.Never)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Never rescan after refresh", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.NeverRescanAfterRefresh));
-
-                return;
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.AfterManual && trigger != CommandTrigger.Manual)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Not after automatic scans", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.RescanAfterManualRefreshOnly));
-
-                return;
-            }
-
-            try
-            {
-                _diskScanService.Scan(movie);
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e, "Couldn't rescan movie {0}", movie);
-            }
-        }
-
         public void Execute(RefreshStudiosCommand message)
         {
             // Decided once per refresh, so the reason is logged once rather than for every studio.
@@ -328,10 +293,21 @@ namespace NzbDrone.Core.Movies.Studios
                     }
 
                     // Rescan before sync since syncing will add a new movie and scan automatically
-                    foreach (var movieItem in items)
+                    var scanIds = items
+                        .Where(movieItem => _rescanAfterRefreshFilter.ShouldRescan(movieItem, isNew, trigger))
+                        .Select(movieItem => movieItem.Id)
+                        .ToList();
+
+                    if (scanIds.Any())
                     {
-                        var movie = _movieService.GetMovie(movieItem.Id);
-                        RescanMovie(movie, isNew, trigger);
+                        try
+                        {
+                            _diskScanService.Scan(scanIds, false);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error(e, "Couldn't rescan movies for {0}", studio.Title);
+                        }
                     }
 
                     // The scene import and GetStudioWorks both let HTTP errors propagate

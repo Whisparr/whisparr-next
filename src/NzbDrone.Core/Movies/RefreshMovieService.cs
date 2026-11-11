@@ -39,6 +39,8 @@ namespace NzbDrone.Core.Movies
 
     public class RefreshMovieService : IExecute<RefreshMovieCommand>, IRefreshNewScenes
     {
+        internal const int ScanBatchSize = 1000;
+
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IMovieService _movieService;
         private readonly IAddMovieCollectionService _movieCollectionService;
@@ -60,6 +62,7 @@ namespace NzbDrone.Core.Movies
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly ICommandResultReporter _commandResultReporter;
         private readonly ILegacyMigrationGate _migrationGate;
+        private readonly IRescanAfterRefreshFilter _rescanAfterRefreshFilter;
         private readonly Logger _logger;
 
         public RefreshMovieService(IProvideMovieInfo movieInfo,
@@ -83,6 +86,7 @@ namespace NzbDrone.Core.Movies
                                     IManageCommandQueue commandQueueManager,
                                     ICommandResultReporter commandResultReporter,
                                     ILegacyMigrationGate migrationGate,
+                                    IRescanAfterRefreshFilter rescanAfterRefreshFilter,
                                     Logger logger)
         {
             _movieInfo = movieInfo;
@@ -106,6 +110,7 @@ namespace NzbDrone.Core.Movies
             _commandQueueManager = commandQueueManager;
             _commandResultReporter = commandResultReporter;
             _migrationGate = migrationGate;
+            _rescanAfterRefreshFilter = rescanAfterRefreshFilter;
             _logger = logger;
         }
 
@@ -348,36 +353,33 @@ namespace NzbDrone.Core.Movies
             }
         }
 
-        private void RescanMovie(Movie movie, bool isNew, CommandTrigger trigger)
+        private void ScanMovies(List<int> movieIds)
         {
-            var rescanAfterRefresh = _configService.RescanAfterRefresh;
-
-            if (isNew)
+            if (movieIds.Empty())
             {
-                _logger.Trace("Forcing rescan of {0}. Reason: New movie", movie);
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.Never)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Never rescan after refresh", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.NeverRescanAfterRefresh));
-
-                return;
-            }
-            else if (rescanAfterRefresh == RescanAfterRefreshType.AfterManual && trigger != CommandTrigger.Manual)
-            {
-                _logger.Trace("Skipping rescan of {0}. Reason: Not after automatic scans", movie);
-                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.RescanAfterManualRefreshOnly));
-
                 return;
             }
 
             try
             {
-                _diskScanService.Scan(movie);
+                // A copy, as QueueScan clears the list after a batch
+                _diskScanService.Scan(movieIds.ToList());
             }
             catch (Exception e)
             {
-                _logger.Error(e, "Couldn't rescan movie {0}", movie);
+                _logger.Error(e, "Couldn't rescan {0} movies", movieIds.Count);
+            }
+        }
+
+        // Scanned in batches, so a long refresh doesn't hold every scan until it ends
+        private void QueueScan(List<int> scanIds, int movieId)
+        {
+            scanIds.Add(movieId);
+
+            if (scanIds.Count >= ScanBatchSize)
+            {
+                ScanMovies(scanIds);
+                scanIds.Clear();
             }
         }
 
@@ -399,29 +401,39 @@ namespace NzbDrone.Core.Movies
 
         public void RefreshNewScenes(List<Movie> movies)
         {
-            foreach (var scene in movies)
-            {
-                try
-                {
-                    var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
-                    ScanNewScene(movie);
-                }
-                catch (MovieNotFoundException)
-                {
-                    _logger.Error("Movie '{0}' was not found upstream, it may have been removed.", scene);
-                }
-                catch (Exception e)
-                {
-                    _logger.Error(e, "Couldn't refresh info for {0}", scene);
+            var scanIds = new List<int>();
 
-                    // Same as Execute: a failed refresh still gets its rescan, so search on add
-                    // and clearing AddOptions happen.
-                    ScanNewScene(_movieService.GetMovie(scene.Id));
+            try
+            {
+                foreach (var scene in movies)
+                {
+                    try
+                    {
+                        var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
+                        ScanNewScene(movie, scanIds);
+                    }
+                    catch (MovieNotFoundException)
+                    {
+                        _logger.Error("Movie '{0}' was not found upstream, it may have been removed.", scene);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Error(e, "Couldn't refresh info for {0}", scene);
+
+                        // Same as Execute: a failed refresh still gets its rescan, so search on add
+                        // and clearing AddOptions happen.
+                        ScanNewScene(_movieService.GetMovie(scene.Id), scanIds);
+                    }
                 }
+            }
+            finally
+            {
+                // Items already refreshed still get their scan (search on add, AddOptions) if the loop throws
+                ScanMovies(scanIds);
             }
         }
 
-        private void ScanNewScene(Movie movie)
+        private void ScanNewScene(Movie movie, List<int> scanIds)
         {
             // A studio's scenes share one folder, so scanning each new scene re-reads that whole folder every time.
             // The migration links its files itself; the skip event still clears AddOptions.
@@ -432,14 +444,33 @@ namespace NzbDrone.Core.Movies
                 return;
             }
 
-            RescanMovie(movie, true, CommandTrigger.Unspecified);
+            // A new scene is always rescanned, so the RescanAfterRefresh filter has nothing to decide.
+            QueueScan(scanIds, movie.Id);
         }
 
         public void Execute(RefreshMovieCommand message)
         {
+            _eventAggregator.PublishEvent(new MovieRefreshStartingEvent(message.Trigger == CommandTrigger.Manual));
+
+            var scanIds = new List<int>();
+
+            try
+            {
+                RefreshMovies(message, scanIds);
+            }
+            finally
+            {
+                // Items already refreshed still get their scan (search on add, AddOptions) if the loop throws
+                ScanMovies(scanIds);
+            }
+
+            _eventAggregator.PublishEvent(new MovieRefreshCompleteEvent());
+        }
+
+        private void RefreshMovies(RefreshMovieCommand message, List<int> scanIds)
+        {
             var trigger = message.Trigger;
             var isNew = message.IsNewMovie;
-            _eventAggregator.PublishEvent(new MovieRefreshStartingEvent(message.Trigger == CommandTrigger.Manual));
 
             if (message.MovieIds.Any())
             {
@@ -451,7 +482,11 @@ namespace NzbDrone.Core.Movies
                     {
                         movie = RefreshMovieInfo(movieId);
                         UpdateTags(movie, isNew);
-                        RescanMovie(movie, isNew, trigger);
+
+                        if (_rescanAfterRefreshFilter.ShouldRescan(movie, isNew, trigger))
+                        {
+                            QueueScan(scanIds, movie.Id);
+                        }
                     }
                     catch (MovieNotFoundException)
                     {
@@ -465,7 +500,11 @@ namespace NzbDrone.Core.Movies
                     {
                         _logger.Error(e, "Couldn't refresh info for {0}", movie);
                         UpdateTags(movie, isNew);
-                        RescanMovie(movie, isNew, trigger);
+
+                        if (_rescanAfterRefreshFilter.ShouldRescan(movie, isNew, trigger))
+                        {
+                            QueueScan(scanIds, movie.Id);
+                        }
 
                         // Mark the result as indeterminate so it's not marked as a full success,
                         // but we can still process the remaining movies.
@@ -533,7 +572,11 @@ namespace NzbDrone.Core.Movies
                             }
 
                             UpdateTags(movie, false);
-                            RescanMovie(movieLocal, false, trigger);
+
+                            if (_rescanAfterRefreshFilter.ShouldRescan(movieLocal, false, trigger))
+                            {
+                                QueueScan(scanIds, movieLocal.Id);
+                            }
                         }
                         else
                         {
@@ -542,8 +585,6 @@ namespace NzbDrone.Core.Movies
                     }
                 }
             }
-
-            _eventAggregator.PublishEvent(new MovieRefreshCompleteEvent());
         }
     }
 }
