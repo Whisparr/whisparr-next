@@ -69,6 +69,12 @@ function setupUrl(path: string) {
   return `${window.Whisparr.urlBase}/api/setup/${path}`;
 }
 
+// Both ways of noticing setup mode has ended land here, so whichever fires first
+// opens the same page: the import still running as a task.
+export function openAppAfterSetup() {
+  window.location.assign(`${window.Whisparr.urlBase}/system/tasks`);
+}
+
 export async function postSetup(path: string, body?: unknown) {
   const response = await fetch(setupUrl(path), {
     method: 'POST',
@@ -113,7 +119,7 @@ export default function useSetupStatus() {
       // The setup API only exists in setup mode, so a 404 means the app has
       // restarted into its normal mode.
       if (response.status === 404) {
-        window.location.reload();
+        openAppAfterSetup();
 
         return;
       }
