@@ -31,8 +31,9 @@ namespace Whisparr.Api.V5.Calendar
                             ICustomFormatCalculationService formatCalculator,
                             ITagService tagService,
                             IMapCoversToLocal coverMapper,
-                            IConfigService configService)
-            : base(moviesService, movieStatisticsService, upgradableSpecification, formatCalculator, configService, coverMapper, signalR)
+                            IConfigService configService,
+                            IBroadcastResourceIds idBroadcaster)
+            : base(moviesService, movieStatisticsService, upgradableSpecification, formatCalculator, configService, coverMapper, signalR, idBroadcaster)
         {
             _moviesService = moviesService;
             _movieStatisticsService = movieStatisticsService;

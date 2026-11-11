@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -18,6 +19,7 @@ namespace Whisparr.Http.REST
         protected string Resource { get; }
         protected int? Version { get; }
         private readonly IBroadcastSignalRMessage _signalRBroadcaster;
+        private readonly IBroadcastResourceIds _idBroadcaster;
 
         protected RestControllerWithSignalR(IBroadcastSignalRMessage signalRBroadcaster)
         {
@@ -34,6 +36,13 @@ namespace Whisparr.Http.REST
                 Resource = new TResource().ResourceName.Trim('/');
                 Version = apiAttribute?.Version;
             }
+        }
+
+        // Only controllers that call QueueResourceChange need the id batcher, so the other subclasses keep the one-arg constructor.
+        protected RestControllerWithSignalR(IBroadcastSignalRMessage signalRBroadcaster, IBroadcastResourceIds idBroadcaster)
+            : this(signalRBroadcaster)
+        {
+            _idBroadcaster = idBroadcaster;
         }
 
         // The UI only consumes v5 messages, so v3 controllers stay silent and an edit is broadcast once.
@@ -54,6 +63,19 @@ namespace Whisparr.Http.REST
             }
 
             BroadcastResourceChange(message.Action, message.Model.Id);
+        }
+
+        // Id-only, coalesced broadcast: no DB read or mapping on the handler thread. The UI just invalidates queries.
+        protected void QueueResourceChange(ModelAction action, params int[] ids) => QueueResourceChange(action, (IEnumerable<int>)ids);
+
+        protected void QueueResourceChange(ModelAction action, IEnumerable<int> ids)
+        {
+            if (CanBroadcast)
+            {
+                var idBroadcaster = _idBroadcaster ?? throw new InvalidOperationException($"{GetType().Name} queues id changes but was built without an {nameof(IBroadcastResourceIds)}");
+
+                idBroadcaster.Queue(Resource, Version, action, ids);
+            }
         }
 
         protected void BroadcastResourceChange(ModelAction action, int id)

@@ -28,8 +28,9 @@ namespace Whisparr.Api.V5.Wanted
                             ICustomFormatCalculationService formatCalculator,
                             IConfigService configService,
                             IMapCoversToLocal coverMapper,
-                            IBroadcastSignalRMessage signalRBroadcaster)
-            : base(movieService, movieStatisticsService, upgradableSpecification, formatCalculator, configService, coverMapper, signalRBroadcaster)
+                            IBroadcastSignalRMessage signalRBroadcaster,
+                            IBroadcastResourceIds idBroadcaster)
+            : base(movieService, movieStatisticsService, upgradableSpecification, formatCalculator, configService, coverMapper, signalRBroadcaster, idBroadcaster)
         {
             _movieCutoffService = movieCutoffService;
         }

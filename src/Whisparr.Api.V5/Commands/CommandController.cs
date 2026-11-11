@@ -25,16 +25,19 @@ namespace Whisparr.Api.V5.Commands
         private readonly KnownTypes _knownTypes;
         private readonly Debouncer _debouncer;
         private readonly Dictionary<int, CommandResource> _pendingUpdates;
+        private readonly IBroadcastResourceIds _idBroadcaster;
 
         private readonly CommandPriorityComparer _commandPriorityComparer = new CommandPriorityComparer();
 
         public CommandController(IManageCommandQueue commandQueueManager,
                              IBroadcastSignalRMessage signalRBroadcaster,
-                             KnownTypes knownTypes)
+                             KnownTypes knownTypes,
+                             IBroadcastResourceIds idBroadcaster)
             : base(signalRBroadcaster)
         {
             _commandQueueManager = commandQueueManager;
             _knownTypes = knownTypes;
+            _idBroadcaster = idBroadcaster;
 
             _debouncer = new Debouncer(SendUpdates, TimeSpan.FromSeconds(0.1));
             _pendingUpdates = new Dictionary<int, CommandResource>();
@@ -113,6 +116,12 @@ namespace Whisparr.Api.V5.Commands
             {
                 var pendingUpdates = _pendingUpdates.Values.ToArray();
                 _pendingUpdates.Clear();
+
+                // The UI flushes its held-back refreshes on a finished command, so the command's last batched ids must reach it first
+                if (pendingUpdates.Any(u => u.Status is CommandStatus.Completed or CommandStatus.Failed or CommandStatus.Aborted or CommandStatus.Cancelled or CommandStatus.Orphaned))
+                {
+                    _idBroadcaster.Flush();
+                }
 
                 foreach (var pendingUpdate in pendingUpdates)
                 {

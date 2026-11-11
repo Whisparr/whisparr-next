@@ -97,8 +97,9 @@ namespace Whisparr.Api.V5.Movies
                            RootFolderExistsValidator<MovieResource> rootFolderExistsValidator,
                            MovieFolderAsRootFolderValidator movieFolderAsRootFolderValidator,
                            ICacheManager cacheManager,
-                           Logger logger)
-            : base(signalRBroadcaster)
+                           Logger logger,
+                           IBroadcastResourceIds idBroadcaster)
+            : base(signalRBroadcaster, idBroadcaster)
         {
             _moviesService = moviesService;
             _addMovieService = addMovieService;
@@ -377,7 +378,7 @@ namespace Whisparr.Api.V5.Movies
                 _movieResourcesCache.Remove(movie.Id.ToString());
             }
 
-            BroadcastResourceChangeBatch(ModelAction.Updated, updated.Select(MapToResource));
+            QueueResourceChange(ModelAction.Updated, updated.Select(m => m.Id));
 
             return Ok();
         }
@@ -582,16 +583,7 @@ namespace Whisparr.Api.V5.Movies
         public void Handle(MovieFileImportedEvent message)
         {
             _movieResourcesCache.Remove(message.MovieInfo.Movie.Id.ToString());
-
-            var updatedMovie = _moviesService.GetMovie(message.MovieInfo.Movie.Id);
-            if (updatedMovie != null)
-            {
-                BroadcastResourceChange(ModelAction.Updated, MapToResource(updatedMovie));
-            }
-            else
-            {
-                BroadcastResourceChange(ModelAction.Updated, message.MovieInfo.Movie.Id);
-            }
+            QueueResourceChange(ModelAction.Updated, message.MovieInfo.Movie.Id);
         }
 
         [NonAction]
@@ -604,15 +596,7 @@ namespace Whisparr.Api.V5.Movies
             }
 
             _movieResourcesCache.Remove(message.MovieFile.MovieId.ToString());
-            var updatedMovie = _moviesService.GetMovie(message.MovieFile.MovieId);
-            if (updatedMovie != null)
-            {
-                BroadcastResourceChange(ModelAction.Updated, MapToResource(updatedMovie));
-            }
-            else
-            {
-                BroadcastResourceChange(ModelAction.Updated, message.MovieFile.MovieId);
-            }
+            QueueResourceChange(ModelAction.Updated, message.MovieFile.MovieId);
         }
 
         /// <summary>SignalR handler for MovieImportedEvent</summary>
@@ -632,21 +616,21 @@ namespace Whisparr.Api.V5.Movies
                 _movieResourcesCache.Remove(movie.Id.ToString());
             }
 
-            BroadcastResourceChangeBatch(ModelAction.Updated, movies.Select(MapToResource));
+            QueueResourceChange(ModelAction.Updated, movies.Select(m => m.Id));
         }
 
         [NonAction]
         public void Handle(MovieUpdatedEvent message)
         {
             _movieResourcesCache.Remove(message.Movie.Id.ToString());
-            BroadcastResourceChange(ModelAction.Updated, MapToResource(message.Movie));
+            QueueResourceChange(ModelAction.Updated, message.Movie.Id);
         }
 
         [NonAction]
         public void Handle(MovieEditedEvent message)
         {
             _movieResourcesCache.Remove(message.Movie.Id.ToString());
-            BroadcastResourceChange(ModelAction.Updated, MapToResource(message.Movie));
+            QueueResourceChange(ModelAction.Updated, message.Movie.Id);
         }
 
         [NonAction]
@@ -662,7 +646,7 @@ namespace Whisparr.Api.V5.Movies
                 _movieResourcesCache.Remove(movie.Id.ToString());
             }
 
-            BroadcastResourceChangeBatch(ModelAction.Deleted, message.Movies.Select(m => new MovieResource { Id = m.Id }));
+            QueueResourceChange(ModelAction.Deleted, message.Movies.Select(m => m.Id));
         }
 
         [NonAction]
@@ -678,15 +662,14 @@ namespace Whisparr.Api.V5.Movies
                 _movieResourcesCache.Remove(movie.Id.ToString());
             }
 
-            // Batch broadcast with mapped resources
-            BroadcastResourceChangeBatch(ModelAction.Updated, message.Movies.Select(MapToResource));
+            QueueResourceChange(ModelAction.Updated, message.Movies.Select(m => m.Id));
         }
 
         [NonAction]
         public void Handle(MovieRenamedEvent message)
         {
             _movieResourcesCache.Remove(message.Movie.Id.ToString());
-            BroadcastResourceChange(ModelAction.Updated, MapToResource(message.Movie));
+            QueueResourceChange(ModelAction.Updated, message.Movie.Id);
         }
 
         [NonAction]
@@ -695,8 +678,7 @@ namespace Whisparr.Api.V5.Movies
             if (message.Updated)
             {
                 _movieResourcesCache.Remove(message.Movie.Id.ToString());
-                var updatedMovie = _moviesService.GetMovie(message.Movie.Id);
-                BroadcastResourceChange(ModelAction.Updated, MapToResource(updatedMovie));
+                QueueResourceChange(ModelAction.Updated, message.Movie.Id);
             }
         }
 
