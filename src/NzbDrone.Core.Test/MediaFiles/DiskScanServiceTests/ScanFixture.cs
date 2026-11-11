@@ -949,10 +949,13 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
 
             Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
             Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(new List<MovieFile>());
+            Mocker.GetMock<IMediaFileService>()
                   .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
                   .Returns((string _, List<string> files) => files);
             Mocker.GetMock<ISharedFolderScanner>()
-                  .Setup(s => s.IdentifyOwned(_movie, It.IsAny<List<string>>()))
+                  .Setup(s => s.IdentifyOwned(_movie.Path, It.IsAny<List<string>>()))
                   .Returns(new List<ImportDecision>());
 
             Subject.Scan(_movie);

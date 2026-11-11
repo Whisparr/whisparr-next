@@ -24,6 +24,9 @@ namespace NzbDrone.Core.Organizer
 
         // True when another item's folder is, or sits inside, the given folder.
         bool HoldsOtherItems(int movieId, string folder);
+
+        // The path entries of the given items. Read from the cached path index; an id it doesn't hold is left out.
+        List<MoviePathEntry> GetEntries(IEnumerable<int> movieIds);
     }
 
     public class SceneFolderLayout : ISceneFolderLayout,
@@ -150,6 +153,13 @@ namespace NzbDrone.Core.Organizer
             return AllPathEntries().Any(e => e.Id != movieId &&
                                              e.Path.IsNotNullOrWhiteSpace() &&
                                              (e.Path.PathEquals(folder) || folder.IsParentPath(e.Path)));
+        }
+
+        public List<MoviePathEntry> GetEntries(IEnumerable<int> movieIds)
+        {
+            var ids = movieIds.ToHashSet();
+
+            return AllPathEntries().Where(e => ids.Contains(e.Id)).ToList();
         }
 
         public void Handle(MovieAddedEvent message)

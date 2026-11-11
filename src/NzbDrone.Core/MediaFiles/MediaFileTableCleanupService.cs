@@ -6,6 +6,7 @@ using NLog;
 using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
@@ -17,6 +18,9 @@ namespace NzbDrone.Core.MediaFiles
     public interface IMediaFileTableCleanupService
     {
         void Clean(Movie movie, List<string> filesOnDisk);
+
+        // The same over rows the caller already loaded; returns the rows it removed
+        List<MovieFile> Clean(Movie movie, List<string> filesOnDisk, List<MovieFile> movieFiles);
         void Clean(string folder, List<string> filesOnDisk);
     }
 
@@ -45,8 +49,12 @@ namespace NzbDrone.Core.MediaFiles
 
         public void Clean(Movie movie, List<string> filesOnDisk)
         {
-            var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
+            Clean(movie, filesOnDisk, _mediaFileService.GetFilesByMovie(movie.Id));
+        }
 
+        public List<MovieFile> Clean(Movie movie, List<string> filesOnDisk, List<MovieFile> movieFiles)
+        {
+            var removed = new List<MovieFile>();
             var filesOnDiskKeys = new HashSet<string>(filesOnDisk, PathEqualityComparer.Instance);
 
             foreach (var movieFile in movieFiles)
@@ -55,11 +63,28 @@ namespace NzbDrone.Core.MediaFiles
 
                 try
                 {
+                    if (filesOnDiskKeys.Contains(movieFilePath))
+                    {
+                        continue;
+                    }
+
+                    // The rows can be a snapshot another scan has since re-linked or removed, so re-read the row
+                    var current = FindCurrent(movieFile.Id);
+
+                    if (current == null ||
+                        current.MovieId != movieFile.MovieId ||
+                        !Path.Combine(movie.Path, current.RelativePath).PathEquals(movieFilePath))
+                    {
+                        _logger.Debug("File [{0}] changed in db since it was read, not removing it", movieFilePath);
+                        continue;
+                    }
+
                     // A listing can be stale or partial (shared folders), so confirm on disk right before deleting.
-                    if (!filesOnDiskKeys.Contains(movieFilePath) && !_diskProvider.FileExists(movieFilePath))
+                    if (!_diskProvider.FileExists(movieFilePath))
                     {
                         _logger.Debug("File [{0}] no longer exists on disk, removing from db", movieFilePath);
-                        _mediaFileService.Delete(movieFile, DeleteMediaFileReason.MissingFromDisk);
+                        _mediaFileService.Delete(current, DeleteMediaFileReason.MissingFromDisk);
+                        removed.Add(movieFile);
                         continue;
                     }
                 }
@@ -68,6 +93,20 @@ namespace NzbDrone.Core.MediaFiles
                     var errorMessage = string.Format("Unable to cleanup MovieFile in DB: {0}", movieFile.Id);
                     _logger.Error(ex, errorMessage);
                 }
+            }
+
+            return removed;
+        }
+
+        private MovieFile FindCurrent(int id)
+        {
+            try
+            {
+                return _mediaFileService.GetMovie(id);
+            }
+            catch (ModelNotFoundException)
+            {
+                return null;
             }
         }
 

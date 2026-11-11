@@ -28,6 +28,9 @@ namespace NzbDrone.Core.MediaFiles
     public interface IDiskScanService
     {
         void Scan(Movie movie, bool manual = false);
+
+        // Scans the items, each shared folder once for all of its requested scenes. Items are loaded a folder at a time.
+        void Scan(IEnumerable<int> movieIds, bool manual = false);
         string[] GetVideoFiles(string path, bool allDirectories = true);
         string[] GetNonVideoFiles(string path, bool allDirectories = true);
         List<string> FilterPaths(string basePath, IEnumerable<string> paths, bool filterExtras = true);
@@ -113,6 +116,13 @@ namespace NzbDrone.Core.MediaFiles
                 return;
             }
 
+            if (movie.Path.IsNotNullOrWhiteSpace() && _sceneFolderLayout.IsShared(movie))
+            {
+                // A single-scene rescan still identifies the whole folder, so a newly dropped file is found
+                ScanSharedFolder(movie.Path, new List<Movie> { movie }, manual);
+                return;
+            }
+
             var sem = ScanLocks.GetOrAdd(movie.Id, _ => new SemaphoreSlim(1, 1));
 
             _logger.Trace("Acquiring scan lock for movie id {0} ({1})", movie.Id, movie.Title);
@@ -144,29 +154,7 @@ namespace NzbDrone.Core.MediaFiles
 
                 if (!movieFolderExists)
                 {
-                    if (_configService.CreateEmptyMovieFolders)
-                    {
-                        if (_configService.DeleteEmptyFolders)
-                        {
-                            _logger.Debug("Not creating missing movie folder: {0} because delete empty movie folders is enabled", movie.Path);
-                        }
-                        else
-                        {
-                            _logger.Debug("Creating missing movie folder: {0}", movie.Path);
-
-                            _diskProvider.CreateFolder(movie.Path);
-                            SetPermissions(movie.Path);
-                        }
-                    }
-                    else
-                    {
-                        _logger.Debug("Movie's folder doesn't exist: {0}", movie.Path);
-                    }
-
-                    RecordLostFiles(movie, new List<string>());
-                    CleanMediaFiles(movie, new List<string>());
-                    CompletedScanning(movie, new List<string>());
-
+                    ScanMissingFolder(movie);
                     return;
                 }
 
@@ -175,80 +163,27 @@ namespace NzbDrone.Core.MediaFiles
                 videoFilesStopwatch.Stop();
                 _logger.Trace("Finished getting movie files for: {0} [{1}]", movie, videoFilesStopwatch.Elapsed);
 
-                var shared = movie.Path.IsNotNullOrWhiteSpace() && _sceneFolderLayout.IsShared(movie);
+                RelinkRenamedFiles(movie, _mediaFileService.GetFilesByMovie(movie.Id), mediaFileList, false, new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance));
 
-                if (shared)
-                {
-                    // R2: movie lock (held), then the folder lock, so a sibling's import can't claim the same file meanwhile
-                    RunInFolderLock(movie.Path, () => RelinkRenamedFiles(movie, mediaFileList, true));
-                }
-                else
-                {
-                    RelinkRenamedFiles(movie, mediaFileList, false);
-                }
-
-                RecordLostFiles(movie, mediaFileList);
+                RecordLostFiles(movie, null, mediaFileList);
                 CleanMediaFiles(movie, mediaFileList);
 
                 var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
                 var unmappedFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
 
                 var decisionsStopwatch = Stopwatch.StartNew();
-                List<ImportDecision> decisions;
+                var decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
+                decisionsStopwatch.Stop();
+                _logger.Trace("Import decisions complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
+                _importApprovedMovies.Import(decisions, false);
 
-                if (shared)
+                if (IsScene(movie) && unmappedFiles.Count > 0 && _lostMovieFileService.Any())
                 {
-                    decisions = IdentifyAndImportOwned(movie, unmappedFiles);
-                    decisionsStopwatch.Stop();
-                    _logger.Trace("Shared folder import complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
-                }
-                else
-                {
-                    decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
-                    decisionsStopwatch.Stop();
-                    _logger.Trace("Import decisions complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
-                    _importApprovedMovies.Import(decisions, false);
+                    // Only what no item tracks is unowned, whatever the layout
+                    RelinkLostFiles(_mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles), decisions);
                 }
 
-                RelinkLostFiles(movie, unmappedFiles, decisions, shared);
-
-                // Update existing files that have a different file size
-                var fileInfoStopwatch = Stopwatch.StartNew();
-                var filesToUpdate = new List<MovieFile>();
-
-                foreach (var file in movieFiles)
-                {
-                    var path = Path.Combine(movie.Path, file.RelativePath);
-                    var fileSize = _diskProvider.GetFileSize(path);
-
-                    var hashesChanged = UpdateHashes(file, path, fileSize);
-
-                    if (!manual && file.Size == fileSize)
-                    {
-                        if (hashesChanged)
-                        {
-                            filesToUpdate.Add(file);
-                        }
-
-                        continue;
-                    }
-
-                    file.Size = fileSize;
-
-                    if (!_updateMediaInfoService.Update(file, movie))
-                    {
-                        filesToUpdate.Add(file);
-                    }
-                }
-
-                // Update any files that had a file size change, but didn't get media info updated.
-                if (filesToUpdate.Any())
-                {
-                    _mediaFileService.Update(filesToUpdate);
-                }
-
-                fileInfoStopwatch.Stop();
-                _logger.Trace("Reprocessing existing files complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
+                UpdateExistingFiles(movie, movieFiles, manual);
 
                 var filesOnDisk = GetNonVideoFiles(movie.Path);
                 var possibleExtraFiles = FilterPaths(movie.Path, filesOnDisk);
@@ -261,16 +196,9 @@ namespace NzbDrone.Core.MediaFiles
                     var existingUnmappedFiles = _mediaFileRepository.GetUnmappedFiles();
                     if (existingUnmappedFiles != null)
                     {
-                        // In a shared folder only the files this scan imported count; a row for a sibling's file stays
-                        var importedPaths = shared
-                            ? decisions.Where(d => d.Approved).Select(d => d.LocalMovie.Path).ToList()
-                            : null;
-
                         foreach (var unmappedFile in existingUnmappedFiles)
                         {
-                            var owned = shared
-                                ? importedPaths.Contains(unmappedFile.OriginalFilePath, PathEqualityComparer.Instance)
-                                : unmappedFile.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(unmappedFile.OriginalFilePath);
+                            var owned = unmappedFile.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(unmappedFile.OriginalFilePath);
 
                             if (owned)
                             {
@@ -289,6 +217,270 @@ namespace NzbDrone.Core.MediaFiles
             {
                 ReleaseScanLock(movie, sem);
             }
+        }
+
+        public void Scan(IEnumerable<int> movieIds, bool manual = false)
+        {
+            var ids = movieIds.Distinct().ToList();
+            var entries = _sceneFolderLayout.GetEntries(ids).Where(e => e.Path.IsNotNullOrWhiteSpace()).ToList();
+            var indexed = entries.Select(e => e.Id).ToHashSet();
+            var single = new List<int>();
+
+            foreach (var folder in entries.GroupBy(e => e.Path, PathEqualityComparer.Instance))
+            {
+                var folderIds = folder.Select(e => e.Id).ToList();
+
+                if (folderIds.Count == 1)
+                {
+                    single.Add(folderIds[0]);
+                    continue;
+                }
+
+                TryScan(folder.Key, () => ScanFolder(folderIds, manual));
+            }
+
+            // Alone in their folder, not in the path index yet, or without a path: each is scanned on its own
+            // (Scan(movie) still takes the shared-folder pass when it is shared), loaded in chunks
+            single.AddRange(ids.Where(id => !indexed.Contains(id)));
+
+            foreach (var chunk in single.Chunk(1000))
+            {
+                TryScan($"{chunk.Length} item(s)", () =>
+                {
+                    foreach (var movie in LoadMovies(chunk.ToList()))
+                    {
+                        TryScan(movie.ToString(), () => Scan(movie, manual));
+                    }
+                });
+            }
+        }
+
+        private void ScanFolder(List<int> ids, bool manual)
+        {
+            var movies = LoadMovies(ids);
+            var shared = movies.Where(m => m.Path.IsNotNullOrWhiteSpace() && _sceneFolderLayout.IsShared(m)).ToList();
+
+            // Grouped by the loaded path, which the cached index can lag behind
+            foreach (var folder in shared.GroupBy(m => m.Path, PathEqualityComparer.Instance))
+            {
+                TryScan(folder.Key, () => ScanSharedFolder(folder.Key, folder.ToList(), manual));
+            }
+
+            foreach (var movie in movies.Except(shared))
+            {
+                TryScan(movie.ToString(), () => Scan(movie, manual));
+            }
+        }
+
+        private List<Movie> LoadMovies(List<int> ids)
+        {
+            var movies = _movieService.GetMovies(ids);
+            var loaded = movies.Select(m => m.Id).ToHashSet();
+
+            foreach (var id in ids.Where(id => !loaded.Contains(id)))
+            {
+                _logger.Debug("Item {0} no longer exists, not scanning it", id);
+            }
+
+            return movies;
+        }
+
+        private void TryScan(string what, Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Unable to scan {0}", what);
+            }
+        }
+
+        // Each scene under its own movie lock then the folder lock (R2), so one failing doesn't stop its siblings
+        private void ForEachScene(string folder, List<Movie> scenes, Action<Movie> action)
+        {
+            foreach (var scene in scenes)
+            {
+                TryScan(scene.ToString(), () => RunLocked(scene, folder, () => action(scene)));
+            }
+        }
+
+        /// <summary>
+        /// Scans a shared folder once for the requested scenes: one listing, one identification of the unowned videos,
+        /// then each requested scene is finished. Folder-level steps hold only the folder lock and per-scene steps run
+        /// through RunLocked one after another, so no movie lock is ever taken while the folder lock is held (R2).
+        /// </summary>
+        private void ScanSharedFolder(string folder, List<Movie> requested, bool manual)
+        {
+            var rootFolder = _rootFolderService.GetBestRootFolderPath(folder);
+
+            if (!_diskProvider.FolderExists(folder))
+            {
+                if (!_diskProvider.FolderExists(rootFolder))
+                {
+                    _logger.Warn("Movie's root folder ({0}) doesn't exist.", rootFolder);
+                    requested.ForEach(m => _eventAggregator.PublishEvent(new MovieScanSkippedEvent(m, MovieScanSkippedReason.RootFolderDoesNotExist)));
+                    return;
+                }
+
+                if (_diskProvider.FolderEmpty(rootFolder))
+                {
+                    _logger.Warn("Movie's root folder ({0}) is empty. Rescan will not update movies as a failsafe.", rootFolder);
+                    requested.ForEach(m => _eventAggregator.PublishEvent(new MovieScanSkippedEvent(m, MovieScanSkippedReason.RootFolderIsEmpty)));
+                    return;
+                }
+
+                ForEachScene(folder, requested, ScanMissingFolder);
+                return;
+            }
+
+            _logger.Trace("Scanning shared folder {0} for {1} item(s)", folder, requested.Count);
+
+            List<string> videoFiles = null;
+            List<string> possibleExtraFiles = null;
+            ILookup<int, MovieFile> rows = null;
+
+            RunInFolderLock(folder, () =>
+            {
+                var filesOnDisk = _diskProvider.GetFiles(folder, true).ToList();
+
+                videoFiles = FilterPaths(folder, filesOnDisk.Where(f => MediaFileExtensions.Extensions.Contains(Path.GetExtension(f))));
+                possibleExtraFiles = FilterPaths(folder, filesOnDisk.Where(f => !MediaFileExtensions.Extensions.Contains(Path.GetExtension(f))));
+
+                // Every requested scene's rows in one query; later steps reuse these objects, so a re-link is seen
+                rows = _mediaFileService.GetFilesByMovies(requested.Select(m => m.Id)).ToLookup(f => f.MovieId);
+            });
+
+            var hashes = new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance);
+            var movieFiles = new Dictionary<int, List<MovieFile>>();
+
+            ForEachScene(folder, requested, scene =>
+            {
+                var sceneFiles = rows[scene.Id].ToList();
+
+                RelinkRenamedFiles(scene, sceneFiles, videoFiles, true, hashes);
+                RecordLostFiles(scene, sceneFiles, videoFiles);
+
+                _logger.Debug("{0} Cleaning up media files in DB", scene);
+                var removed = _mediaFileTableCleanupService.Clean(scene, videoFiles, sceneFiles) ?? new List<MovieFile>();
+
+                movieFiles[scene.Id] = sceneFiles.Except(removed).ToList();
+            });
+
+            RunInFolderLock(folder, () =>
+            {
+                // Files any item tracks are never unowned: siblings, nested items and an item above the folder.
+                // IdentifyOwned(folder, ...) trusts this, so the filter runs once per pass.
+                var unowned = _mediaFileService.FilterFilesTrackedByAnyItem(folder, videoFiles);
+
+                var decisions = _sharedFolderScanner.IdentifyOwned(folder, unowned);
+                _importApprovedMovies.Import(decisions, false);
+
+                if (unowned.Count > 0 && requested.Any(IsScene) && _lostMovieFileService.Any())
+                {
+                    RelinkLostFiles(unowned, decisions);
+                }
+
+                RemoveImportedUnmappedFiles(decisions);
+            });
+
+            // A scene whose earlier steps failed isn't finished
+            ForEachScene(folder, requested.Where(s => movieFiles.ContainsKey(s.Id)).ToList(), scene =>
+            {
+                UpdateExistingFiles(scene, movieFiles[scene.Id], manual);
+                CompletedScanning(scene, possibleExtraFiles.ToList());
+            });
+
+            RunInFolderLock(folder, () => RemoveEmptyMovieFolder(requested[0]));
+        }
+
+        private void ScanMissingFolder(Movie movie)
+        {
+            if (_configService.CreateEmptyMovieFolders)
+            {
+                if (_configService.DeleteEmptyFolders)
+                {
+                    _logger.Debug("Not creating missing movie folder: {0} because delete empty movie folders is enabled", movie.Path);
+                }
+                else
+                {
+                    _logger.Debug("Creating missing movie folder: {0}", movie.Path);
+
+                    _diskProvider.CreateFolder(movie.Path);
+                    SetPermissions(movie.Path);
+                }
+            }
+            else
+            {
+                _logger.Debug("Movie's folder doesn't exist: {0}", movie.Path);
+            }
+
+            RecordLostFiles(movie, null, new List<string>());
+            CleanMediaFiles(movie, new List<string>());
+            CompletedScanning(movie, new List<string>());
+        }
+
+        // Every unmapped row for a file this pass imported, whichever scene took it; a row for any other file stays
+        private void RemoveImportedUnmappedFiles(List<ImportDecision> decisions)
+        {
+            var importedPaths = decisions.Where(d => d.Approved && d.LocalMovie.Path.IsNotNullOrWhiteSpace())
+                                         .Select(d => d.LocalMovie.Path)
+                                         .ToHashSet(PathEqualityComparer.Instance);
+
+            if (importedPaths.Count == 0)
+            {
+                return;
+            }
+
+            var unmappedFiles = _mediaFileRepository.GetUnmappedFiles() ?? new List<MovieFile>();
+
+            foreach (var unmappedFile in unmappedFiles.Where(f => f.OriginalFilePath.IsNotNullOrWhiteSpace() && importedPaths.Contains(f.OriginalFilePath)))
+            {
+                _mediaFileRepository.Delete(unmappedFile);
+                _eventAggregator.PublishEvent(new MovieFileDeletedEvent(unmappedFile, DeleteMediaFileReason.Manual));
+            }
+        }
+
+        // Update existing files that have a different file size
+        private void UpdateExistingFiles(Movie movie, List<MovieFile> movieFiles, bool manual)
+        {
+            var fileInfoStopwatch = Stopwatch.StartNew();
+            var filesToUpdate = new List<MovieFile>();
+
+            foreach (var file in movieFiles)
+            {
+                var path = Path.Combine(movie.Path, file.RelativePath);
+                var fileSize = _diskProvider.GetFileSize(path);
+
+                var hashesChanged = UpdateHashes(file, path, fileSize);
+
+                if (!manual && file.Size == fileSize)
+                {
+                    if (hashesChanged)
+                    {
+                        filesToUpdate.Add(file);
+                    }
+
+                    continue;
+                }
+
+                file.Size = fileSize;
+
+                if (!_updateMediaInfoService.Update(file, movie))
+                {
+                    filesToUpdate.Add(file);
+                }
+            }
+
+            // Update any files that had a file size change, but didn't get media info updated.
+            if (filesToUpdate.Any())
+            {
+                _mediaFileService.Update(filesToUpdate);
+            }
+
+            fileInfoStopwatch.Stop();
+            _logger.Trace("Reprocessing existing files complete for: {0} [{1}]", movie, fileInfoStopwatch.Elapsed);
         }
 
         public void RunLocked(Movie movie, string folder, Action action)
@@ -388,20 +580,6 @@ namespace NzbDrone.Core.MediaFiles
             return changed;
         }
 
-        // Shared folder: identify what this scene (or a sibling) owns and import it, one scan per folder at a time.
-        private List<ImportDecision> IdentifyAndImportOwned(Movie movie, List<string> unmappedFiles)
-        {
-            List<ImportDecision> decisions = null;
-
-            RunInFolderLock(movie.Path, () =>
-            {
-                decisions = _sharedFolderScanner.IdentifyOwned(movie, unmappedFiles);
-                _importApprovedMovies.Import(decisions, false);
-            });
-
-            return decisions;
-        }
-
         // Always taken after the movie lock (R2)
         private void RunInFolderLock(string folder, Action action)
         {
@@ -432,9 +610,8 @@ namespace NzbDrone.Core.MediaFiles
         /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
         /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
         /// </summary>
-        private void RelinkRenamedFiles(Movie movie, List<string> mediaFileList, bool shared)
+        private void RelinkRenamedFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList, bool shared, Dictionary<string, (string OsHash, DateTime? HashedAt)> hashCache)
         {
-            var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
             var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
             // The listing can miss a file that is still there (filtered path, unreadable folder), so confirm on disk
@@ -466,11 +643,16 @@ namespace NzbDrone.Core.MediaFiles
 
             foreach (var path in newFiles)
             {
-                var (osHash, hashedAt) = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
-
-                if (osHash != null)
+                // Shared across a folder pass's scenes, so each candidate is hashed at most once
+                if (!hashCache.TryGetValue(path, out var hash))
                 {
-                    newFileHashes[path] = (osHash, hashedAt);
+                    hash = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
+                    hashCache[path] = hash;
+                }
+
+                if (hash.OsHash != null)
+                {
+                    newFileHashes[path] = hash;
                 }
             }
 
@@ -508,7 +690,8 @@ namespace NzbDrone.Core.MediaFiles
         /// Remembers the oshash of each scene file that is gone from disk (and wasn't re-linked in its folder), so a later
         /// scan can follow it if another tool moved it to a different library folder. Runs before the rows are deleted.
         /// </summary>
-        private void RecordLostFiles(Movie movie, List<string> mediaFileList)
+        // movieFiles null: the scene's rows are loaded here, only when it is a scene
+        private void RecordLostFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList)
         {
             if (!IsScene(movie))
             {
@@ -519,7 +702,7 @@ namespace NzbDrone.Core.MediaFiles
             {
                 var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
-                foreach (var file in _mediaFileService.GetFilesByMovie(movie.Id))
+                foreach (var file in movieFiles ?? _mediaFileService.GetFilesByMovie(movie.Id))
                 {
                     var path = Path.Combine(movie.Path, file.RelativePath);
 
@@ -536,32 +719,12 @@ namespace NzbDrone.Core.MediaFiles
         }
 
         /// <summary>
-        /// Files in this scene's folder that nothing claimed may be a file StashApp moved here from another scene's
-        /// folder: re-link them, in place, to the scene that lost a file with the same oshash and size.
+        /// Files in a scene folder that no item tracks may be a file StashApp moved here from another scene's folder:
+        /// re-link them, in place, to the scene that lost a file with the same oshash and size. In a shared folder this
+        /// runs under the folder lock, so a sibling's scan can't claim the same file meanwhile.
         /// </summary>
-        private void RelinkLostFiles(Movie movie, List<string> unmappedFiles, List<ImportDecision> decisions, bool shared)
+        private void RelinkLostFiles(List<string> candidates, List<ImportDecision> decisions)
         {
-            if (!IsScene(movie) || unmappedFiles.Count == 0 || !_lostMovieFileService.Any())
-            {
-                return;
-            }
-
-            if (shared)
-            {
-                // Under the folder lock a sibling's scan can't claim the same file meanwhile
-                RunInFolderLock(movie.Path, () => RelinkLostFilesLocked(movie, unmappedFiles, decisions));
-            }
-            else
-            {
-                RelinkLostFilesLocked(movie, unmappedFiles, decisions);
-            }
-        }
-
-        private void RelinkLostFilesLocked(Movie movie, List<string> unmappedFiles, List<ImportDecision> decisions)
-        {
-            // Only what no item tracks is unowned, whatever the layout
-            var candidates = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, unmappedFiles);
-
             // Only approved decisions are claimed (imported, so tracked); a rejected file is still unowned
             var decided = new HashSet<string>(decisions.Where(d => d.Approved).Select(d => d.LocalMovie.Path), PathEqualityComparer.Instance);
 
