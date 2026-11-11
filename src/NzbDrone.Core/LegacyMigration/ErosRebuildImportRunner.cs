@@ -33,6 +33,8 @@ namespace NzbDrone.Core.LegacyMigration
         private const string CatalogStep = "Importing catalogs";
 
         // The same converter the repositories use to read this column
+        private const int PrefetchWindowSize = 100;
+
         private static readonly EmbeddedDocumentConverter<MediaInfoModel> MediaInfoConverter = new();
 
         private readonly ErosSeedImportRunner _movieRunner;
@@ -804,11 +806,85 @@ namespace NzbDrone.Core.LegacyMigration
                 Subject = s => SceneSubject(s, context),
                 LegacyDetail = s => LegacyIdDetail(state, s.LegacyForeignId),
                 Update = s => _sceneSeeds.Update(s),
-                Prepare = due => HashFiles(due, context, progress),
+                Prepare = due =>
+                {
+                    HashFiles(due, context, progress);
+                    ListPrefetchScenes(due, context);
+                },
                 Resolve = s => ResolveScene(state, s, context)
             };
 
-            return RunStage(stage, scenes, progress, recordOutages, now);
+            try
+            {
+                return RunStage(stage, scenes, progress, recordOutages, now);
+            }
+            finally
+            {
+                _movieInfo.ForgetPrefetched(Array.Empty<string>(), context.WindowPerformers);
+            }
+        }
+
+        // The hash-matched scenes still to add, in due order, so the stage can fetch them a window at a time
+        private void ListPrefetchScenes(List<LegacySceneSeed> due, SceneContext context)
+        {
+            if (context.Hashes == null)
+            {
+                return;
+            }
+
+            var library = new HashSet<string>(_movieService.AllSceneForeignIds());
+
+            foreach (var seed in due)
+            {
+                if (context.Hashes.TryGetValue(seed.Id.ToString(CultureInfo.InvariantCulture), out var match)
+                    && !match.TryLater
+                    && match.SceneId.IsNotNullOrWhiteSpace()
+                    && !library.Contains(match.SceneId)
+                    && context.PrefetchIndex.TryAdd(match.SceneId, context.PrefetchIds.Count))
+                {
+                    context.PrefetchIds.Add(match.SceneId);
+                    context.SeedScenes[seed.Id] = match.SceneId;
+                }
+            }
+        }
+
+        // Bulk fetch only fills the proxy's cache; a miss or failure leaves the scene to its own per-scene fetch
+        private void PrefetchWindow(string sceneId, SceneContext context)
+        {
+            if (context.PrefetchIndex[sceneId] < context.Cursor)
+            {
+                return;
+            }
+
+            var window = context.PrefetchIds.Skip(context.Cursor).Take(PrefetchWindowSize).ToList();
+
+            context.Cursor += window.Count;
+            _movieInfo.ForgetPrefetched(Array.Empty<string>(), context.WindowPerformers);
+            context.WindowPerformers = new List<string>();
+
+            var notCached = _movieInfo.PrefetchScenes(window);
+
+            try
+            {
+                var known = new HashSet<string>(_performerService.AllPerformerForeignIds());
+
+                // Reads the proxy's cache, so only the scenes it holds
+                context.WindowPerformers = window
+                    .Except(notCached)
+                    .SelectMany(id => _movieInfo.GetSceneInfo(id).Item3.Select(p => p.ForeignId))
+                    .Where(id => id.IsNotNullOrWhiteSpace() && !known.Contains(id))
+                    .Distinct()
+                    .ToList();
+
+                if (context.WindowPerformers.Count > 0)
+                {
+                    _movieInfo.PrefetchPerformers(context.WindowPerformers);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Prefetching the performers of a scene window failed");
+            }
         }
 
         // With the studio as Eros had it, since a title alone doesn't say which scene a report row means
@@ -881,6 +957,28 @@ namespace NzbDrone.Core.LegacyMigration
         }
 
         private void ResolveScene(LegacyMigrationState state, LegacySceneSeed seed, SceneContext context)
+        {
+            context.SeedScenes.TryGetValue(seed.Id, out var prefetchId);
+
+            try
+            {
+                if (prefetchId != null)
+                {
+                    PrefetchWindow(prefetchId, context);
+                }
+
+                ResolveSceneCore(state, seed, context);
+            }
+            finally
+            {
+                if (prefetchId != null)
+                {
+                    _movieInfo.ForgetPrefetched(new[] { prefetchId }, Array.Empty<string>());
+                }
+            }
+        }
+
+        private void ResolveSceneCore(LegacyMigrationState state, LegacySceneSeed seed, SceneContext context)
         {
             context.Files.TryGetValue(seed.Id, out var importFile);
 
@@ -1077,6 +1175,11 @@ namespace NzbDrone.Core.LegacyMigration
             public Dictionary<string, string> StudioIds { get; }
             public Dictionary<int, ImportFile> Files { get; } = new();
             public Dictionary<string, HashMatch> Hashes { get; set; }
+            public List<string> PrefetchIds { get; } = new();
+            public Dictionary<string, int> PrefetchIndex { get; } = new();
+            public Dictionary<int, string> SeedScenes { get; } = new();
+            public int Cursor { get; set; }
+            public List<string> WindowPerformers { get; set; } = new();
             public ILegacyImportProgress Progress { get; init; }
             public Dictionary<string, string> StudioTitles { get; init; }
             public Exception HashError { get; set; }

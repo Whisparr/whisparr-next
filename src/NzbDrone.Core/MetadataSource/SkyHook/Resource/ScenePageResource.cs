@@ -13,6 +13,12 @@ namespace NzbDrone.Core.MetadataSource.SkyHook.Resource
         public bool Building { get; set; }
     }
 
+    public class SceneBulkResource
+    {
+        public List<MovieResource> Scenes { get; set; }
+        public List<string> Pending { get; set; }
+    }
+
     public class PerformerBulkResource
     {
         public List<PerformerResource> Performers { get; set; }
