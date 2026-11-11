@@ -14,6 +14,7 @@ import SetupSourceForm from './SetupSourceForm';
 import SetupSummary from './SetupSummary';
 import useSetupStatus, {
   LegacyKind,
+  openAppAfterSetup,
   postSetup,
   SetupChoice,
   SetupInstall,
@@ -85,8 +86,8 @@ function defaultsFor(status: SetupStatus, kind: LegacyKind): SetupChoice {
 }
 
 // Polls initialize.json until the app is back out of setup mode, then opens
-// the migration report, which covers what the migration did and what's left.
-function useOpenReportWhenBack(isRestarting: boolean) {
+// System > Tasks, where the import carries on.
+function useOpenAppWhenBack(isRestarting: boolean) {
   useEffect(() => {
     if (!isRestarting) {
       return;
@@ -100,9 +101,7 @@ function useOpenReportWhenBack(isRestarting: boolean) {
         const json = (await response.json()) as { setupMode?: boolean };
 
         if (response.ok && json.setupMode === false) {
-          window.location.assign(
-            `${window.Whisparr.urlBase}/system/migration-report`
-          );
+          openAppAfterSetup();
         }
       } catch {
         // Still down; try again.
@@ -164,7 +163,7 @@ function SetupApp() {
     (hasError &&
       (progressStatus === 'succeeded' || progressStatus === 'running'));
 
-  useOpenReportWhenBack(isRestarting);
+  useOpenAppWhenBack(isRestarting);
 
   const activeChoice =
     choice ?? (status ? defaultsFor(status, status.defaults.kind) : null);
