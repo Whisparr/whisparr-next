@@ -95,6 +95,19 @@ namespace NzbDrone.Core.Test.DiskSpace
         }
 
         [Test]
+        public void should_resolve_a_shared_folder_once()
+        {
+            GivenMovies(new Movie { Id = 1, Path = _moviesFolder }, new Movie { Id = 2, Path = _moviesFolder }, new Movie { Id = 3, Path = _moviesFolder });
+            GivenRootFolder(_moviesFolder, _rootFolder);
+            GivenExistingFolder(_rootFolder);
+
+            Subject.GetFreeSpace();
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Verify(v => v.GetBestRootFolderPath(_moviesFolder, It.IsAny<List<RootFolder>>()), Times.Once());
+        }
+
+        [Test]
         public void should_not_check_diskspace_for_missing_movie_root_folders()
         {
             GivenMovies(new Movie { Path = _moviesFolder });
