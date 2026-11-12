@@ -208,14 +208,7 @@ namespace NzbDrone.Core.Movies
                 .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
                 .Where<MovieMetadata>(x => x.StudioForeignId == studioForeignId);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public List<Movie> FindByYear(ItemType itemType, int year)
@@ -224,14 +217,7 @@ namespace NzbDrone.Core.Movies
                 .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
                 .Where<MovieMetadata>(x => x.ItemType == itemType && x.Year == year);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public List<Movie> GetByPerformerForeignId(string performerForeignId)
@@ -241,14 +227,7 @@ namespace NzbDrone.Core.Movies
                 .Join<MovieMetadata, Credit>((m, p) => m.Id == p.MovieMetadataId)
                 .Where<Credit>(x => x.PerformerForeignId == performerForeignId);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public Movie FindByTpdbId(string tpdbid)
@@ -289,14 +268,7 @@ namespace NzbDrone.Core.Movies
                 .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
                 .Where<MovieMetadata>(x => x.Status == MovieStatusType.Deleted);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public Movie FindByJavCode(string code)
