@@ -36,6 +36,7 @@ namespace NzbDrone.Core.Movies
         List<Movie> GetMoviesByCollectionTmdbId(int collectionId);
         PagingSpec<Movie> MoviesWhereCutoffUnmet(PagingSpec<Movie> pagingSpec, List<QualitiesBelowCutoff> qualitiesBelowCutoff, HashSet<int> movieTags = null, List<int> quality = null);
         Movie FindByPath(string path);
+        List<Movie> GetDeletedMovies();
         Dictionary<int, string> AllMoviePaths();
         List<MoviePathEntry> AllMoviePathEntries();
         List<MoviePathEntry> NonScenePathEntries();
@@ -207,14 +208,7 @@ namespace NzbDrone.Core.Movies
                 .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
                 .Where<MovieMetadata>(x => x.StudioForeignId == studioForeignId);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public List<Movie> FindByYear(ItemType itemType, int year)
@@ -223,14 +217,7 @@ namespace NzbDrone.Core.Movies
                 .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
                 .Where<MovieMetadata>(x => x.ItemType == itemType && x.Year == year);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public List<Movie> GetByPerformerForeignId(string performerForeignId)
@@ -240,14 +227,7 @@ namespace NzbDrone.Core.Movies
                 .Join<MovieMetadata, Credit>((m, p) => m.Id == p.MovieMetadataId)
                 .Where<Credit>(x => x.PerformerForeignId == performerForeignId);
 
-            return _database.QueryJoined<Movie, MovieMetadata>(
-                builder,
-                (movie, metadata) =>
-                {
-                    movie.MovieMetadata = metadata;
-
-                    return movie;
-                }).AsList();
+            return PagedQuery(builder).AsList();
         }
 
         public Movie FindByTpdbId(string tpdbid)
@@ -279,6 +259,16 @@ namespace NzbDrone.Core.Movies
         public Movie FindByForeignId(string foreignId)
         {
             return Query(x => x.MovieMetadata.Value.ForeignId == foreignId).FirstOrDefault();
+        }
+
+        public List<Movie> GetDeletedMovies()
+        {
+            // Joins only the metadata, like All(), so a dangling quality profile can't hide a removed item
+            var builder = new SqlBuilder(_database.DatabaseType)
+                .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
+                .Where<MovieMetadata>(x => x.Status == MovieStatusType.Deleted);
+
+            return PagedQuery(builder).AsList();
         }
 
         public Movie FindByJavCode(string code)

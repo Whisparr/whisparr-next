@@ -22,7 +22,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
 
         public override HealthCheck Check()
         {
-            var deletedItems = _movieService.GetAllMovies().Where(v => v.MovieMetadata.Value.Status == MovieStatusType.Deleted).ToList();
+            var deletedItems = _movieService.GetDeletedMovies();
 
             if (deletedItems.Empty())
             {

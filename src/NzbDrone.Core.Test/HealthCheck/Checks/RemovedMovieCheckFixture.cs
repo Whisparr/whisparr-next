@@ -66,7 +66,7 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
         private void GivenDeletedItems(params Movie[] movies)
         {
             Mocker.GetMock<IMovieService>()
-                  .Setup(v => v.GetAllMovies())
+                  .Setup(v => v.GetDeletedMovies())
                   .Returns(movies.ToList());
         }
 
@@ -95,9 +95,20 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
                     .BuildList();
             }
 
+            // The service only returns deleted items
             Mocker.GetMock<IMovieService>()
-                .Setup(v => v.GetAllMovies())
-                .Returns(movie);
+                .Setup(v => v.GetDeletedMovies())
+                .Returns(movie.Where(m => m.MovieMetadata.Value.Status == MovieStatusType.Deleted).ToList());
+        }
+
+        [Test]
+        public void should_not_load_every_movie()
+        {
+            GivenMovie(4, 1);
+
+            Subject.Check();
+
+            Mocker.GetMock<IMovieService>().Verify(v => v.GetAllMovies(), Times.Never());
         }
 
         [Test]

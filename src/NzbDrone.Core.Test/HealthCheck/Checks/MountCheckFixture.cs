@@ -151,6 +151,18 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
         }
 
         [Test]
+        public void should_resolve_a_shared_folder_once()
+        {
+            var path = @"C:\Scenes\Studio".AsOsAgnostic();
+
+            GivenMoviePaths(path, path, path);
+
+            Subject.Check();
+
+            Mocker.GetMock<IDiskProvider>().Verify(s => s.GetMount(path), Times.Once());
+        }
+
+        [Test]
         public void should_report_each_read_only_mount()
         {
             var first = @"C:\First\movie".AsOsAgnostic();
