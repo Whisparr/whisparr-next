@@ -56,6 +56,7 @@ namespace NzbDrone.Core.Movies
         List<string> AllMovieTpdbIds();
         List<string> AllMovieStashIds();
         List<string> AllSceneForeignIds();
+        List<string> FindSceneForeignIds(List<string> foreignIds);
         List<string> AllMovieForeignIds();
         bool MovieExists(Movie movie);
         List<Movie> GetMoviesByFileId(int fileId);
@@ -397,6 +398,12 @@ namespace NzbDrone.Core.Movies
         public List<string> AllSceneForeignIds()
         {
             return _movieRepository.AllSceneForeignIds();
+        }
+
+        /// <summary> Get which of the given foreign IDs belong to a scene or JAV already in the library. </summary>
+        public List<string> FindSceneForeignIds(List<string> foreignIds)
+        {
+            return _movieRepository.FindSceneForeignIds(foreignIds);
         }
 
         /// <summary> Get a list of all foreign IDs for movies in the repository. </summary>
