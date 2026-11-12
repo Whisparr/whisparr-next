@@ -21,19 +21,33 @@ namespace NzbDrone.Core.Housekeeping.Housekeepers
 
         public void Clean()
         {
-            var allMovies = _movieService.GetAllMovies();
+            // Start from the extra files: a library can hold hundreds of thousands of items and only a few extras
+            var allExtraFiles = _extraFileRepository.All().ToList();
 
-            foreach (var movie in allMovies)
+            if (allExtraFiles.Count == 0)
             {
-                var extraFiles = _extraFileRepository.GetFilesByMovie(movie.Id);
-                var filteredExtraFiles = _diskScanService.FilterPaths(movie.Path, extraFiles.Select(e => Path.Combine(movie.Path, e.RelativePath)));
+                return;
+            }
+
+            var moviePaths = _movieService.AllMoviePaths();
+
+            foreach (var group in allExtraFiles.GroupBy(e => e.MovieId))
+            {
+                // Orphaned extras are left to CleanupOrphanedExtraFiles
+                if (!moviePaths.TryGetValue(group.Key, out var moviePath))
+                {
+                    continue;
+                }
+
+                var extraFiles = group.ToList();
+                var filteredExtraFiles = _diskScanService.FilterPaths(moviePath, extraFiles.Select(e => Path.Combine(moviePath, e.RelativePath)));
 
                 if (filteredExtraFiles.Count == extraFiles.Count)
                 {
                     continue;
                 }
 
-                var excludedExtraFiles = extraFiles.Where(e => !filteredExtraFiles.Contains(Path.Combine(movie.Path, e.RelativePath))).ToList();
+                var excludedExtraFiles = extraFiles.Where(e => !filteredExtraFiles.Contains(Path.Combine(moviePath, e.RelativePath))).ToList();
 
                 if (excludedExtraFiles.Any())
                 {
