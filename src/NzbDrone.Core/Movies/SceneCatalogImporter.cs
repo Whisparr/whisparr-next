@@ -51,7 +51,9 @@ namespace NzbDrone.Core.Movies
 
         public SceneCatalogImportResult ImportScenes(string ownerTitle, Func<string, ScenePage> fetchPage, Func<string, Movie> buildStub, Func<bool> keepGoing)
         {
-            var library = new HashSet<string>(_movieService.AllSceneForeignIds());
+            // Each page is checked against the library on its own: loading every scene id per studio cost seconds per studio
+            // on large libraries. addedIds covers what this walk added, so a revisited page can't add a scene twice.
+            var addedIds = new HashSet<string>();
             var excluded = new HashSet<string>(_exclusionService.GetAllExclusions().Select(e => e.ForeignId));
             var addedCount = 0;
             var total = 0;
@@ -71,23 +73,28 @@ namespace NzbDrone.Core.Movies
                         return;
                     }
 
-                    var newItems = items
-                        .Where(i => !library.Contains(i.SceneId) && !excluded.Contains(i.SceneId))
+                    var candidates = items
+                        .Where(i => !addedIds.Contains(i.SceneId) && !excluded.Contains(i.SceneId))
                         .GroupBy(i => i.SceneId)
                         .Select(g => g.First())
                         .ToList();
+
+                    var inLibrary = candidates.Count == 0
+                        ? new HashSet<string>()
+                        : new HashSet<string>(_movieService.FindSceneForeignIds(candidates.Select(i => i.SceneId).ToList()));
+                    var newItems = candidates.Where(i => !inLibrary.Contains(i.SceneId)).ToList();
 
                     if (newItems.Count == 0)
                     {
                         return;
                     }
 
-                    var knownPerformers = new HashSet<string>(_performerService.AllPerformerForeignIds());
-                    var unknownPerformers = newItems
+                    var pagePerformers = newItems
                         .SelectMany(i => i.PerformerIds ?? new List<string>())
-                        .Where(id => !knownPerformers.Contains(id))
                         .Distinct()
                         .ToList();
+                    var knownPerformers = new HashSet<string>(_performerService.FindByForeignIds(pagePerformers).Select(p => p.ForeignId));
+                    var unknownPerformers = pagePerformers.Where(id => !knownPerformers.Contains(id)).ToList();
 
                     if (unknownPerformers.Count > 0)
                     {
@@ -99,7 +106,7 @@ namespace NzbDrone.Core.Movies
 
                     foreach (var movie in added)
                     {
-                        library.Add(movie.ForeignId);
+                        addedIds.Add(movie.ForeignId);
                     }
 
                     addedCount += added.Count;

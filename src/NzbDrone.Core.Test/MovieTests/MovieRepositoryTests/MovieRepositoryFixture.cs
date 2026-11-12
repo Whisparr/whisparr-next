@@ -250,6 +250,35 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
         }
 
         [Test]
+        public void should_find_only_the_requested_scene_and_jav_foreign_ids()
+        {
+            var profile = GivenProfile();
+            var scene = GivenTitledMovie(profile.Id, "A Scene", ItemType.Scene);
+            var otherScene = GivenTitledMovie(profile.Id, "Another Scene", ItemType.Scene);
+            var jav = GivenTitledMovie(profile.Id, "A Jav", ItemType.Jav);
+            var movie = GivenTitledMovie(profile.Id, "A Movie", ItemType.Movie);
+
+            var foreignIds = Db.All<MovieMetadata>().ToDictionary(m => m.Id, m => m.ForeignId);
+
+            var found = Subject.FindSceneForeignIds(new List<string>
+            {
+                foreignIds[scene.MovieMetadataId],
+                foreignIds[jav.MovieMetadataId],
+                foreignIds[movie.MovieMetadataId],
+                "not-in-library"
+            });
+
+            found.Should().BeEquivalentTo(foreignIds[scene.MovieMetadataId], foreignIds[jav.MovieMetadataId]);
+            found.Should().NotContain(foreignIds[otherScene.MovieMetadataId]);
+        }
+
+        [Test]
+        public void should_find_nothing_for_no_foreign_ids()
+        {
+            Subject.FindSceneForeignIds(new List<string>()).Should().BeEmpty();
+        }
+
+        [Test]
         public void find_by_jav_code_ignores_scene_with_same_code()
         {
             var profile = GivenProfile();

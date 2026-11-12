@@ -46,6 +46,7 @@ namespace NzbDrone.Core.Movies
         List<string> AllMovieTpdbIds();
         List<string> AllMovieStashIds();
         List<string> AllSceneForeignIds();
+        List<string> FindSceneForeignIds(List<string> foreignIds);
         List<string> AllMovieForeignIds();
         Dictionary<int, List<int>> AllMovieTags();
         bool ExistsByMetadataId(int metadataId);
@@ -458,6 +459,30 @@ namespace NzbDrone.Core.Movies
                 return conn.Query<string>(
                     "SELECT \"MovieMetadata\".\"ForeignId\" FROM \"MovieMetadata\" JOIN \"Movies\" ON (\"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\") WHERE \"MovieMetadata\".\"ItemType\" IN (@Scene, @Jav)",
                     new { Scene = (int)ItemType.Scene, Jav = (int)ItemType.Jav }).ToList();
+            }
+        }
+
+        public List<string> FindSceneForeignIds(List<string> foreignIds)
+        {
+            if (foreignIds.Count == 0)
+            {
+                return new List<string>();
+            }
+
+            // ItemType is filtered here, not in SQL: with it in the WHERE, SQLite picks the ItemType index and
+            // reads every scene (~6.5s on 450k scenes) instead of looking up the ids by the ForeignId index (~0.1s).
+            var sql = new SqlBuilder(_database.DatabaseType)
+                .Select("\"MovieMetadata\".\"ForeignId\", \"MovieMetadata\".\"ItemType\"")
+                .Join<Movie, MovieMetadata>((m, mm) => m.MovieMetadataId == mm.Id)
+                .Where<MovieMetadata>(x => foreignIds.Contains(x.ForeignId))
+                .AddSelectTemplate(typeof(Movie));
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<(string ForeignId, ItemType ItemType)>(sql.RawSql, sql.Parameters)
+                    .Where(r => r.ItemType is ItemType.Scene or ItemType.Jav)
+                    .Select(r => r.ForeignId)
+                    .ToList();
             }
         }
 

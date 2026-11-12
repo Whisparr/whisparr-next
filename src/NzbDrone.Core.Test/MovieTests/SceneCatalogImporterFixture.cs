@@ -31,8 +31,12 @@ namespace NzbDrone.Core.Test.MovieTests
 
             _sceneForeignIds = new List<string>();
 
-            Mocker.GetMock<IMovieService>().Setup(s => s.AllSceneForeignIds()).Returns(() => _sceneForeignIds);
-            Mocker.GetMock<IPerformerService>().Setup(s => s.AllPerformerForeignIds()).Returns(() => _performerIds);
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.FindSceneForeignIds(It.IsAny<List<string>>()))
+                  .Returns<List<string>>(ids => ids.Intersect(_sceneForeignIds).ToList());
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns<List<string>>(ids => ids.Intersect(_performerIds).Select(id => new Performer { ForeignId = id }).ToList());
             Mocker.GetMock<IImportListExclusionService>().Setup(s => s.GetAllExclusions()).Returns(() => _exclusions);
 
             Mocker.GetMock<IProvideMovieInfo>()
@@ -123,9 +127,37 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_only_look_up_the_page_not_the_whole_library()
+        {
+            _sceneForeignIds.Add("a");
+            _performerIds.Add("known");
+
+            GivenPages(Page(ScenePageStatus.Complete, 2, Item("a", "pa"), Item("b", "known", "new")));
+
+            Import().Should().Be(1);
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindSceneForeignIds(It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "a", "b" }))), Times.Once());
+            Mocker.GetMock<IPerformerService>().Verify(s => s.FindByForeignIds(It.Is<List<string>>(ids => ids.SequenceEqual(new[] { "known", "new" }))), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllSceneForeignIds(), Times.Never());
+            Mocker.GetMock<IPerformerService>().Verify(s => s.AllPerformerForeignIds(), Times.Never());
+        }
+
+        [Test]
+        public void should_not_query_the_library_for_a_page_of_excluded_scenes()
+        {
+            _exclusions.Add(new ImportListExclusion { ForeignId = "a" });
+
+            GivenPages(Page(ScenePageStatus.Complete, 1, Item("a")));
+
+            Import().Should().Be(0);
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindSceneForeignIds(It.IsAny<List<string>>()), Times.Never());
+        }
+
+        [Test]
         public void should_skip_owned_jav_items()
         {
-            // AllSceneForeignIds covers owned JAV too, so the JAV lane skips what the library already holds.
+            // FindSceneForeignIds covers owned JAV too, so the JAV lane skips what the library already holds.
             _sceneForeignIds.Add("owned-jav");
 
             GivenPages(Page(ScenePageStatus.Complete, 2, Item("owned-jav", "pj"), Item("new-jav", "pn")));
