@@ -12,9 +12,9 @@ namespace NzbDrone.Core.Movies.Studios
     {
         Studio FindByForeignId(string foreignId);
         List<Studio> FindByForeignIds(List<string> foreignIds);
-        Studio FindByTitle(string title);
+        List<Studio> FindByIds(List<int> ids);
         List<Studio> SearchStudios(string cleanTitle, string foreignId);
-        List<Studio> FindAllByTitle(string title);
+        Dictionary<string, List<int>> AllCleanTitles();
         List<string> AllStudioForeignIds();
         List<int> AllStudioIdsByLastInfoSync();
     }
@@ -26,9 +26,10 @@ namespace NzbDrone.Core.Movies.Studios
         {
         }
 
-        public Studio FindByTitle(string title)
+        // Unlike Get(ids), doesn't throw when a studio was deleted after its id was looked up
+        public List<Studio> FindByIds(List<int> ids)
         {
-            return FindAllByTitle(title).FirstOrDefault();
+            return Query(x => ids.Contains(x.Id)).ToList();
         }
 
         public List<Studio> SearchStudios(string cleanTitle, string foreignId)
@@ -36,21 +37,34 @@ namespace NzbDrone.Core.Movies.Studios
             return Query(x => x.CleanTitle.Contains(cleanTitle) || x.ForeignId == foreignId).ToList();
         }
 
-        public List<Studio> FindAllByTitle(string title)
+        /// <summary> Every title a studio can be found by: its clean title, clean search title and cleaned aliases, mapped to the ids of the studios that use it. </summary>
+        public Dictionary<string, List<int>> AllCleanTitles()
         {
-            if (title.IsNullOrWhiteSpace())
+            var lookup = new Dictionary<string, List<int>>();
+
+            foreach (var studio in All())
             {
-                return new List<Studio>();
+                // CleanSearchTitle is only ever written by the API's resource mapper, and stores
+                // string.Empty when the studio has no search title. Studios created by the
+                // metadata and scan paths leave it null. A blank key would match every studio
+                // the user has saved through the UI, so blanks are left out.
+                var titles = new[] { studio.CleanTitle, studio.CleanSearchTitle }
+                    .Concat(studio.Aliases?.Select(alias => alias.CleanStudioTitle()?.ToLower()) ?? Enumerable.Empty<string>())
+                    .Where(t => t.IsNotNullOrWhiteSpace())
+                    .Distinct();
+
+                foreach (var title in titles)
+                {
+                    if (!lookup.TryGetValue(title, out var ids))
+                    {
+                        lookup[title] = ids = new List<int>();
+                    }
+
+                    ids.Add(studio.Id);
+                }
             }
 
-            // CleanSearchTitle is only ever written by the API's resource mapper, and stores
-            // string.Empty when the studio has no search title. Studios created by the
-            // metadata and scan paths leave it null. Comparing a blank title against either
-            // would return every studio the user has saved through the UI, so blanks are
-            // excluded rather than relied upon to be null.
-            return All().Where(x => x.CleanTitle == title
-                                 || (x.CleanSearchTitle.IsNotNullOrWhiteSpace() && x.CleanSearchTitle == title)
-                                 || (x.Aliases != null && x.Aliases.Any(alias => alias.CleanStudioTitle()?.ToLower() == title))).ToList();
+            return lookup;
         }
 
         public Studio FindByForeignId(string foreignId)
