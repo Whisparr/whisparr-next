@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Cache;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Events;
@@ -42,6 +44,11 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly IMovieRepository _movieRepository;
         private readonly IMovieStatisticsService _movieStatisticsService;
 
+        // RSS looks up a studio for every release, and reading every studio to clean its aliases cost ~40ms each time.
+        // Only ids are cached so callers always get fresh studios; writes clear it, and the lifetime is a backstop.
+        private static readonly TimeSpan TitleCacheLifetime = TimeSpan.FromMinutes(10);
+        private readonly ICached<Dictionary<string, List<int>>> _titleCache;
+
         public StudioService(
             IStudioRepository studioRepo,
             IEventAggregator eventAggregator,
@@ -54,11 +61,13 @@ namespace NzbDrone.Core.Movies.Studios
             _cacheManager = cacheManager;
             _movieRepository = movieRepository;
             _movieStatisticsService = movieStatisticsService;
+            _titleCache = cacheManager.GetCache<Dictionary<string, List<int>>>(GetType(), "studioTitles");
         }
 
         public Studio AddStudio(Studio studio)
         {
             var newStudio = _studioRepo.Insert(studio);
+            _titleCache.Clear();
 
             _eventAggregator.PublishEvent(new StudioAddedEvent(newStudio));
 
@@ -68,6 +77,7 @@ namespace NzbDrone.Core.Movies.Studios
         public List<Studio> AddStudios(List<Studio> studios)
         {
             _studioRepo.InsertMany(studios);
+            _titleCache.Clear();
 
             _eventAggregator.PublishEvent(new StudiosAddedEvent(studios));
 
@@ -93,6 +103,7 @@ namespace NzbDrone.Core.Movies.Studios
         {
             RemoveStudioResourcesCache(studio.ForeignId);
             var updatedStudio = _studioRepo.Update(studio);
+            _titleCache.Clear();
             _eventAggregator.PublishEvent(new StudioUpdatedEvent(updatedStudio));
             return updatedStudio;
         }
@@ -100,6 +111,7 @@ namespace NzbDrone.Core.Movies.Studios
         public List<Studio> Update(List<Studio> studios)
         {
             _studioRepo.UpdateMany(studios);
+            _titleCache.Clear();
 
             foreach (var studio in studios)
             {
@@ -113,22 +125,27 @@ namespace NzbDrone.Core.Movies.Studios
         public void RemoveStudio(Studio studio)
         {
             _studioRepo.Delete(studio);
+            _titleCache.Clear();
             _eventAggregator.PublishEvent(new StudiosDeletedEvent(new List<Studio> { studio }));
             RemoveStudioResourcesCache(studio.ForeignId);
         }
 
         public Studio FindByTitle(string title)
         {
-            var cleanTitle = title.CleanStudioTitle();
-
-            return _studioRepo.FindByTitle(cleanTitle);
+            return FindAllByTitle(title).FirstOrDefault();
         }
 
         public List<Studio> FindAllByTitle(string title)
         {
             var cleanTitle = title.CleanStudioTitle().ToLower();
 
-            return _studioRepo.FindAllByTitle(cleanTitle);
+            if (cleanTitle.IsNullOrWhiteSpace() ||
+                !_titleCache.Get("all", _studioRepo.AllCleanTitles, TitleCacheLifetime).TryGetValue(cleanTitle, out var ids))
+            {
+                return new List<Studio>();
+            }
+
+            return _studioRepo.FindByIds(ids);
         }
 
         public Studio FindByForeignId(string foreignId)
