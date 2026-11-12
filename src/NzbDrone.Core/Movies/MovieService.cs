@@ -66,6 +66,7 @@ namespace NzbDrone.Core.Movies
         void DeleteMovie(int movieId, bool deleteFiles, bool addImportListExclusion = false);
         void DeleteMovies(List<int> movieIds, bool deleteFiles, bool addImportListExclusion = false);
         List<Movie> GetAllMovies();
+        List<Movie> GetDeletedMovies();
         int CountByQualityProfile(int qualityProfileId);
         Dictionary<int, List<int>> AllMovieTags();
         Movie UpdateMovie(Movie movie);
@@ -479,6 +480,12 @@ namespace NzbDrone.Core.Movies
         public List<Movie> GetAllMovies()
         {
             return _movieRepository.All().ToList();
+        }
+
+        /// <summary> Get the movies whose metadata was removed from the metadata source. </summary>
+        public List<Movie> GetDeletedMovies()
+        {
+            return _movieRepository.GetDeletedMovies();
         }
 
         /// <summary> Count the movies assigned to a quality profile. </summary>

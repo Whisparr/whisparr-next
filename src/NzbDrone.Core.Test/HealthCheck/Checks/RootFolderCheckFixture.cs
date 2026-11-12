@@ -118,6 +118,23 @@ namespace NzbDrone.Core.Test.HealthCheck.Checks
         }
 
         [Test]
+        public void should_resolve_a_shared_folder_once()
+        {
+            var path = @"C:\Scenes\Studio".AsOsAgnostic();
+
+            GivenMissingRootFolder(@"C:\Scenes".AsOsAgnostic());
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.AllMoviePaths())
+                  .Returns(new Dictionary<int, string> { { 1, path }, { 2, path }, { 3, path } });
+
+            Subject.Check();
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Verify(s => s.GetBestRootFolderPath(path, It.IsAny<List<RootFolder>>()), Times.Once());
+        }
+
+        [Test]
         public void should_only_fetch_root_folders_once_regardless_of_movie_count()
         {
             GivenMissingRootFolder(@"C:\Movies".AsOsAgnostic(), 10);

@@ -36,6 +36,7 @@ namespace NzbDrone.Core.Movies
         List<Movie> GetMoviesByCollectionTmdbId(int collectionId);
         PagingSpec<Movie> MoviesWhereCutoffUnmet(PagingSpec<Movie> pagingSpec, List<QualitiesBelowCutoff> qualitiesBelowCutoff, HashSet<int> movieTags = null, List<int> quality = null);
         Movie FindByPath(string path);
+        List<Movie> GetDeletedMovies();
         Dictionary<int, string> AllMoviePaths();
         List<MoviePathEntry> AllMoviePathEntries();
         List<MoviePathEntry> NonScenePathEntries();
@@ -279,6 +280,23 @@ namespace NzbDrone.Core.Movies
         public Movie FindByForeignId(string foreignId)
         {
             return Query(x => x.MovieMetadata.Value.ForeignId == foreignId).FirstOrDefault();
+        }
+
+        public List<Movie> GetDeletedMovies()
+        {
+            // Joins only the metadata, like All(), so a dangling quality profile can't hide a removed item
+            var builder = new SqlBuilder(_database.DatabaseType)
+                .Join<Movie, MovieMetadata>((m, p) => m.MovieMetadataId == p.Id)
+                .Where<MovieMetadata>(x => x.Status == MovieStatusType.Deleted);
+
+            return _database.QueryJoined<Movie, MovieMetadata>(
+                builder,
+                (movie, metadata) =>
+                {
+                    movie.MovieMetadata = metadata;
+
+                    return movie;
+                }).AsList();
         }
 
         public Movie FindByJavCode(string code)
