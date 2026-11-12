@@ -7,6 +7,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Organizer;
 
 namespace NzbDrone.Core.Extras
 {
@@ -35,6 +36,13 @@ namespace NzbDrone.Core.Extras
             var files = _mediaFileService.GetFilesByMovie(movie.Id);
 
             return files is { Count: 1 } ? files[0].Id : movie.MovieFileId;
+        }
+
+        // Whether side files need an owner lookup. Without resolved owners, the folder is only checked when there is a
+        // file to assign: a studio folder can hold thousands of items.
+        protected static bool IsSharedFolder(Movie movie, List<string> filesOnDisk, IReadOnlyDictionary<string, int> resolvedOwners, ISceneFolderLayout sceneFolderLayout)
+        {
+            return resolvedOwners != null || (filesOnDisk.Count > 0 && sceneFolderLayout.IsShared(movie));
         }
 
         // The owning MovieFile.Id of a side file in a shared folder, or null when the movie doesn't own it. The folder
