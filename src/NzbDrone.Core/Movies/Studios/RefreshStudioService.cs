@@ -300,6 +300,8 @@ namespace NzbDrone.Core.Movies.Studios
 
                     if (scanIds.Any())
                     {
+                        _logger.ProgressInfo("Rescanning {0} items for {1}", scanIds.Count, studio.Title);
+
                         try
                         {
                             _diskScanService.Scan(scanIds, false);

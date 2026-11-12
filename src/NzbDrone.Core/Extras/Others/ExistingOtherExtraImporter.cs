@@ -45,7 +45,8 @@ namespace NzbDrone.Core.Extras.Others
             var extraFiles = new List<OtherExtraFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            // Only look up the folder's owners when there is a file to assign; a studio folder can hold thousands of items
+            var shared = resolvedOwners != null || (filterResult.FilesOnDisk.Count > 0 && _sceneFolderLayout.IsShared(movie));
             var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleExtraFile in filterResult.FilesOnDisk)
