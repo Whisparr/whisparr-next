@@ -45,7 +45,7 @@ namespace NzbDrone.Core.Extras.Others
             var extraFiles = new List<OtherExtraFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            var shared = IsSharedFolder(movie, filterResult.FilesOnDisk, resolvedOwners, _sceneFolderLayout);
             var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleExtraFile in filterResult.FilesOnDisk)

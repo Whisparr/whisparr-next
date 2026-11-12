@@ -70,9 +70,10 @@ namespace NzbDrone.Core.Extras
         // Every tracked video file of every item in the movie's folder.
         public List<MovieFile> GetFolderFiles(Movie movie)
         {
-            return _sceneFolderLayout.GetItemsInFolder(movie.Path)
-                                     .SelectMany(e => _mediaFileService.GetFilesByMovie(e.Id))
-                                     .ToList();
+            // One query for the whole folder: a studio folder can hold thousands of items
+            var ids = _sceneFolderLayout.GetItemsInFolder(movie.Path).Select(e => e.Id).ToList();
+
+            return ids.Count == 0 ? new List<MovieFile>() : _mediaFileService.GetFilesByMovies(ids);
         }
 
         public MovieFile FindOwner(Movie movie, string sidecarPath, List<MovieFile> folderFiles)

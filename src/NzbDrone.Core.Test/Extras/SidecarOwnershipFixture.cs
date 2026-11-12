@@ -147,10 +147,26 @@ namespace NzbDrone.Core.Test.Extras
                   .Setup(s => s.GetItemsInFolder(_folder))
                   .Returns(new List<MoviePathEntry> { new() { Id = 1 }, new() { Id = 2 } });
 
-            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(1)).Returns(new List<MovieFile> { _file1 });
-            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(2)).Returns(new List<MovieFile> { _file2 });
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovies(It.Is<IEnumerable<int>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { 1, 2 }))))
+                  .Returns(new List<MovieFile> { _file1, _file2 });
 
             Subject.GetFolderFiles(_scene1).Should().BeEquivalentTo(new[] { _file1, _file2 });
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Once);
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesByMovie(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void should_not_query_files_for_an_empty_folder()
+        {
+            Mocker.GetMock<ISceneFolderLayout>()
+                  .Setup(s => s.GetItemsInFolder(_folder))
+                  .Returns(new List<MoviePathEntry>());
+
+            Subject.GetFolderFiles(_scene1).Should().BeEmpty();
+
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Never);
         }
     }
 
@@ -225,6 +241,17 @@ namespace NzbDrone.Core.Test.Extras
             _upserted.Should().ContainSingle();
             _upserted[0].MovieFileId.Should().Be(7);
         }
+
+        [Test]
+        public void no_files_on_disk_skips_the_folder_lookup()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            Subject.ProcessFiles(_movie, new List<string>(), new List<string>(), null).ToList();
+
+            Mocker.GetMock<ISceneFolderLayout>().Verify(s => s.IsShared(It.IsAny<Movie>()), Times.Never);
+            Mocker.GetMock<ISidecarOwnership>().Verify(s => s.GetFolderFiles(It.IsAny<Movie>()), Times.Never);
+        }
     }
 
     [TestFixture]
@@ -294,6 +321,17 @@ namespace NzbDrone.Core.Test.Extras
 
             _upserted.Should().ContainSingle();
             _upserted[0].MovieFileId.Should().Be(7);
+        }
+
+        [Test]
+        public void no_files_on_disk_skips_the_folder_lookup()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            Subject.ProcessFiles(_movie, new List<string>(), new List<string>(), null).ToList();
+
+            Mocker.GetMock<ISceneFolderLayout>().Verify(s => s.IsShared(It.IsAny<Movie>()), Times.Never);
+            Mocker.GetMock<ISidecarOwnership>().Verify(s => s.GetFolderFiles(It.IsAny<Movie>()), Times.Never);
         }
     }
 
@@ -376,6 +414,17 @@ namespace NzbDrone.Core.Test.Extras
 
             _upserted.Should().ContainSingle();
             _upserted[0].MovieFileId.Should().Be(7);
+        }
+
+        [Test]
+        public void no_files_on_disk_skips_the_folder_lookup()
+        {
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            Subject.ProcessFiles(_movie, new List<string>(), new List<string>(), null).ToList();
+
+            Mocker.GetMock<ISceneFolderLayout>().Verify(s => s.IsShared(It.IsAny<Movie>()), Times.Never);
+            Mocker.GetMock<ISidecarOwnership>().Verify(s => s.GetFolderFiles(It.IsAny<Movie>()), Times.Never);
         }
     }
 }

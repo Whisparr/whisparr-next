@@ -49,7 +49,7 @@ namespace NzbDrone.Core.Extras.Metadata
             var metadataFiles = new List<MetadataFile>();
             var filterResult = FilterAndClean(movie, filesOnDisk, importedFiles, fileNameBeforeRename is not null);
 
-            var shared = resolvedOwners != null || _sceneFolderLayout.IsShared(movie);
+            var shared = IsSharedFolder(movie, filterResult.FilesOnDisk, resolvedOwners, _sceneFolderLayout);
             var folderFiles = shared && resolvedOwners == null ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var possibleMetadataFile in filterResult.FilesOnDisk)

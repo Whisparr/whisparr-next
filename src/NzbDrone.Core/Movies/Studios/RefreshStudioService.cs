@@ -300,6 +300,8 @@ namespace NzbDrone.Core.Movies.Studios
 
                     if (scanIds.Any())
                     {
+                        _logger.ProgressInfo("Rescanning {0} items for {1}", scanIds.Count, studio.Title);
+
                         try
                         {
                             _diskScanService.Scan(scanIds, false);
@@ -315,6 +317,8 @@ namespace NzbDrone.Core.Movies.Studios
                     // either one drops every studio the user selected after the one that failed.
                     try
                     {
+                        // Replaces the rescan message, which would otherwise stay up through the sync
+                        _logger.ProgressDebug("Syncing items for {0}", studio.Title);
                         SyncStudioItems(studio, syncMovies);
                     }
                     catch (Exception e)
