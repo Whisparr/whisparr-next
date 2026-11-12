@@ -56,9 +56,11 @@ namespace NzbDrone.Core.DiskSpace
             // Pass the root folders in, otherwise every cache miss re-queries them from the database, once per movie.
             var allRootFolders = _rootFolderService.All();
 
-            return _movieService.AllMoviePaths()
-                .Where(s => s.Value.IsPathValid(PathValidationType.CurrentOs))
-                .Select(s => _rootFolderService.GetBestRootFolderPath(s.Value, allRootFolders))
+            // Scenes share studio folders, so there are far fewer folders than items to resolve.
+            return _movieService.AllMoviePaths().Values
+                .Distinct()
+                .Where(s => s.IsPathValid(PathValidationType.CurrentOs))
+                .Select(s => _rootFolderService.GetBestRootFolderPath(s, allRootFolders))
                 .Distinct()
                 .Where(r => _diskProvider.FolderExists(r))
                 .Select(r => _diskProvider.GetPathRoot(r))
