@@ -79,9 +79,7 @@ namespace NzbDrone.Core.Movies
                         .Select(g => g.First())
                         .ToList();
 
-                    var inLibrary = candidates.Count == 0
-                        ? new HashSet<string>()
-                        : new HashSet<string>(_movieService.FindSceneForeignIds(candidates.Select(i => i.SceneId).ToList()));
+                    var inLibrary = new HashSet<string>(_movieService.FindSceneForeignIds(candidates.Select(i => i.SceneId).ToList()));
                     var newItems = candidates.Where(i => !inLibrary.Contains(i.SceneId)).ToList();
 
                     if (newItems.Count == 0)

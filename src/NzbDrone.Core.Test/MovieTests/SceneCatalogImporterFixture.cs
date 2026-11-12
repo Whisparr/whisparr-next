@@ -143,18 +143,6 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
-        public void should_not_query_the_library_for_a_page_of_excluded_scenes()
-        {
-            _exclusions.Add(new ImportListExclusion { ForeignId = "a" });
-
-            GivenPages(Page(ScenePageStatus.Complete, 1, Item("a")));
-
-            Import().Should().Be(0);
-
-            Mocker.GetMock<IMovieService>().Verify(s => s.FindSceneForeignIds(It.IsAny<List<string>>()), Times.Never());
-        }
-
-        [Test]
         public void should_skip_owned_jav_items()
         {
             // FindSceneForeignIds covers owned JAV too, so the JAV lane skips what the library already holds.
