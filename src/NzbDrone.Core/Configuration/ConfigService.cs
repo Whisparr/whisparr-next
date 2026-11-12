@@ -377,7 +377,7 @@ namespace NzbDrone.Core.Configuration
 
         public RescanAfterRefreshType RescanAfterRefresh
         {
-            get { return GetValueEnum("RescanAfterRefresh", RescanAfterRefreshType.Always); }
+            get { return GetValueEnum("RescanAfterRefresh", RescanAfterRefreshType.AfterManual); }
 
             set { SetValue("RescanAfterRefresh", value); }
         }
