@@ -172,16 +172,11 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
 
             movie.Genres = resource.Genres;
 
-            // Check for tags with StashIDs as used for exclusion/tagging in Whisparr not stored locally.
-            // Tag exclusion is StashDB-based, so a TPDB-locked library carries no tag ids.
-            if (sceneSource == SceneMetadataType.StashDb && resource.Tags != null && resource.Tags.Any(t => !string.IsNullOrEmpty(t.ForeignIds?.StashId)))
-            {
-                movie.TagIds = resource.Tags.Select(t => t.ForeignIds.StashId).ToList();
-            }
-            else
-            {
-                movie.TagIds = new List<string>();
-            }
+            // Tag ids feed tag exclusions; they're keyed by the locked scene source's tag uuid.
+            movie.TagIds = resource.Tags?
+                .Select(t => sceneSource == SceneMetadataType.Tpdb ? t.ForeignIds?.TpdbId : t.ForeignIds?.StashId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToList() ?? new List<string>();
 
             movie.Images = resource.Images.Select(MapImage).ToList();
 
