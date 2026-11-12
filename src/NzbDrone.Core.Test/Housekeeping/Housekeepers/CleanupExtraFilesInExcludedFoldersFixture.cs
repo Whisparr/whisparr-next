@@ -26,8 +26,8 @@ namespace NzbDrone.Core.Test.Housekeeping.Housekeepers
             };
 
             Mocker.GetMock<IMovieService>()
-                  .Setup(s => s.GetAllMovies())
-                  .Returns(new List<Movie> { _movie });
+                  .Setup(s => s.AllMoviePaths())
+                  .Returns(new Dictionary<int, string> { { _movie.Id, _movie.Path } });
 
             var inBackdrops = new OtherExtraFile
             {
@@ -46,7 +46,7 @@ namespace NzbDrone.Core.Test.Housekeeping.Housekeepers
             _extraFiles = new List<OtherExtraFile> { inBackdrops, inSubtitles };
 
             Mocker.GetMock<IOtherExtraFileRepository>()
-                  .Setup(s => s.GetFilesByMovie(_movie.Id))
+                  .Setup(s => s.All())
                   .Returns(_extraFiles);
 
             // Mirror the production filter: paths under backdrops are excluded.
@@ -77,6 +77,30 @@ namespace NzbDrone.Core.Test.Housekeeping.Housekeepers
 
             Mocker.GetMock<IOtherExtraFileRepository>()
                   .Verify(r => r.DeleteMany(It.IsAny<List<int>>()), Times.Never);
+        }
+
+        [Test]
+        public void should_not_load_movies_when_there_are_no_extra_files()
+        {
+            Mocker.GetMock<IOtherExtraFileRepository>()
+                  .Setup(s => s.All())
+                  .Returns(new List<OtherExtraFile>());
+
+            Subject.Clean();
+
+            Mocker.GetMock<IMovieService>().Verify(s => s.AllMoviePaths(), Times.Never);
+        }
+
+        [Test]
+        public void should_skip_extra_files_whose_movie_is_gone()
+        {
+            _extraFiles.Add(new OtherExtraFile { Id = 3, MovieId = 99, RelativePath = @"backdrops\fanart.jpg" });
+
+            Subject.Clean();
+
+            Mocker.GetMock<IOtherExtraFileRepository>()
+                  .Verify(r => r.DeleteMany(new List<int> { 1 }), Times.Once);
+            Mocker.GetMock<IMovieService>().Verify(s => s.GetAllMovies(), Times.Never);
         }
     }
 }
