@@ -632,6 +632,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             var imported = new List<ImportResult>();
             var importedTrackedDownload = new List<ManuallyImportedFile>();
 
+            // Read once, not per file: a flat folder's unmapped backlog can be thousands of rows
+            Dictionary<string, List<MovieFile>> unmappedByPath = null;
+
             for (var i = 0; i < message.Files.Count; i++)
             {
                 _logger.ProgressTrace("Processing file {0} of {1}", i + 1, message.Files.Count);
@@ -721,17 +724,18 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                         continue;
                     }
 
-                    var unmappedFiles = _mediaFileRepository.GetUnmappedFiles();
-                    if (unmappedFiles != null)
+                    unmappedByPath ??= (_mediaFileRepository.GetUnmappedFiles() ?? new List<MovieFile>())
+                        .Where(f => f.OriginalFilePath != null)
+                        .GroupBy(f => f.OriginalFilePath)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+
+                    // Removed as handled, so a path listed twice deletes its rows once
+                    if (unmappedByPath.Remove(file.Path, out var unmappedFiles))
                     {
                         foreach (var unmappedFile in unmappedFiles)
                         {
-                            if (unmappedFile.OriginalFilePath == file.Path)
-                            {
-                                var reason = DeleteMediaFileReason.Manual;
-                                _mediaFileRepository.Delete(unmappedFile);
-                                _eventAggregator.PublishEvent(new MovieFileDeletedEvent(unmappedFile, reason));
-                            }
+                            _mediaFileRepository.Delete(unmappedFile);
+                            _eventAggregator.PublishEvent(new MovieFileDeletedEvent(unmappedFile, DeleteMediaFileReason.Manual));
                         }
                     }
                 }

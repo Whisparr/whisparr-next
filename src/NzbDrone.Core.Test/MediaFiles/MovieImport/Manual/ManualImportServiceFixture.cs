@@ -410,5 +410,45 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
             imported.Should().ContainSingle();
             imported[0].LocalMovie.MatchTier.Should().Be(MatchTier.Manual);
         }
+
+        [Test]
+        public void should_read_unmapped_rows_once_and_remove_each_imported_files_row()
+        {
+            var movie = new Movie { Id = 3, Path = Folder };
+            movie.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            var a = System.IO.Path.Combine(Folder, "a.mp4");
+            var b = System.IO.Path.Combine(Folder, "b.mp4");
+            var rowA = new MovieFile { Id = 21, OriginalFilePath = a };
+            var rowB = new MovieFile { Id = 22, OriginalFilePath = b };
+            var other = new MovieFile { Id = 23, OriginalFilePath = System.IO.Path.Combine(Folder, "c.mp4") };
+
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FileExists(It.IsAny<string>())).Returns(true);
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(movie.Id)).Returns(movie);
+            Mocker.GetMock<IAggregationService>()
+                  .Setup(s => s.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
+                  .Returns<LocalMovie, DownloadClientItem>((lm, _) => lm);
+            Mocker.GetMock<IImportApprovedMovie>()
+                  .Setup(s => s.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>(), It.IsAny<DownloadClientItem>(), It.IsAny<ImportMode>()))
+                  .Returns(new List<ImportResult>());
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Setup(s => s.GetUnmappedFiles())
+                  .Returns(new List<MovieFile> { rowA, rowB, other, new() { Id = 24 } });
+
+            Subject.Execute(new ManualImportCommand
+            {
+                ImportMode = ImportMode.Auto,
+                Files = new List<ManualImportFile>
+                {
+                    new() { Path = a, MovieId = movie.Id, Quality = new QualityModel(Quality.Unknown), Languages = new List<Language> { Language.English } },
+                    new() { Path = b, MovieId = movie.Id, Quality = new QualityModel(Quality.Unknown), Languages = new List<Language> { Language.English } }
+                }
+            });
+
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.GetUnmappedFiles(), Times.Once());
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(rowA), Times.Once());
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(rowB), Times.Once());
+            Mocker.GetMock<IMediaFileRepository>().Verify(v => v.Delete(other), Times.Never());
+        }
     }
 }
