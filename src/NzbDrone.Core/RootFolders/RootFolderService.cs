@@ -30,6 +30,7 @@ namespace NzbDrone.Core.RootFolders
         RootFolder Get(int id);
         RootFolder Refresh(int id);
         string GetBestRootFolderPath(string path, List<RootFolder> rootFolders = null);
+        bool IsRootFolder(string path);
     }
 
     public class RootFolderService : IRootFolderService
@@ -230,6 +231,11 @@ namespace NzbDrone.Core.RootFolders
             rootFolder.ImportFiles = _importFileRepository.FindActiveByRootFolderId(rootFolder.Id);
 
             return rootFolder;
+        }
+
+        public bool IsRootFolder(string path)
+        {
+            return _rootFolderRepository.All().Any(r => r.Path.PathEquals(path));
         }
 
         public string GetBestRootFolderPath(string path, List<RootFolder> rootFolders = null)

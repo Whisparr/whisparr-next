@@ -865,7 +865,8 @@ namespace NzbDrone.Core.MediaFiles
                     _diskProvider.RemoveEmptySubfolders(path);
                 }
 
-                if (_diskProvider.FolderEmpty(path))
+                // A flat scene's folder is the root folder itself, which must survive its last scene
+                if (_diskProvider.FolderEmpty(path) && !_rootFolderService.IsRootFolder(path))
                 {
                     _diskProvider.DeleteFolder(path, true);
                 }

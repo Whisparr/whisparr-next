@@ -8,6 +8,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
@@ -62,6 +63,24 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
 
             Mocker.GetMock<IDiskProvider>()
                   .Verify(v => v.RemoveEmptySubfolders(SharedPath), Times.Once());
+        }
+
+        [TestCase(false, 1)]
+        [TestCase(true, 0)]
+        public void should_delete_emptied_folder_unless_it_is_a_root_folder(bool isRootFolder, int deletes)
+        {
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderEmpty(SharedPath))
+                  .Returns(true);
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.IsRootFolder(SharedPath))
+                  .Returns(isRootFolder);
+
+            Subject.Handle(new MovieFileDeletedEvent(_movieFile, DeleteMediaFileReason.Manual));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFolder(SharedPath, true), Times.Exactly(deletes));
         }
     }
 }

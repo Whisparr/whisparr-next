@@ -13,6 +13,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -162,6 +163,27 @@ namespace NzbDrone.Core.Test.MovieTests
             transfer.Verify(v => v.TransferFile(Path.Combine(_command.SourcePath, "scene one.jpg"), Path.Combine(_command.DestinationPath, "scene one.jpg"), TransferMode.Move, false), Times.Once());
             transfer.Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), It.IsAny<bool>()), Times.Exactly(2));
             transfer.Verify(v => v.TransferFolder(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>()), Times.Never());
+        }
+
+        [TestCase(false, 1)]
+        [TestCase(true, 0)]
+        public void moving_last_scene_out_of_shared_folder_deletes_it_unless_it_is_a_root_folder(bool isRootFolder, int deletes)
+        {
+            GivenSharedSceneWithFiles();
+            _movie.Path = _command.DestinationPath;
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderEmpty(_command.SourcePath))
+                  .Returns(true);
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.IsRootFolder(_command.SourcePath))
+                  .Returns(isRootFolder);
+
+            Subject.Execute(_command);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFolder(_command.SourcePath, true), Times.Exactly(deletes));
         }
 
         [Test]

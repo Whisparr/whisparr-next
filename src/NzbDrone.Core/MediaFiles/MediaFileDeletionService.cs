@@ -318,7 +318,7 @@ namespace NzbDrone.Core.MediaFiles
                 }
             }
 
-            if (_diskProvider.FolderEmpty(movie.Path))
+            if (_diskProvider.FolderEmpty(movie.Path) && !_rootFolderService.IsRootFolder(movie.Path))
             {
                 _diskProvider.DeleteFolder(movie.Path, true);
             }
@@ -388,7 +388,8 @@ namespace NzbDrone.Core.MediaFiles
 
                 SweepEmptySubfolders(movieId, moviePath);
 
-                if (_diskProvider.FolderEmpty(moviePath))
+                // A flat scene's folder is the root folder itself, which must survive its last file
+                if (_diskProvider.FolderEmpty(moviePath) && !_rootFolderService.IsRootFolder(moviePath))
                 {
                     _diskProvider.DeleteFolder(moviePath, true);
                 }
