@@ -167,9 +167,11 @@ namespace NzbDrone.Core.MediaFiles
                 videoFilesStopwatch.Stop();
                 _logger.Trace("Finished getting movie files for: {0} [{1}]", movie, videoFilesStopwatch.Elapsed);
 
-                RelinkRenamedFiles(movie, _mediaFileService.GetFilesByMovie(movie.Id), mediaFileList, false, new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance));
+                var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
-                RecordLostFiles(movie, null, mediaFileList);
+                RelinkRenamedFiles(movie, _mediaFileService.GetFilesByMovie(movie.Id), mediaFileList, onDisk, false, new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance));
+
+                RecordLostFiles(movie, null, onDisk);
                 CleanMediaFiles(movie, mediaFileList);
 
                 var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
@@ -359,15 +361,18 @@ namespace NzbDrone.Core.MediaFiles
             var hashes = new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance);
             var movieFiles = new Dictionary<int, List<MovieFile>>();
 
+            // Built once per pass: a flat root lists every scene's files, so a per-scene set is quadratic
+            var onDisk = new HashSet<string>(videoFiles, PathEqualityComparer.Instance);
+
             ForEachScene(folder, requested, scene =>
             {
                 var sceneFiles = rows[scene.Id].ToList();
 
-                RelinkRenamedFiles(scene, sceneFiles, videoFiles, true, hashes);
-                RecordLostFiles(scene, sceneFiles, videoFiles);
+                RelinkRenamedFiles(scene, sceneFiles, videoFiles, onDisk, true, hashes);
+                RecordLostFiles(scene, sceneFiles, onDisk);
 
                 _logger.Debug("{0} Cleaning up media files in DB", scene);
-                var removed = _mediaFileTableCleanupService.Clean(scene, videoFiles, sceneFiles) ?? new List<MovieFile>();
+                var removed = _mediaFileTableCleanupService.Clean(scene, onDisk, sceneFiles) ?? new List<MovieFile>();
 
                 movieFiles[scene.Id] = sceneFiles.Except(removed).ToList();
             });
@@ -431,7 +436,7 @@ namespace NzbDrone.Core.MediaFiles
                 _logger.Debug("Movie's folder doesn't exist: {0}", movie.Path);
             }
 
-            RecordLostFiles(movie, null, new List<string>());
+            RecordLostFiles(movie, null, new HashSet<string>());
             CleanMediaFiles(movie, new List<string>());
             CompletedScanning(movie, new List<string>());
         }
@@ -625,10 +630,8 @@ namespace NzbDrone.Core.MediaFiles
         /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
         /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
         /// </summary>
-        private void RelinkRenamedFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList, bool shared, Dictionary<string, (string OsHash, DateTime? HashedAt)> hashCache)
+        private void RelinkRenamedFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList, HashSet<string> onDisk, bool shared, Dictionary<string, (string OsHash, DateTime? HashedAt)> hashCache)
         {
-            var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
-
             // The listing can miss a file that is still there (filtered path, unreadable folder), so confirm on disk
             var missing = movieFiles
                 .Where(f => f.OsHash != null &&
@@ -706,7 +709,7 @@ namespace NzbDrone.Core.MediaFiles
         /// scan can follow it if another tool moved it to a different library folder. Runs before the rows are deleted.
         /// </summary>
         // movieFiles null: the scene's rows are loaded here, only when it is a scene
-        private void RecordLostFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList)
+        private void RecordLostFiles(Movie movie, List<MovieFile> movieFiles, HashSet<string> onDisk)
         {
             if (!IsScene(movie))
             {
@@ -715,8 +718,6 @@ namespace NzbDrone.Core.MediaFiles
 
             try
             {
-                var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
-
                 foreach (var file in movieFiles ?? _mediaFileService.GetFilesByMovie(movie.Id))
                 {
                     var path = Path.Combine(movie.Path, file.RelativePath);
