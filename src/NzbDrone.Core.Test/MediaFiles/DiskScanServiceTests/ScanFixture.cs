@@ -146,6 +146,30 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Verify(v => v.RemoveEmptySubfolders(_movie.Path), Times.Once());
         }
 
+        [TestCase(false, 1)]
+        [TestCase(true, 0)]
+        public void should_delete_empty_movie_folder_unless_it_is_a_root_folder(bool isRootFolder, int deletes)
+        {
+            GivenMovieFolder();
+
+            Mocker.GetMock<IConfigService>()
+                  .Setup(s => s.DeleteEmptyFolders)
+                  .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderEmpty(_movie.Path))
+                  .Returns(true);
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.IsRootFolder(_movie.Path))
+                  .Returns(isRootFolder);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFolder(_movie.Path, true), Times.Exactly(deletes));
+        }
+
         [Test]
         public void should_not_scan_if_movie_root_folder_is_empty()
         {

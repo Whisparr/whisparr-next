@@ -268,7 +268,7 @@ namespace NzbDrone.Core.MediaFiles
                         _diskProvider.RemoveEmptySubfolders(oldFolder);
                     }
 
-                    if (_diskProvider.FolderEmpty(oldFolder))
+                    if (_diskProvider.FolderEmpty(oldFolder) && !_rootFolderService.IsRootFolder(oldFolder))
                     {
                         _diskProvider.DeleteFolder(oldFolder, false);
                     }

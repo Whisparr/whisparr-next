@@ -13,6 +13,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 
 namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
@@ -153,6 +154,28 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
                   .Verify(v => v.DeleteFolder(SharedPath, true), Times.Once());
             Mocker.GetMock<IRecycleBinProvider>()
                   .Verify(v => v.DeleteFolder(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void deleting_last_scene_in_flat_root_folder_keeps_the_root_folder()
+        {
+            var video = SharedPath + "/scene one.mp4";
+
+            GivenAllMoviePaths("/lib/scenes/Other Studio");
+            GivenOwnedFiles(video);
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderEmpty(SharedPath))
+                  .Returns(true);
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.IsRootFolder(SharedPath))
+                  .Returns(true);
+
+            DeleteWithOwned(video);
+
+            Mocker.GetMock<IRecycleBinProvider>()
+                  .Verify(v => v.DeleteFile(video, It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFolder(SharedPath, It.IsAny<bool>()), Times.Never());
         }
 
         [Test]

@@ -15,6 +15,7 @@ using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Movies
 {
@@ -30,6 +31,7 @@ namespace NzbDrone.Core.Movies
         private readonly ISubtitleFileService _subtitleFileService;
         private readonly IOtherExtraFileService _otherExtraFileService;
         private readonly IMetadataFileService _metadataFileService;
+        private readonly IRootFolderService _rootFolderService;
         private readonly Logger _logger;
 
         public MoveMovieService(IMovieService movieService,
@@ -42,6 +44,7 @@ namespace NzbDrone.Core.Movies
                                  ISubtitleFileService subtitleFileService,
                                  IOtherExtraFileService otherExtraFileService,
                                  IMetadataFileService metadataFileService,
+                                 IRootFolderService rootFolderService,
                                  Logger logger)
         {
             _sceneFolderLayout = sceneFolderLayout;
@@ -49,6 +52,7 @@ namespace NzbDrone.Core.Movies
             _subtitleFileService = subtitleFileService;
             _otherExtraFileService = otherExtraFileService;
             _metadataFileService = metadataFileService;
+            _rootFolderService = rootFolderService;
             _movieService = movieService;
             _filenameBuilder = filenameBuilder;
             _diskProvider = diskProvider;
@@ -170,7 +174,7 @@ namespace NzbDrone.Core.Movies
                 throw;
             }
 
-            if (_diskProvider.FolderExists(sourcePath) && _diskProvider.FolderEmpty(sourcePath))
+            if (_diskProvider.FolderExists(sourcePath) && _diskProvider.FolderEmpty(sourcePath) && !_rootFolderService.IsRootFolder(sourcePath))
             {
                 _diskProvider.DeleteFolder(sourcePath, true);
             }
