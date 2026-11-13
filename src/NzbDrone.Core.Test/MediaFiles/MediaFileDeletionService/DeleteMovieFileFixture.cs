@@ -54,8 +54,8 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
         private void GivenRootFolderHasFolders()
         {
             Mocker.GetMock<IDiskProvider>()
-                  .Setup(s => s.GetDirectories(RootFolder))
-                  .Returns(new[] { _movie.Path });
+                  .Setup(s => s.FolderEmpty(RootFolder))
+                  .Returns(false);
         }
 
         private void GivenMovieFolderExists()
@@ -76,6 +76,10 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
         public void should_should_throw_if_root_folder_is_empty()
         {
             GivenRootFolderExists();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderEmpty(RootFolder))
+                  .Returns(true);
 
             Assert.Throws<NzbDroneClientException>(() => Subject.DeleteMovieFile(_movie, _movieFile));
             ExceptionVerification.ExpectedWarns(1);
@@ -139,6 +143,25 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
             Subject.DeleteMovieFile(_movie, _movieFile);
 
             Mocker.GetMock<IDiskProvider>().Verify(v => v.FolderExists(RootFolder), Times.Once());
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(_movieFile, DeleteMediaFileReason.Manual), Times.Once());
+        }
+
+        [Test]
+        public void should_delete_from_a_flat_root_folder_with_files_but_no_subfolders()
+        {
+            _movie.Path = RootFolder;
+            _movieFile.Path = Path.Combine(RootFolder, "scene.mp4");
+            _movieFile.RelativePath = "scene.mp4";
+
+            Mocker.GetMock<IRootFolderService>()
+                  .Setup(s => s.GetBestRootFolderPath(RootFolder, null))
+                  .Returns(RootFolder);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(RootFolder)).Returns(true);
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetDirectories(RootFolder)).Returns(System.Array.Empty<string>());
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderEmpty(RootFolder)).Returns(false);
+
+            Subject.DeleteMovieFile(_movie, _movieFile);
+
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(_movieFile, DeleteMediaFileReason.Manual), Times.Once());
         }
 
