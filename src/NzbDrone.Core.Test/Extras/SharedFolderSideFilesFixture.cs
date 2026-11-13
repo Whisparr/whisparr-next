@@ -108,6 +108,18 @@ namespace NzbDrone.Core.Test.Extras
         }
 
         [Test]
+        public void name_match_ignores_case()
+        {
+            var file = InFolder("movie.title.EN.srt");
+            var video = new MovieFile { Id = 11, MovieId = _s1.Id, RelativePath = "Movie.Title.mp4" };
+
+            var result = Subject.Assign(_folder, _itemIds, new List<string> { file }, new List<MovieFile> { video });
+
+            result.OwnerFileIds[file].Should().Be(video.Id);
+            VerifyFindScene(Times.Never());
+        }
+
+        [Test]
         public void tie_stays_unowned()
         {
             var file = InFolder("Title.nfo");

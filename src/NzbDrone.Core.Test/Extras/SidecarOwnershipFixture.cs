@@ -48,6 +48,20 @@ namespace NzbDrone.Core.Test.Extras
         public void should_ignore_the_sidecar_directory()
         {
             SidecarName.SidecarNameMatches(Path.Combine("some", "dir", "Title.nfo"), "Title").Should().BeTrue();
+            SidecarName.MatchingBaseNames(Path.Combine("some", "dir", "Title.nfo")).Should().Equal("Title", "Title.nfo");
+        }
+
+        [TestCase("Title.en.srt", new[] { "Title", "Title.en", "Title.en.srt" })]
+        [TestCase("A-B.nfo", new[] { "A", "A-B", "A-B.nfo" })]
+        [TestCase(".hidden.nfo", new[] { ".hidden", ".hidden.nfo" })]
+        [TestCase("Title", new[] { "Title" })]
+        [TestCase("", new string[0])]
+        public void matching_base_names_are_exactly_the_names_that_match(string sidecar, string[] expected)
+        {
+            var names = SidecarName.MatchingBaseNames(sidecar).ToList();
+
+            names.Should().Equal(expected);
+            names.Where(n => !SidecarName.SidecarNameMatches(sidecar, n)).Should().BeEmpty();
         }
     }
 
