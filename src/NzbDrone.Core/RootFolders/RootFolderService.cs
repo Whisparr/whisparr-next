@@ -10,12 +10,10 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
-using NzbDrone.Core.Configuration;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Profiles.Qualities;
 
@@ -40,25 +38,11 @@ namespace NzbDrone.Core.RootFolders
         private readonly ILegacyMigrationService _legacyMigrationService;
         private readonly IDiskProvider _diskProvider;
         private readonly IManageCommandQueue _commandQueueManager;
-        private readonly IMovieRepository _movieRepository;
-        private readonly IConfigService _configService;
         private readonly INamingConfigService _namingConfigService;
         private readonly Logger _logger;
 
         private readonly ICached<string> _cache;
 
-        private static readonly HashSet<string> SpecialFolders = new HashSet<string>
-                                                                 {
-                                                                     "$recycle.bin",
-                                                                     "system volume information",
-                                                                     "recycler",
-                                                                     "lost+found",
-                                                                     ".appledb",
-                                                                     ".appledesktop",
-                                                                     ".appledouble",
-                                                                     "@eadir",
-                                                                     ".grab"
-                                                                 };
         private static readonly Regex ExcludedSubFoldersRegex = new Regex(@"(?:\\|\/|^)(?:@eadir|\.@__thumb|plex versions|\.[^\\/]+)(?:\\|\/)", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
         private static readonly Regex ExcludedFilesRegex = new Regex(@"^\._|^Thumbs\.db$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
 
@@ -67,8 +51,6 @@ namespace NzbDrone.Core.RootFolders
                                     IImportFileRepository importFileRepository,
                                     IDiskProvider diskProvider,
                                     IManageCommandQueue commandQueueManager,
-                                    IMovieRepository movieRepository,
-                                    IConfigService configService,
                                     INamingConfigService namingConfigService,
                                     ICacheManager cacheManager,
                                     ILegacyMigrationService legacyMigrationService,
@@ -80,8 +62,6 @@ namespace NzbDrone.Core.RootFolders
             _importFileRepository = importFileRepository;
             _diskProvider = diskProvider;
             _commandQueueManager = commandQueueManager;
-            _movieRepository = movieRepository;
-            _configService = configService;
             _namingConfigService = namingConfigService;
             _logger = logger;
 
@@ -99,15 +79,13 @@ namespace NzbDrone.Core.RootFolders
         {
             var rootFolders = _rootFolderRepository.All().ToList();
 
-            var moviePaths = _movieRepository.AllMoviePaths();
-
             rootFolders.ForEach(folder =>
             {
                 try
                 {
                     if (folder.Path.IsPathValid(PathValidationType.CurrentOs))
                     {
-                        GetDetails(folder, moviePaths, true);
+                        GetDetails(folder, true);
                     }
                 }
 
@@ -148,9 +126,7 @@ namespace NzbDrone.Core.RootFolders
 
             _rootFolderRepository.Insert(rootFolder);
 
-            var moviePaths = _movieRepository.AllMoviePaths();
-
-            GetDetails(rootFolder, moviePaths, true);
+            GetDetails(rootFolder, true);
             _cache.Clear();
 
             return rootFolder;
@@ -160,67 +136,6 @@ namespace NzbDrone.Core.RootFolders
         {
             _rootFolderRepository.Delete(id);
             _cache.Clear();
-        }
-
-        private List<UnmappedFolder> GetUnmappedFolders(string path, Dictionary<int, string> moviePaths)
-        {
-            _logger.Debug("Generating list of unmapped folders");
-
-            if (string.IsNullOrEmpty(path))
-            {
-                throw new ArgumentException("Invalid path provided", nameof(path));
-            }
-
-            var results = new List<UnmappedFolder>();
-
-            if (!_diskProvider.FolderExists(path))
-            {
-                _logger.Debug("Path supplied does not exist: {0}", path);
-                return results;
-            }
-
-            var config = _namingConfigService.GetConfig().MovieFolderFormat;
-            var firstSeparatorIndex = config.IndexOfAny(new char[] { '\\', '/' });
-            var movieConfig = firstSeparatorIndex >= 0 ? config.Substring(firstSeparatorIndex + 1) : config;
-
-            var subFolderDepth = movieConfig.Count(f => f == Path.DirectorySeparatorChar);
-            var possibleMovieFolders = _diskProvider.GetDirectories(path).ToList();
-
-            if (subFolderDepth > 0)
-            {
-                for (var i = 0; i < subFolderDepth; i++)
-                {
-                    possibleMovieFolders = possibleMovieFolders.SelectMany(_diskProvider.GetDirectories).ToList();
-                }
-            }
-
-            var unmappedFolders = possibleMovieFolders.Except(moviePaths.Select(s => s.Value), PathEqualityComparer.Instance).ToList();
-
-            var recycleBinPath = _configService.RecycleBin;
-
-            foreach (var unmappedFolder in unmappedFolders)
-            {
-                var di = new DirectoryInfo(unmappedFolder.Normalize());
-
-                if ((!di.Attributes.HasFlag(FileAttributes.System) && !di.Attributes.HasFlag(FileAttributes.Hidden)) || di.Attributes.ToString() == "-1")
-                {
-                    if (string.IsNullOrWhiteSpace(recycleBinPath) || di.FullName.PathNotEquals(recycleBinPath))
-                    {
-                        results.Add(new UnmappedFolder
-                        {
-                            Name = di.Name,
-                            Path = di.FullName,
-                            RelativePath = path.GetRelativePath(di.FullName)
-                        });
-                    }
-                }
-            }
-
-            var setToRemove = SpecialFolders;
-            results.RemoveAll(x => setToRemove.Contains(new DirectoryInfo(x.Path.ToLowerInvariant()).Name));
-
-            _logger.Debug("{0} unmapped folders detected.", results.Count);
-            return results.OrderBy(u => u.Name, StringComparer.InvariantCultureIgnoreCase).ToList();
         }
 
         public RootFolder Get(int id)
@@ -237,7 +152,7 @@ namespace NzbDrone.Core.RootFolders
             return _cache.Get(path, () => GetBestRootFolderPathInternal(path, rootFolders), TimeSpan.FromDays(1));
         }
 
-        private void GetDetails(RootFolder rootFolder, Dictionary<int, string> moviePaths, bool timeout, bool getMovieFolder = false)
+        private void GetDetails(RootFolder rootFolder, bool timeout)
         {
             Task.Run(() =>
             {
@@ -270,8 +185,6 @@ namespace NzbDrone.Core.RootFolders
         public RootFolder Refresh(int id)
         {
             var rootFolder = Get(id);
-
-            // We want to make sure we have the latest movie paths in case any have been added or removed since the root folder was loaded
             var importFolder = GetImportFolder(rootFolder.Path);
 
             var folderExists = _diskProvider.FolderExists(importFolder);
@@ -304,9 +217,13 @@ namespace NzbDrone.Core.RootFolders
                 Name = Path.GetFileName(f)
             }).ToList();
 
-            var toAdd = newUnmappedFiles.Where(n => !existingUnmappedFiles.Any(e => e.Path.PathEquals(n.Path))).ToList();
+            // Sets, not nested scans: a flat import folder can hold the whole library
+            var existingPaths = new HashSet<string>(existingUnmappedFiles.Select(e => e.Path), PathEqualityComparer.Instance);
+            var newPaths = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
+
+            var toAdd = newUnmappedFiles.Where(n => !existingPaths.Contains(n.Path)).ToList();
             var toRemove = existingUnmappedFiles
-                .Where(e => !newUnmappedFiles.Any(n => n.Path.PathEquals(e.Path)))
+                .Where(e => !newPaths.Contains(e.Path))
                 .Where(e => importFolder.IsParentPath(e.Path) || CanForgetOutsideImportFolder(e, rootFolder))
                 .ToList();
 
@@ -322,8 +239,7 @@ namespace NzbDrone.Core.RootFolders
                 _commandQueueManager.Push(new GenerateOsHashesCommand(), CommandPriority.Low);
             }
 
-            var moviePaths = _movieRepository.AllMoviePaths();
-            GetDetails(rootFolder, moviePaths, true);
+            GetDetails(rootFolder, true);
 
             _logger.ProgressInfo("Scanning {0} Completed", importFolder);
             return rootFolder;

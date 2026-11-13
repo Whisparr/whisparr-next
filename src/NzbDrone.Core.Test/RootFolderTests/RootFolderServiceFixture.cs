@@ -10,7 +10,6 @@ using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.Fingerprints.Commands;
 using NzbDrone.Core.Messaging.Commands;
-using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
@@ -56,10 +55,6 @@ namespace NzbDrone.Core.Test.RootFolderTests
         [TestCase("//server//folder")]
         public void should_be_able_to_add_root_dir(string path)
         {
-            Mocker.GetMock<IMovieRepository>()
-                  .Setup(s => s.AllMoviePaths())
-                  .Returns(new Dictionary<int, string>());
-
             var root = new RootFolder { Path = path.AsOsAgnostic() };
 
             Subject.Add(root);
@@ -219,7 +214,6 @@ namespace NzbDrone.Core.Test.RootFolderTests
         private void SetupRefresh(RootFolder root, string importFolder, string[] filesOnDisk, string knownPath)
         {
             Mocker.GetMock<IRootFolderRepository>().Setup(s => s.Get(7)).Returns(root);
-            Mocker.GetMock<IMovieRepository>().Setup(s => s.AllMoviePaths()).Returns(new Dictionary<int, string>());
             Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFiles(importFolder, true)).Returns(filesOnDisk);
             Mocker.GetMock<IImportFileRepository>()
                   .Setup(s => s.FindByRootFolderId(7))
