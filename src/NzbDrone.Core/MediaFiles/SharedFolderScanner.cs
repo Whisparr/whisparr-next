@@ -208,11 +208,12 @@ namespace NzbDrone.Core.MediaFiles
                 }
             }
 
-            // Local tier: the oshash of a file one of the folder's scenes already has
-            var localByHash = scenes.Values
-                .SelectMany(s => _mediaFileService.GetFilesByMovie(s.Id).Where(f => f.OsHash.IsNotNullOrWhiteSpace()).Select(f => (f.OsHash, Scene: s)))
-                .GroupBy(x => x.OsHash)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Scene).DistinctBy(s => s.Id).ToList());
+            // Local tier: the oshash of a file one of the folder's scenes already has (one query, a flat root holds every scene)
+            var folderFiles = scenes.Count == 0 ? new List<MovieFile>() : _mediaFileService.GetFilesByMovies(scenes.Keys);
+            var localByHash = folderFiles
+                .Where(f => f.OsHash.IsNotNullOrWhiteSpace() && scenes.ContainsKey(f.MovieId))
+                .GroupBy(f => f.OsHash)
+                .ToDictionary(g => g.Key, g => g.Select(f => scenes[f.MovieId]).DistinctBy(s => s.Id).ToList());
 
             var remote = new List<FileFingerprint>();
 
