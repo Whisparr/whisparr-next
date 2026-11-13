@@ -300,6 +300,47 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void renamed_rows_of_every_scene_are_relinked_from_one_candidate_list()
+        {
+            var rows = new[] { _s1, _s2, _s3 }
+                .Select(s => new MovieFile { Id = 10 + s.Id, MovieId = s.Id, RelativePath = $"old{s.Id}.mp4", OsHash = $"hash{s.Id}" })
+                .ToList();
+            _rows.AddRange(rows);
+
+            GivenFiles(InFolder("new1.mp4"), InFolder("new2.mp4"), InFolder("new3.mp4"));
+
+            foreach (var id in new[] { 1, 2, 3 })
+            {
+                Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(InFolder($"new{id}.mp4"))).Returns($"hash{id}");
+            }
+
+            Subject.Scan(new[] { 1, 2, 3 });
+
+            rows.Select(r => r.RelativePath).Should().Equal("new1.mp4", "new2.mp4", "new3.mp4");
+
+            // Once for the relink candidates, once for the unowned files
+            Mocker.GetMock<IMediaFileService>().Verify(v => v.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()), Times.Exactly(2));
+            Mocker.GetMock<IVideoHashService>().Verify(v => v.ComputeOsHash(It.IsAny<string>()), Times.Exactly(3));
+        }
+
+        [Test]
+        public void file_relinked_to_one_scene_is_not_relinked_to_the_next()
+        {
+            var first = new MovieFile { Id = 11, MovieId = _s1.Id, RelativePath = "old1.mp4", OsHash = "abc" };
+            var second = new MovieFile { Id = 12, MovieId = _s2.Id, RelativePath = "old2.mp4", OsHash = "abc" };
+            _rows.Add(first);
+            _rows.Add(second);
+
+            GivenFiles(InFolder("new.mp4"));
+            Mocker.GetMock<IVideoHashService>().Setup(s => s.ComputeOsHash(InFolder("new.mp4"))).Returns("abc");
+
+            Subject.Scan(new[] { 1, 2, 3 });
+
+            first.RelativePath.Should().Be("new.mp4");
+            second.RelativePath.Should().Be("old2.mp4");
+        }
+
+        [Test]
         public void missing_root_folder_skips_every_requested_scene()
         {
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(It.IsAny<string>())).Returns(false);
