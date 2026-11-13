@@ -52,7 +52,7 @@ namespace NzbDrone.Core.MediaFiles
             Clean(movie, new HashSet<string>(filesOnDisk, PathEqualityComparer.Instance), _mediaFileService.GetFilesByMovie(movie.Id));
         }
 
-        public List<MovieFile> Clean(Movie movie, HashSet<string> filesOnDiskKeys, List<MovieFile> movieFiles)
+        public List<MovieFile> Clean(Movie movie, HashSet<string> filesOnDisk, List<MovieFile> movieFiles)
         {
             var removed = new List<MovieFile>();
 
@@ -62,7 +62,7 @@ namespace NzbDrone.Core.MediaFiles
 
                 try
                 {
-                    if (filesOnDiskKeys.Contains(movieFilePath))
+                    if (filesOnDisk.Contains(movieFilePath))
                     {
                         continue;
                     }
