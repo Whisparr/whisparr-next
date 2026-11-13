@@ -26,6 +26,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         private const string StudioStashId = "39cee498-a9ac-4403-910a-1a0157ad22d8";
         private const string StudioTpdbId = "7a1e0c55-2f3b-4d8e-9b6a-0c4d5e6f7a8b";
         private const string TagStashId = "a0c4b2d6-1e3f-4a5b-8c7d-9e0f1a2b3c4d";
+        private const string TagTpdbId = "240e8e31-2921-4818-96c5-cc484013b0c5";
 
         [SetUp]
         public void Setup()
@@ -72,11 +73,23 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
         }
 
         [Test]
-        public void should_leave_tag_ids_empty_under_tpdb()
+        public void should_key_tag_ids_by_tpdb_uuid_under_tpdb()
         {
             var movie = SkyHookProxy.MapMovie(Scene(SceneStashId, SceneTpdbId), SceneMetadataType.Tpdb);
 
-            movie.TagIds.Should().BeEmpty();
+            movie.TagIds.Should().Equal(TagTpdbId);
+        }
+
+        [Test]
+        public void should_skip_tags_without_locked_source_id()
+        {
+            var resource = Scene(SceneStashId, SceneTpdbId);
+            resource.Tags.Add(new TagResource { Name = "StashOnly", ForeignIds = new ExternalIdResource { StashId = "x" } });
+            resource.Tags.Add(new TagResource { Name = "NoIds" });
+
+            var movie = SkyHookProxy.MapMovie(resource, SceneMetadataType.Tpdb);
+
+            movie.TagIds.Should().Equal(TagTpdbId);
         }
 
         [Test]
@@ -361,7 +374,7 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
                 Genres = new List<string>(),
                 Tags = new List<TagResource>
                 {
-                    new() { Name = "Tag", ForeignIds = new ExternalIdResource { StashId = TagStashId } }
+                    new() { Name = "Tag", ForeignIds = new ExternalIdResource { StashId = TagStashId, TpdbId = TagTpdbId } }
                 },
                 Studio = new StudioResource
                 {
