@@ -169,7 +169,9 @@ namespace NzbDrone.Core.MediaFiles
 
                 var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
-                RelinkRenamedFiles(movie, _mediaFileService.GetFilesByMovie(movie.Id), mediaFileList, onDisk, false, new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance));
+                var trackedFiles = _mediaFileService.GetFilesByMovie(movie.Id);
+
+                RelinkRenamedFiles(movie, trackedFiles, onDisk, () => HashCandidates(MediaFileService.FilterExistingFiles(mediaFileList, trackedFiles, movie)));
 
                 RecordLostFiles(movie, null, onDisk);
                 CleanMediaFiles(movie, mediaFileList);
@@ -358,8 +360,11 @@ namespace NzbDrone.Core.MediaFiles
                 rows = _mediaFileService.GetFilesByMovies(requested.Select(m => m.Id)).ToLookup(f => f.MovieId);
             });
 
-            var hashes = new Dictionary<string, (string OsHash, DateTime? HashedAt)>(PathEqualityComparer.Instance);
             var movieFiles = new Dictionary<int, List<MovieFile>>();
+
+            // Built on the first scene with a missing file, then shared: re-filtering per scene reads every row in the folder each time.
+            // shortcut: a file another command links in place between scene steps stays a candidate; rebuild per scene if that ever shows up.
+            Dictionary<string, List<(string Path, DateTime? HashedAt)>> relinkCandidates = null;
 
             // Built once per pass: a flat root lists every scene's files, so a per-scene set is quadratic
             var onDisk = new HashSet<string>(videoFiles, PathEqualityComparer.Instance);
@@ -368,7 +373,8 @@ namespace NzbDrone.Core.MediaFiles
             {
                 var sceneFiles = rows[scene.Id].ToList();
 
-                RelinkRenamedFiles(scene, sceneFiles, videoFiles, onDisk, true, hashes);
+                // No item's tracked file is up for re-linking (siblings, nested items, an item above), even when its hash matches
+                RelinkRenamedFiles(scene, sceneFiles, onDisk, () => relinkCandidates ??= HashCandidates(_mediaFileService.FilterFilesTrackedByAnyItem(folder, videoFiles)));
                 RecordLostFiles(scene, sceneFiles, onDisk);
 
                 _logger.Debug("{0} Cleaning up media files in DB", scene);
@@ -630,7 +636,7 @@ namespace NzbDrone.Core.MediaFiles
         /// Re-points a MovieFile whose path is missing at the unknown file in the movie folder that has the same oshash
         /// (a rename outside Whisparr). Only an unambiguous 1:1 match is re-linked; nothing on disk is touched.
         /// </summary>
-        private void RelinkRenamedFiles(Movie movie, List<MovieFile> movieFiles, List<string> mediaFileList, HashSet<string> onDisk, bool shared, Dictionary<string, (string OsHash, DateTime? HashedAt)> hashCache)
+        private void RelinkRenamedFiles(Movie movie, List<MovieFile> movieFiles, HashSet<string> onDisk, Func<Dictionary<string, List<(string Path, DateTime? HashedAt)>>> getCandidates)
         {
             // The listing can miss a file that is still there (filtered path, unreadable folder), so confirm on disk
             var missing = movieFiles
@@ -644,59 +650,46 @@ namespace NzbDrone.Core.MediaFiles
                 return;
             }
 
-            var newFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
+            var candidates = getCandidates();
 
-            if (shared)
-            {
-                // No item's tracked file is up for re-linking (siblings, nested items, an item above), even when its hash matches
-                newFiles = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, newFiles);
-            }
-
-            if (newFiles.Count == 0)
-            {
-                return;
-            }
-
-            var newFileHashes = new Dictionary<string, (string OsHash, DateTime? HashedAt)>();
-
-            foreach (var path in newFiles)
-            {
-                // Shared across a folder pass's scenes, so each candidate is hashed at most once
-                if (!hashCache.TryGetValue(path, out var hash))
-                {
-                    hash = _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger);
-                    hashCache[path] = hash;
-                }
-
-                if (hash.OsHash != null)
-                {
-                    newFileHashes[path] = hash;
-                }
-            }
+            // The item's own tracked files, in case the path index doesn't list it yet
+            var own = movieFiles.Select(f => Path.Combine(movie.Path, f.RelativePath)).ToHashSet(PathEqualityComparer.Instance);
 
             foreach (var row in missing)
             {
-                if (missing.Count(m => m.OsHash == row.OsHash) != 1)
+                if (missing.Count(m => m.OsHash == row.OsHash) != 1 || !candidates.TryGetValue(row.OsHash, out var sameHash))
                 {
                     continue;
                 }
 
-                var matches = newFileHashes.Where(h => h.Value.OsHash == row.OsHash).ToList();
+                var matches = sameHash.Where(c => !own.Contains(c.Path)).ToList();
 
                 if (matches.Count != 1)
                 {
                     continue;
                 }
 
-                var newPath = matches[0].Key;
+                var (newPath, hashedAt) = matches[0];
                 var oldRelativePath = row.RelativePath;
 
                 row.RelativePath = movie.Path.GetRelativePath(newPath);
-                row.HashedFileModifiedAt = matches[0].Value.HashedAt;
+                row.HashedFileModifiedAt = hashedAt;
                 _mediaFileService.Update(row);
+
+                // Tracked now, so no later item in the pass can take it
+                sameHash.Remove(matches[0]);
 
                 _logger.Info("Re-linked {0} to {1} by oshash", oldRelativePath, row.RelativePath);
             }
+        }
+
+        // Untracked video files by oshash; a file that can't be hashed can't be matched
+        private Dictionary<string, List<(string Path, DateTime? HashedAt)>> HashCandidates(List<string> files)
+        {
+            return files.Select(path => (Path: path, Hash: _videoHashService.ComputeOsHashStamp(_diskProvider, path, _logger)))
+                        .Where(c => c.Hash.OsHash != null)
+                        .GroupBy(c => c.Hash.OsHash)
+                        .ToDictionary(g => g.Key, g => g.Select(c => (c.Path, HashedAt: c.Hash.ModifiedAt)).ToList());
         }
 
         private static bool IsScene(Movie movie)
