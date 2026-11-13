@@ -185,8 +185,6 @@ namespace NzbDrone.Core.RootFolders
         public RootFolder Refresh(int id)
         {
             var rootFolder = Get(id);
-
-            // We want to make sure we have the latest movie paths in case any have been added or removed since the root folder was loaded
             var importFolder = GetImportFolder(rootFolder.Path);
 
             var folderExists = _diskProvider.FolderExists(importFolder);
