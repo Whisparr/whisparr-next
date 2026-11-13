@@ -42,7 +42,7 @@ function LogsTableRow({
   message,
   exception,
   columns,
-}: LogsTableRowProps) {
+}: Readonly<LogsTableRowProps>) {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const handlePress = useCallback(() => {
@@ -53,45 +53,48 @@ function LogsTableRow({
     setIsDetailsModalOpen(false);
   }, []);
 
+  // Modal sits outside the row: React bubbles portal clicks to ancestors, so the row's onPress would reopen it.
   return (
-    <TableRowButton overlayContent={true} onPress={handlePress}>
-      {columns.map((column) => {
-        const { name, isVisible } = column;
+    <>
+      <TableRowButton onPress={handlePress}>
+        {columns.map((column) => {
+          const { name, isVisible } = column;
 
-        if (!isVisible) {
+          if (!isVisible) {
+            return null;
+          }
+
+          if (name === 'level') {
+            return (
+              <TableRowCell key={name} className={styles.level}>
+                <Icon
+                  className={styles[level]}
+                  name={getIconName(level)}
+                  title={level}
+                />
+              </TableRowCell>
+            );
+          }
+
+          if (name === 'time') {
+            return <RelativeDateCell key={name} date={time} />;
+          }
+
+          if (name === 'logger') {
+            return <TableRowCell key={name}>{logger}</TableRowCell>;
+          }
+
+          if (name === 'message') {
+            return <TableRowCell key={name}>{message}</TableRowCell>;
+          }
+
+          if (name === 'actions') {
+            return <TableRowCell key={name} className={styles.actions} />;
+          }
+
           return null;
-        }
-
-        if (name === 'level') {
-          return (
-            <TableRowCell key={name} className={styles.level}>
-              <Icon
-                className={styles[level]}
-                name={getIconName(level)}
-                title={level}
-              />
-            </TableRowCell>
-          );
-        }
-
-        if (name === 'time') {
-          return <RelativeDateCell key={name} date={time} />;
-        }
-
-        if (name === 'logger') {
-          return <TableRowCell key={name}>{logger}</TableRowCell>;
-        }
-
-        if (name === 'message') {
-          return <TableRowCell key={name}>{message}</TableRowCell>;
-        }
-
-        if (name === 'actions') {
-          return <TableRowCell key={name} className={styles.actions} />;
-        }
-
-        return null;
-      })}
+        })}
+      </TableRowButton>
 
       <LogsTableDetailsModal
         isOpen={isDetailsModalOpen}
@@ -99,7 +102,7 @@ function LogsTableRow({
         exception={exception}
         onModalClose={handleModalClose}
       />
-    </TableRowButton>
+    </>
   );
 }
 
