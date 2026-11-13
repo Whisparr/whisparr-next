@@ -38,8 +38,8 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
                   .Returns(true);
 
             Mocker.GetMock<IDiskProvider>()
-                  .Setup(s => s.GetDirectories(RootFolder))
-                  .Returns(new[] { Path.Combine(RootFolder, "Studio"), _second.Path });
+                  .Setup(s => s.FolderEmpty(RootFolder))
+                  .Returns(false);
 
             Mocker.GetMock<IDiskProvider>()
                   .Setup(s => s.FileExists(It.IsAny<string>()))
@@ -146,8 +146,8 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileDeletionService
         public void should_skip_movie_whose_root_folder_is_empty()
         {
             Mocker.GetMock<IDiskProvider>()
-                  .Setup(s => s.GetDirectories(RootFolder))
-                  .Returns(System.Array.Empty<string>());
+                  .Setup(s => s.FolderEmpty(RootFolder))
+                  .Returns(true);
 
             Execute(1);
 

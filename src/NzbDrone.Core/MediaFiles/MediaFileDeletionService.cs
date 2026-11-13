@@ -90,7 +90,8 @@ namespace NzbDrone.Core.MediaFiles
                 throw new NzbDroneClientException(HttpStatusCode.Conflict, "Movie's root folder ({0}) doesn't exist.", rootFolder);
             }
 
-            if (_diskProvider.GetDirectories(rootFolder).Empty())
+            // Files count too: a flat layout's root holds scene files and may have no subfolders
+            if (_diskProvider.FolderEmpty(rootFolder))
             {
                 _logger.Warn("Movie's root folder ({0}) is empty. Rescan will not update movies as a failsafe.", rootFolder);
                 throw new NzbDroneClientException(HttpStatusCode.Conflict, "Movie's root folder ({0}) is empty. Rescan will not update movies as a failsafe.", rootFolder);
@@ -175,7 +176,7 @@ namespace NzbDrone.Core.MediaFiles
                         continue;
                     }
 
-                    if (_diskProvider.GetDirectories(rootFolder).Empty())
+                    if (_diskProvider.FolderEmpty(rootFolder))
                     {
                         _logger.Warn("Movie's root folder ({0}) is empty. Rescan will not update movies as a failsafe.", rootFolder);
                         _commandResultReporter.Report(CommandResult.Indeterminate);
