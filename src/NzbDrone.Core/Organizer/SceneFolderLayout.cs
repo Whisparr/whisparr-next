@@ -179,7 +179,7 @@ namespace NzbDrone.Core.Organizer
 
         public void Handle(MovieEditedEvent message)
         {
-            _pathCache.Clear();
+            ClearIfPathChanged(message.Movie);
         }
 
         public void Handle(MoviesBulkEditedEvent message)
@@ -194,7 +194,7 @@ namespace NzbDrone.Core.Organizer
 
         public void Handle(MovieRenamedEvent message)
         {
-            _pathCache.Clear();
+            ClearIfPathChanged(message.Movie);
         }
 
         // An import can recompute Movie.Path while saving the new file without any edit event.
@@ -206,6 +206,17 @@ namespace NzbDrone.Core.Organizer
         public void Handle(NamingConfigSavedEvent message)
         {
             _flatCache.Clear();
+        }
+
+        // A rename saves the item once per file; reloading every item's path each time is quadratic in a bulk rename
+        private void ClearIfPathChanged(Movie movie)
+        {
+            var entry = _pathCache.Find("all")?.FirstOrDefault(e => e.Id == movie?.Id);
+
+            if (entry == null || entry.Path != movie.Path)
+            {
+                _pathCache.Clear();
+            }
         }
 
         private List<MoviePathEntry> AllPathEntries()
