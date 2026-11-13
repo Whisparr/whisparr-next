@@ -75,7 +75,9 @@ namespace NzbDrone.Core.Extras.Others
 
             var isShared = _sceneFolderLayout.IsShared(movie);
             var onlyFileId = _mediaFileService.GetFilesByMovie(movie.Id) is { Count: 1 } files ? files[0].Id : 0;
-            var folderFiles = isShared ? _sidecarOwnership.GetFolderFiles(movie) : null;
+
+            // Only when there is an extra to place: a flat folder's files are the whole library's
+            var folderFiles = isShared && extraFiles.Count > 0 ? _sidecarOwnership.GetFolderFiles(movie) : null;
 
             foreach (var renamedFile in renamedFiles)
             {

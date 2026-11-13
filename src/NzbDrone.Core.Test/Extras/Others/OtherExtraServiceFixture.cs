@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Extras;
 using NzbDrone.Core.Extras.Others;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
@@ -241,6 +242,19 @@ namespace NzbDrone.Core.Test.Extras.Others
 
             results.Should().ContainSingle();
             results[0].RelativePath.Should().Be("2020 - Buffy [id].nfo");
+        }
+
+        [Test]
+        public void shared_scene_without_extras_does_not_load_the_folder_files_on_rename()
+        {
+            Mocker.GetMock<IOtherExtraFileService>().Setup(s => s.GetFilesByMovie(_movie.Id)).Returns(new List<OtherExtraFile>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            var renamed = new RenamedMovieFile { MovieFile = _movieFile, PreviousRelativePath = "s1.mp4", PreviousPath = Path.Combine(_movie.Path, "s1.mp4") };
+
+            Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).Should().BeEmpty();
+
+            Mocker.GetMock<ISidecarOwnership>().Verify(v => v.GetFolderFiles(It.IsAny<Movie>()), Times.Never());
         }
 
         [Test]

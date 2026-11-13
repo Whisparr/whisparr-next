@@ -308,6 +308,19 @@ namespace NzbDrone.Core.Test.Extras.Subtitles
         }
 
         [Test]
+        public void shared_scene_without_subtitles_does_not_load_the_folder_files_on_rename()
+        {
+            var renamed = GivenRenameIntoStudioFolder("s1.en.srt");
+
+            Mocker.GetMock<ISubtitleFileService>().Setup(s => s.GetFilesByMovie(_movie.Id)).Returns(new List<SubtitleFile>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.IsShared(_movie)).Returns(true);
+
+            Subject.MoveFilesAfterRename(_movie, new List<RenamedMovieFile> { renamed }).Should().BeEmpty();
+
+            Mocker.GetMock<ISidecarOwnership>().Verify(v => v.GetFolderFiles(It.IsAny<Movie>()), Times.Never());
+        }
+
+        [Test]
         public void subtitle_in_a_subfolder_is_resolved_against_the_old_scene_folder()
         {
             var renamed = GivenRenameIntoStudioFolder(@"Subs\s1.en.srt");
