@@ -1,5 +1,6 @@
 using System.Linq;
 using FluentAssertions;
+using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -122,6 +123,38 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Specifications
                   .Returns(filePaths);
 
             Subject.IsSatisfiedBy(_localMovie, null).Accepted.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_list_a_folder_once_for_a_batch_of_its_files()
+        {
+            var filePaths = new[] { @"C:\Test\Flat\a.mp4", @"C:\Test\Flat\b.mp4", @"C:\Test\Flat\c.mp4" }.Select(x => x.AsOsAgnostic()).ToArray();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.GetFiles(filePaths[0].GetParentPath(), false))
+                  .Returns(filePaths);
+
+            foreach (var path in filePaths)
+            {
+                Subject.IsSatisfiedBy(new LocalMovie { Path = path }, null).Accepted.Should().BeTrue();
+            }
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.GetFiles(It.IsAny<string>(), false), Times.Once());
+        }
+
+        [Test]
+        public void should_reject_a_part_added_after_the_folder_was_listed()
+        {
+            var part1 = @"C:\Test\Downloaded\Bad Boys (2006) part1.mkv".AsOsAgnostic();
+            var part2 = @"C:\Test\Downloaded\Bad Boys (2006) part2.mkv".AsOsAgnostic();
+
+            Mocker.GetMock<IDiskProvider>()
+                  .SetupSequence(s => s.GetFiles(part1.GetParentPath(), false))
+                  .Returns(new[] { part1 })
+                  .Returns(new[] { part1, part2 });
+
+            Subject.IsSatisfiedBy(new LocalMovie { Path = part1 }, null).Accepted.Should().BeTrue();
+            Subject.IsSatisfiedBy(new LocalMovie { Path = part2 }, null).Accepted.Should().BeFalse();
         }
     }
 }
