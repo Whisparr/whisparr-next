@@ -19,8 +19,8 @@ namespace NzbDrone.Core.MediaFiles
     {
         void Clean(Movie movie, List<string> filesOnDisk);
 
-        // The same over rows the caller already loaded; returns the rows it removed
-        List<MovieFile> Clean(Movie movie, List<string> filesOnDisk, List<MovieFile> movieFiles);
+        // The same over rows the caller already loaded and a path-comparer set of the files on disk; returns the rows it removed
+        List<MovieFile> Clean(Movie movie, HashSet<string> filesOnDisk, List<MovieFile> movieFiles);
         void Clean(string folder, List<string> filesOnDisk);
     }
 
@@ -49,13 +49,12 @@ namespace NzbDrone.Core.MediaFiles
 
         public void Clean(Movie movie, List<string> filesOnDisk)
         {
-            Clean(movie, filesOnDisk, _mediaFileService.GetFilesByMovie(movie.Id));
+            Clean(movie, new HashSet<string>(filesOnDisk, PathEqualityComparer.Instance), _mediaFileService.GetFilesByMovie(movie.Id));
         }
 
-        public List<MovieFile> Clean(Movie movie, List<string> filesOnDisk, List<MovieFile> movieFiles)
+        public List<MovieFile> Clean(Movie movie, HashSet<string> filesOnDiskKeys, List<MovieFile> movieFiles)
         {
             var removed = new List<MovieFile>();
-            var filesOnDiskKeys = new HashSet<string>(filesOnDisk, PathEqualityComparer.Instance);
 
             foreach (var movieFile in movieFiles)
             {

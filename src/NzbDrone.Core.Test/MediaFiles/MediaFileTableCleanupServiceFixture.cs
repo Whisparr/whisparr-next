@@ -57,7 +57,7 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Mocker.GetMock<IDiskProvider>().Setup(e => e.FileExists(Path.Combine(_movie.Path, "old.mp4"))).Returns(false);
 
-            var removed = Subject.Clean(_movie, new List<string>(), new List<MovieFile> { snapshot });
+            var removed = Subject.Clean(_movie, new HashSet<string>(), new List<MovieFile> { snapshot });
 
             removed.Should().BeEmpty();
             Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
@@ -71,7 +71,7 @@ namespace NzbDrone.Core.Test.MediaFiles
 
             Mocker.GetMock<IDiskProvider>().Setup(e => e.FileExists(Path.Combine(_movie.Path, "old.mp4"))).Returns(false);
 
-            var removed = Subject.Clean(_movie, new List<string>(), new List<MovieFile> { snapshot });
+            var removed = Subject.Clean(_movie, new HashSet<string>(), new List<MovieFile> { snapshot });
 
             removed.Should().BeEmpty();
             Mocker.GetMock<IMediaFileService>().Verify(c => c.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());

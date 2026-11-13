@@ -310,7 +310,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             _skipped.Should().OnlyContain(e => e.Reason == MovieScanSkippedReason.RootFolderDoesNotExist);
             _skipped.Select(e => e.Movie.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
             _scanned.Should().BeEmpty();
-            Mocker.GetMock<IMediaFileTableCleanupService>().Verify(v => v.Clean(It.IsAny<Movie>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()), Times.Never());
+            Mocker.GetMock<IMediaFileTableCleanupService>().Verify(v => v.Clean(It.IsAny<Movie>(), It.IsAny<HashSet<string>>(), It.IsAny<List<MovieFile>>()), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
         }
 
@@ -325,7 +325,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             _skipped.Should().HaveCount(3);
             _skipped.Should().OnlyContain(e => e.Reason == MovieScanSkippedReason.RootFolderIsEmpty);
             _skipped.Select(e => e.Movie.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
-            Mocker.GetMock<IMediaFileTableCleanupService>().Verify(v => v.Clean(It.IsAny<Movie>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()), Times.Never());
+            Mocker.GetMock<IMediaFileTableCleanupService>().Verify(v => v.Clean(It.IsAny<Movie>(), It.IsAny<HashSet<string>>(), It.IsAny<List<MovieFile>>()), Times.Never());
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
         }
 
@@ -403,10 +403,28 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
         }
 
         [Test]
+        public void folder_listing_set_is_built_once_for_every_scene()
+        {
+            GivenFiles(InFolder("a.mp4"), InFolder("b.mp4"));
+
+            var sets = new List<HashSet<string>>();
+
+            Mocker.GetMock<IMediaFileTableCleanupService>()
+                  .Setup(s => s.Clean(It.IsAny<Movie>(), It.IsAny<HashSet<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Callback((Movie _, HashSet<string> onDisk, List<MovieFile> _) => sets.Add(onDisk))
+                  .Returns(new List<MovieFile>());
+
+            Subject.Scan(new[] { 1, 2, 3 });
+
+            sets.Should().HaveCount(3);
+            sets.Distinct().Should().ContainSingle().Which.Should().Contain(InFolder("a.mp4"));
+        }
+
+        [Test]
         public void failing_scene_does_not_stop_its_siblings()
         {
             Mocker.GetMock<IMediaFileTableCleanupService>()
-                  .Setup(s => s.Clean(_s2, It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Setup(s => s.Clean(_s2, It.IsAny<HashSet<string>>(), It.IsAny<List<MovieFile>>()))
                   .Throws(new InvalidOperationException("boom"));
 
             Subject.Scan(new[] { 1, 2, 3 });
