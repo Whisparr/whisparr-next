@@ -256,8 +256,35 @@ namespace NzbDrone.Core.Test.OrganizerTests
 
             Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
 
-            Subject.Handle(new MovieEditedEvent(new Movie(), new Movie()));
+            Subject.Handle(new MovieEditedEvent(GivenItem(1, "/media/scenes/Studio/B", ItemType.Scene), GivenItem(1, "/media/scenes/Studio/A", ItemType.Scene)));
             Subject.GetItemsInFolder("/media/scenes/Studio/A");
+
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
+        }
+
+        [Test]
+        public void path_cache_is_kept_when_an_edit_or_rename_leaves_the_path_unchanged()
+        {
+            GivenEntries(Entry(1, "/media/scenes/Studio", ItemType.Scene));
+
+            Subject.GetItemsInFolder("/media/scenes/Studio");
+
+            var movie = GivenItem(1, "/media/scenes/Studio", ItemType.Scene);
+            Subject.Handle(new MovieEditedEvent(movie, movie));
+            Subject.Handle(new MovieRenamedEvent(movie, new List<RenamedMovieFile>()));
+            Subject.GetItemsInFolder("/media/scenes/Studio");
+
+            Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Once());
+        }
+
+        [Test]
+        public void path_cache_is_cleared_on_rename_of_an_item_it_does_not_hold()
+        {
+            GivenEntries(Entry(1, "/media/scenes/Studio", ItemType.Scene));
+
+            Subject.GetItemsInFolder("/media/scenes/Studio");
+            Subject.Handle(new MovieRenamedEvent(GivenItem(2, "/media/scenes/Studio", ItemType.Scene), new List<RenamedMovieFile>()));
+            Subject.GetItemsInFolder("/media/scenes/Studio");
 
             Mocker.GetMock<IMovieRepository>().Verify(s => s.AllMoviePathEntries(), Times.Exactly(2));
         }
