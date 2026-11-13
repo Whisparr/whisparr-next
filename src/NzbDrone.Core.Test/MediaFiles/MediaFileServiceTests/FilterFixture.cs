@@ -142,5 +142,33 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaFileServiceTests
             Subject.FilterExistingFiles(files, _series).Should().NotContain(files.First().ToLower());
             Subject.FilterExistingFiles(files, _series).Should().Contain(files.First());
         }
+
+        [Test]
+        public void filter_all_should_drop_every_tracked_and_unmapped_file_without_a_query_per_file()
+        {
+            var scenePath = @"C:\scenes".AsOsAgnostic();
+            var primary = Path.Combine(scenePath, "primary.mp4");
+            var second = Path.Combine(scenePath, "second.mp4");
+            var unmapped = @"C:\import\unmapped.mp4".AsOsAgnostic();
+            var fresh = @"C:\import\fresh.mp4".AsOsAgnostic();
+
+            Mocker.GetMock<IMovieRepository>()
+                  .Setup(s => s.AllMoviePaths())
+                  .Returns(new Dictionary<int, string> { { 1, scenePath } });
+            Mocker.GetMock<IMediaFileRepository>()
+                  .Setup(s => s.GetAllFiles())
+                  .Returns(new List<MovieFile>
+                  {
+                      new() { MovieId = 1, RelativePath = "primary.mp4" },
+                      new() { MovieId = 1, RelativePath = "second.mp4" },
+                      new() { MovieId = 0, OriginalFilePath = unmapped },
+                      new() { MovieId = 99, RelativePath = "orphan.mp4" }
+                  });
+
+            Subject.FilterExistingFiles(new List<string> { primary, second, unmapped, fresh })
+                   .Should().BeEquivalentTo(new[] { fresh });
+
+            Mocker.GetMock<IMovieRepository>().Verify(v => v.Get(It.IsAny<int>()), Times.Never());
+        }
     }
 }

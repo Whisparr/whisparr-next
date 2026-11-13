@@ -6,7 +6,6 @@ using System.Linq;
 using NzbDrone.Common;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Extensions;
-using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -190,27 +189,21 @@ namespace NzbDrone.Core.MediaFiles
 
         public List<string> FilterExistingFiles(List<string> files)
         {
-            var allFiles = _mediaFileRepository.GetAllFiles().ToList();
+            // Every item's path in one query, not one per file row
+            var moviePaths = _movieRepository.AllMoviePaths();
 
             var movieFiles = new List<string>();
-            foreach (var file in allFiles)
+            foreach (var file in _mediaFileRepository.GetAllFiles())
             {
-                if (file.MovieId > 0)
-                {
-                    try
-                    {
-                        var movie = _movieRepository.Get(file.MovieId);
-                        movieFiles.Add(Path.Combine(movie.Path, movie.MovieFile.RelativePath));
-                    }
-                    catch (ModelNotFoundException)
-                    {
-                        // Movie File record exists but not movie record
-                        _movieRepository.Delete(file.MovieId);
-                    }
-                }
-                else
+                if (file.MovieId <= 0)
                 {
                     movieFiles.Add(file.OriginalFilePath);
+                }
+                else if (file.RelativePath.IsNotNullOrWhiteSpace() &&
+                         moviePaths.TryGetValue(file.MovieId, out var moviePath) &&
+                         moviePath.IsNotNullOrWhiteSpace())
+                {
+                    movieFiles.Add(Path.Combine(moviePath, file.RelativePath));
                 }
             }
 
@@ -220,8 +213,6 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return files.Except(movieFiles, PathEqualityComparer.Instance).ToList();
-
-            // return files;
         }
 
         // Drops files a MovieFile row points at, for any item (movies included). Unlike FilterExistingFiles,
