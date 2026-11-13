@@ -47,12 +47,12 @@ namespace NzbDrone.Core.Movies
                                  IRootFolderService rootFolderService,
                                  Logger logger)
         {
-            _rootFolderService = rootFolderService;
             _sceneFolderLayout = sceneFolderLayout;
             _mediaFileService = mediaFileService;
             _subtitleFileService = subtitleFileService;
             _otherExtraFileService = otherExtraFileService;
             _metadataFileService = metadataFileService;
+            _rootFolderService = rootFolderService;
             _movieService = movieService;
             _filenameBuilder = filenameBuilder;
             _diskProvider = diskProvider;

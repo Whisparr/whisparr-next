@@ -252,19 +252,21 @@ namespace NzbDrone.Core.Test.MediaFiles
                   .Returns(file);
         }
 
-        [Test]
-        public void rename_removes_old_folder_when_empty()
+        [TestCase(false, 1)]
+        [TestCase(true, 0)]
+        public void rename_removes_old_folder_when_empty_unless_it_is_a_root_folder(bool isRootFolder, int deletes)
         {
             var (_, file) = GivenSceneInOwnFolder();
             GivenMoveRenamesToStudioFolder(file);
 
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(_oldFolder)).Returns(true);
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderEmpty(_oldFolder)).Returns(true);
+            Mocker.GetMock<IRootFolderService>().Setup(s => s.IsRootFolder(_oldFolder)).Returns(isRootFolder);
 
             Subject.Execute(new RenameFilesCommand(7, new List<int> { 70 }));
 
             Mocker.GetMock<IDiskProvider>().Verify(v => v.RemoveEmptySubfolders(_oldFolder), Times.Once());
-            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(_oldFolder, false), Times.Once());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFolder(_oldFolder, false), Times.Exactly(deletes));
         }
 
         [Test]
