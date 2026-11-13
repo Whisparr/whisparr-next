@@ -36,6 +36,31 @@ namespace NzbDrone.Core.Extras
             return next == '.' || next == '-';
         }
 
+        // Every base name SidecarNameMatches accepts for this sidecar: its name cut before each '.' or '-', and the whole name.
+        // Lets a caller look videos up by base name instead of testing each one.
+        public static IEnumerable<string> MatchingBaseNames(string sidecarFileName)
+        {
+            if (string.IsNullOrEmpty(sidecarFileName))
+            {
+                yield break;
+            }
+
+            var name = Path.GetFileName(sidecarFileName);
+
+            for (var i = 1; i < name.Length; i++)
+            {
+                if (name[i] == '.' || name[i] == '-')
+                {
+                    yield return name[..i];
+                }
+            }
+
+            if (name.Length > 0)
+            {
+                yield return name;
+            }
+        }
+
         // The longest matching base name wins; a tie across different items leaves the file unowned (null)
         public static MovieFile LongestMatch(List<(MovieFile File, string BaseName)> matches)
         {

@@ -76,13 +76,14 @@ namespace NzbDrone.Core.Extras
                 }
             }
 
-            var videos = folderVideoFiles.Where(f => f.RelativePath.IsNotNullOrWhiteSpace())
-                                         .Select(f => (File: f, BaseName: Path.GetFileNameWithoutExtension(f.RelativePath)))
-                                         .ToList();
+            // By base name: a flat root's untracked side files would otherwise each be tested against every video
+            var videosByBaseName = folderVideoFiles.Where(f => f.RelativePath.IsNotNullOrWhiteSpace())
+                                                   .Select(f => (File: f, BaseName: Path.GetFileNameWithoutExtension(f.RelativePath)))
+                                                   .ToLookup(v => v.BaseName, StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in sideFiles.Where(f => !tracked.Contains(f)))
             {
-                var matches = videos.Where(v => SidecarName.SidecarNameMatches(file, v.BaseName)).ToList();
+                var matches = SidecarName.MatchingBaseNames(file).SelectMany(b => videosByBaseName[b]).ToList();
                 var owner = matches.Count > 0 ? SidecarName.LongestMatch(matches) : FindByParse(file, itemIds, folderVideoFiles);
 
                 if (owner != null)
