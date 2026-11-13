@@ -51,7 +51,7 @@ namespace NzbDrone.Core.Test.MediaFiles
                   .Setup(s => s.FilterFilesTrackedByAnyItem(_folder, It.IsAny<List<string>>()))
                   .Returns((string _, List<string> files) => files);
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
                   .Returns(new List<MovieFile>());
 
             Mocker.GetMock<IParsingService>()
@@ -146,12 +146,17 @@ namespace NzbDrone.Core.Test.MediaFiles
         public void identifies_by_the_hash_of_a_file_a_folder_scene_already_has()
         {
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.GetFilesByMovie(2))
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
                   .Returns(new List<MovieFile> { new() { MovieId = 2, OsHash = "hash" } });
 
             var decisions = Subject.IdentifyOwned(_s1, new List<string> { F("copy.mp4") });
 
             decisions.Should().ContainSingle().Which.LocalMovie.Movie.Id.Should().Be(2);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.GetFilesByMovie(It.IsAny<int>()), Times.Never());
 
             Mocker.GetMock<IFingerprintLookupClient>()
                   .Verify(v => v.Lookup(It.IsAny<IReadOnlyCollection<FileFingerprint>>(), It.IsAny<bool>()), Times.Never());
