@@ -237,6 +237,27 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
         }
 
         [Test]
+        public void should_get_titles_of_only_the_studios_scenes()
+        {
+            var profile = GivenProfile();
+            var scene = GivenTitledMovie(profile.Id, "Shower Sex", ItemType.Scene);
+            var other = GivenTitledMovie(profile.Id, "Poolside", ItemType.Scene);
+
+            var metadata = Db.All<MovieMetadata>().ToDictionary(m => m.Id);
+            metadata[scene.MovieMetadataId].StudioForeignId = "helix";
+            metadata[other.MovieMetadataId].StudioForeignId = "other";
+            Db.Update(metadata[scene.MovieMetadataId]);
+            Db.Update(metadata[other.MovieMetadataId]);
+
+            var results = Subject.GetStudioSceneTitles("helix");
+
+            results.Should().ContainSingle();
+            results[0].Id.Should().Be(scene.Id);
+            results[0].Title.Should().Be("Shower Sex");
+            results[0].ForeignId.Should().Be(metadata[scene.MovieMetadataId].ForeignId);
+        }
+
+        [Test]
         public void should_return_only_scene_and_jav_foreign_ids()
         {
             var profile = GivenProfile();
