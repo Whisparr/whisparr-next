@@ -11,9 +11,11 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
@@ -158,6 +160,30 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
                   .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), true), Times.Never());
 
             ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void import_collision_rescans_only_when_destination_is_untracked(bool trackedByAnotherScene)
+        {
+            const string target = "/library/Studio/Studio - 2026-08-13 - Title.mp4";
+
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
+                  .Throws(new DestinationAlreadyExistsException("exists") { TargetPath = target });
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FindByFullPath(target))
+                  .Returns(trackedByAnotherScene ? new MovieFile { Id = 7, MovieId = 99 } : null);
+
+            Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
+
+            // A rescan can't link a file another scene already tracks, and the download is retried on every check.
+            Mocker.GetMock<IManageCommandQueue>()
+                  .Verify(v => v.Push(It.IsAny<RescanMovieCommand>(), It.IsAny<CommandPriority>(), It.IsAny<CommandTrigger>()),
+                          trackedByAnotherScene ? Times.Never() : Times.Once());
+
+            ExceptionVerification.ExpectedWarns(trackedByAnotherScene ? 2 : 1);
         }
 
         [Test]

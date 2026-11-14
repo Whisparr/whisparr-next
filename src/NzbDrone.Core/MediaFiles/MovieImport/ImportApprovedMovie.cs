@@ -202,7 +202,18 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     _logger.Warn(e, "Couldn't import movie " + localMovie);
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie, Destination already exists."));
 
-                    _commandQueueManager.Push(new RescanMovieCommand(localMovie.Movie.Id));
+                    // A rescan can link an untracked file at the destination, never one a scene already tracks. The download is
+                    // retried every check, and in a shared folder each rescan reads the whole folder, so only rescan when it can help.
+                    var owner = e.TargetPath.IsNotNullOrWhiteSpace() ? _mediaFileService.FindByFullPath(e.TargetPath) : null;
+
+                    if (owner == null)
+                    {
+                        _commandQueueManager.Push(new RescanMovieCommand(localMovie.Movie.Id));
+                    }
+                    else
+                    {
+                        _logger.Warn("Not rescanning {0}: {1} is already the file of movie {2}", localMovie.Movie, e.TargetPath, owner.MovieId);
+                    }
                 }
                 catch (RecycleBinException e)
                 {
