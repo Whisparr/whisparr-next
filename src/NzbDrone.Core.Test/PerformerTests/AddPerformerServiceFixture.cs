@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Cache;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
@@ -171,6 +172,32 @@ namespace NzbDrone.Core.Test.PerformerTests
 
             // One for the lookup miss, one for the skipped credit; no errors.
             ExceptionVerification.ExpectedWarns(2);
+        }
+
+        [Test]
+        public void should_not_ask_the_metadata_source_again_for_a_missing_performer()
+        {
+            const string missingId = "missing-performer";
+
+            Mocker.SetConstant<ICacheManager>(Mocker.Resolve<CacheManager>());
+
+            Mocker.GetMock<IPerformerService>()
+                  .Setup(s => s.FindByForeignIds(It.IsAny<List<string>>()))
+                  .Returns(new List<Performer>());
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetPerformerInfo(missingId))
+                  .Throws(new MovieNotFoundException("Performer not found"));
+
+            // Each scene crediting the performer adds its credits as its own batch.
+            Subject.AddPerformers(new List<Performer> { new Performer { ForeignId = missingId } }, true);
+            Subject.AddPerformers(new List<Performer> { new Performer { ForeignId = missingId } }, true);
+
+            Mocker.GetMock<IProvideMovieInfo>().Verify(v => v.GetPerformerInfo(missingId), Times.Once());
+            Mocker.GetMock<IPerformerService>()
+                  .Verify(v => v.AddPerformers(It.Is<List<Performer>>(l => l.Count == 0)), Times.Exactly(2));
+
+            ExceptionVerification.ExpectedWarns(3);
         }
 
         private static Performer GivenNewPerformer(bool monitored)
