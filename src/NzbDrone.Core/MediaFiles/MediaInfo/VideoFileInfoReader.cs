@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using FFMpegCore;
 using FFMpegCore.Exceptions;
 using NLog;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
@@ -21,8 +22,13 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
     public class VideoFileInfoReader : IVideoFileInfoReader
     {
+        // One import probes a file up to three times, and a blocked download is imported again every check.
+        // Short, so a large scan doesn't hold every file's stream data for long.
+        private static readonly TimeSpan MediaInfoLifetime = TimeSpan.FromMinutes(10);
+
         private readonly IDiskProvider _diskProvider;
         private readonly IConfigService _configService;
+        private readonly ICached<CachedMediaInfo> _mediaInfoCache;
         private readonly Logger _logger;
 
         public const int MINIMUM_MEDIA_INFO_SCHEMA_REVISION = 13;
@@ -33,10 +39,11 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
         private static readonly string[] PqTransferFunctions = { "smpte2084" };
         private static readonly string[] ValidHdrTransferFunctions = HlgTransferFunctions.Concat(PqTransferFunctions).ToArray();
 
-        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, Logger logger)
+        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, ICacheManager cacheManager, Logger logger)
         {
             _diskProvider = diskProvider;
             _configService = configService;
+            _mediaInfoCache = cacheManager.GetCache<CachedMediaInfo>(GetType(), "mediaInfo");
             _logger = logger;
 
             // We bundle ffprobe for all platforms
@@ -57,7 +64,15 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 return null;
             }
 
-            // TODO: Cache media info by path, mtime and length so we don't need to read files multiple times
+            var size = _diskProvider.GetFileSize(filename);
+            var lastWrite = _diskProvider.FileGetLastWrite(filename);
+            var cached = _mediaInfoCache.Find(filename);
+
+            if (cached != null && cached.Size == size && cached.LastWrite == lastWrite)
+            {
+                return cached.Info;
+            }
+
             try
             {
                 _logger.Debug("Getting media info from {0}", filename);
@@ -125,6 +140,8 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
                 var sideData = streamSideData.Concat(framesSideData).ToList();
                 mediaInfoModel.VideoHdrFormat = GetHdrFormat(mediaInfoModel.VideoBitDepth, mediaInfoModel.VideoColourPrimaries, mediaInfoModel.VideoTransferCharacteristics, sideData);
+
+                _mediaInfoCache.Set(filename, new CachedMediaInfo(size, lastWrite, mediaInfoModel), MediaInfoLifetime);
 
                 return mediaInfoModel;
             }
@@ -290,5 +307,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
             return result != null;
         }
+
+        private record CachedMediaInfo(long Size, DateTime LastWrite, MediaInfoModel Info);
     }
 }

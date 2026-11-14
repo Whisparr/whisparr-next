@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MediaFiles.MediaInfo;
@@ -96,6 +97,27 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
             info.VideoColourPrimaries.Should().Be("smpte170m");
             info.VideoTransferCharacteristics.Should().Be("bt709");
             info.Title.Should().Be("Sample Title");
+        }
+
+        [Test]
+        public void should_reuse_media_info_until_the_file_changes()
+        {
+            var path = Path.Combine(TestContext.CurrentContext.TestDirectory, "Files", "Media", "H264_sample.mp4");
+            var size = 1000L;
+
+            Mocker.SetConstant<ICacheManager>(Mocker.Resolve<CacheManager>());
+            Mocker.GetMock<IDiskProvider>().Setup(s => s.GetFileSize(path)).Returns(() => size);
+
+            var first = Subject.GetMediaInfo(path);
+
+            Subject.GetMediaInfo(path).Should().BeSameAs(first);
+
+            size = 2000;
+
+            var changed = Subject.GetMediaInfo(path);
+
+            changed.Should().NotBeSameAs(first);
+            changed.VideoFormat.Should().Be("h264");
         }
 
         [Test]
