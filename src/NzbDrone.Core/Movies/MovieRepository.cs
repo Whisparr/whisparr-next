@@ -272,9 +272,11 @@ namespace NzbDrone.Core.Movies
             return PagedQuery(builder).AsList();
         }
 
+        // ItemType is filtered here, not in SQL: with it in the WHERE, SQLite picks the ItemType index and reads every JAV
+        // row (~0.2s on 28k) instead of looking the code up by its index (~1ms). Download checks run this for every queue item.
         public Movie FindByJavCode(string code)
         {
-            return Query(x => x.MovieMetadata.Value.ItemType == ItemType.Jav && x.MovieMetadata.Value.Code == code).FirstOrDefault();
+            return Query(x => x.MovieMetadata.Value.Code == code).FirstOrDefault(m => m.MovieMetadata.Value.ItemType == ItemType.Jav);
         }
 
         public List<Movie> GetMoviesByFileId(int fileId)
