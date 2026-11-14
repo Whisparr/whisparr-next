@@ -55,6 +55,24 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             (Subject as IHandle<ApplicationShutdownRequested>)?.Handle(new ApplicationShutdownRequested());
         }
 
+        [TestCase("https://cdn.theporndb.net/scene/8e/52/e6/abc/background/c/bg-molly-i-love-it-large.webp", "https://cdn.theporndb.net/scene/8e/52/e6/abc/background/bg-molly-i-love-it.webp")]
+        [TestCase("https://cdn.theporndb.net/scene/1/background/c/bg-x-medium.JPG", "https://cdn.theporndb.net/scene/1/background/bg-x.JPG")]
+        public void should_map_a_resized_image_url_to_the_original(string url, string original)
+        {
+            MediaCoverService.TryGetOriginalImageUrl(url, out var originalUrl).Should().BeTrue();
+            originalUrl.Should().Be(original);
+        }
+
+        [TestCase("https://cdn.theporndb.net/scene/1/background/bg-x.webp")]
+        [TestCase("https://cdn.theporndb.net/scene/1/background/c/bg-x-thumb.webp")]
+        [TestCase("https://image.tmdb.org/t/p/original/abc-large.jpg")]
+        [TestCase(null)]
+        public void should_not_map_an_image_url_that_is_not_a_resized_copy(string url)
+        {
+            MediaCoverService.TryGetOriginalImageUrl(url, out var originalUrl).Should().BeFalse();
+            originalUrl.Should().BeNull();
+        }
+
         [Test]
         public void should_convert_cover_urls_to_local()
         {
