@@ -18,9 +18,9 @@ namespace NzbDrone.Core.Instrumentation
 
         public void Trim()
         {
+            // No vacuum: a day's trim frees about 1/7 of the file, which the next day's logs reuse
             var trimDate = DateTime.UtcNow.AddDays(-7).Date;
             Delete(c => c.Time <= trimDate);
-            Vacuum();
         }
     }
 }
