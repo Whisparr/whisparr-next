@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Credits;
 
 namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
 {
@@ -116,6 +118,50 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
 
             Assert.That(result, Is.Not.Null);
             Assert.That(result.Id, Is.EqualTo(movie.Id));
+        }
+
+        [Test]
+        public void Should_not_match_titles_against_studio_catalogue_without_a_scene_on_the_release_date()
+        {
+            // A new scene isn't in the library yet, so the studio fallback can't find anything released that day.
+            var studioId = "studio-1";
+            var credits = new Mock<ICreditService>();
+            var logger = NzbDrone.Common.Instrumentation.NzbDroneLogger.GetLogger(typeof(MovieService));
+            var service = new MovieService(_movieRepositoryMock.Object, credits.Object, null, null, _configServiceMock.Object, null, null, null, null, logger);
+
+            var other = new Movie { Id = 1 };
+            other.MovieMetadata.Value.Title = "Some Other Scene";
+            other.MovieMetadata.Value.StudioForeignId = studioId;
+            other.MovieMetadata.Value.ReleaseDateUtc = new DateTime(2026, 11, 7);
+
+            _movieRepositoryMock.Setup(r => r.FindByStudioAndDate(studioId, It.IsAny<string>())).Returns(new List<Movie>());
+            _movieRepositoryMock.Setup(r => r.StudioHasSceneReleasedOn(studioId, new DateTime(2026, 11, 14))).Returns(false);
+            _movieRepositoryMock.Setup(r => r.GetByStudioForeignId(studioId)).Returns(new List<Movie> { other });
+
+            var result = service.InvokeFindByStudioAndReleaseDate(studioId, "2026-11-14", "alyssa pure red bikini", "", "");
+
+            Assert.That(result, Is.Null);
+            _movieRepositoryMock.Verify(r => r.GetByStudioForeignId(It.IsAny<string>()), Times.Never);
+            credits.Verify(c => c.GetAllCreditsForMovieMetadata(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void Should_match_title_from_studio_catalogue_when_a_scene_was_released_on_the_release_date()
+        {
+            // The date query matches the stored date text; the fallback still finds a scene whose release date is that day.
+            var studioId = "studio-1";
+            var movie = new Movie { Id = 1 };
+            movie.MovieMetadata.Value.Title = "Red Bikini";
+            movie.MovieMetadata.Value.StudioForeignId = studioId;
+            movie.MovieMetadata.Value.ReleaseDateUtc = new DateTime(2026, 11, 14);
+
+            _movieRepositoryMock.Setup(r => r.FindByStudioAndDate(studioId, It.IsAny<string>())).Returns(new List<Movie>());
+            _movieRepositoryMock.Setup(r => r.StudioHasSceneReleasedOn(studioId, new DateTime(2026, 11, 14))).Returns(true);
+            _movieRepositoryMock.Setup(r => r.GetByStudioForeignId(studioId)).Returns(new List<Movie> { movie });
+
+            var result = _movieService.InvokeFindByStudioAndReleaseDate(studioId, "2026-11-14", "red bikini", "", "");
+
+            Assert.That(result, Is.SameAs(movie));
         }
     }
 

@@ -27,6 +27,7 @@ namespace NzbDrone.Core.Movies
         List<Movie> FindByTmdbId(List<int> tmdbids);
         List<Movie> FindByStudioAndDate(string studioForeignId, string date);
         List<Movie> GetByStudioForeignId(string studioForeignId);
+        bool StudioHasSceneReleasedOn(string studioForeignId, DateTime day);
         List<Movie> FindByYear(ItemType itemType, int year);
         List<Movie> GetByPerformerForeignId(string performerForeignId);
         List<Movie> MoviesBetweenDates(DateTime start, DateTime end, bool includeUnmonitored);
@@ -210,6 +211,24 @@ namespace NzbDrone.Core.Movies
                 .Where<MovieMetadata>(x => x.StudioForeignId == studioForeignId);
 
             return PagedQuery(builder).AsList();
+        }
+
+        // ReleaseDateUtc holds midnight UTC of the release day. The bounds are UTC so the parameter converter doesn't shift them.
+        public bool StudioHasSceneReleasedOn(string studioForeignId, DateTime day)
+        {
+            var start = DateTime.SpecifyKind(day.Date, DateTimeKind.Utc);
+            var end = start.AddDays(1);
+
+            var sql = new SqlBuilder(_database.DatabaseType)
+                .Select("\"MovieMetadata\".\"Id\"")
+                .Join<Movie, MovieMetadata>((m, mm) => m.MovieMetadataId == mm.Id)
+                .Where<MovieMetadata>(x => x.StudioForeignId == studioForeignId && x.ReleaseDateUtc >= start && x.ReleaseDateUtc < end)
+                .AddSelectTemplate(typeof(Movie));
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<int>(sql.RawSql, sql.Parameters).Any();
+            }
         }
 
         public List<Movie> FindByYear(ItemType itemType, int year)
