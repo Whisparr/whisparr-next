@@ -55,6 +55,8 @@ namespace NzbDrone.Core.Movies
         void SetFileId(List<Movie> movies);
         List<Movie> SearchMovies(string cleanTitle, string foreignId);
         List<MovieTitleMatch> SearchMovieTitles(string cleanTitle, string foreignId);
+        List<MovieTitleMatch> GetStudioTitles(string studioForeignId);
+        List<Movie> GetExisting(List<int> ids);
     }
 
     public class MovieRepository : BasicRepository<Movie>, IMovieRepository
@@ -624,6 +626,26 @@ namespace NzbDrone.Core.Movies
                 "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
                 "WHERE \"MovieMetadata\".\"CleanTitle\" LIKE @Pattern OR \"MovieMetadata\".\"ForeignId\" = @ForeignId",
                 new { Pattern = $"%{cleanTitle}%", ForeignId = foreignId }).ToList();
+        }
+
+        // Dateless release matching compares titles across a whole studio, which can be 20k+ scenes, so it reads
+        // only the title columns. The few titles that can match are then loaded in full by id. Movies of the
+        // studio are included, as they were when the whole studio was loaded.
+        public List<MovieTitleMatch> GetStudioTitles(string studioForeignId)
+        {
+            using var conn = _database.OpenConnection();
+
+            return conn.Query<MovieTitleMatch>(
+                "SELECT \"Movies\".\"Id\", \"MovieMetadata\".\"Title\", \"MovieMetadata\".\"ForeignId\" " +
+                "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
+                "WHERE \"MovieMetadata\".\"StudioForeignId\" = @StudioForeignId",
+                new { StudioForeignId = studioForeignId }).ToList();
+        }
+
+        // Unlike Get(ids), leaves out ids deleted since they were read instead of throwing
+        public List<Movie> GetExisting(List<int> ids)
+        {
+            return ids.Any() ? Query(m => ids.Contains(m.Id)) : new List<Movie>();
         }
 
         protected override SqlBuilder Builder() => new SqlBuilder(_database.DatabaseType)

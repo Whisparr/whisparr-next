@@ -49,6 +49,14 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
             Mocker.GetMock<IMovieRepository>()
                 .Setup(s => s.GetByStudioForeignId(StudioForeignId))
                 .Returns(() => _scenes.ToList());
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(s => s.GetStudioTitles(StudioForeignId))
+                .Returns(() => _scenes.Select(m => new MovieTitleMatch { Id = m.Id, Title = m.Title, ForeignId = m.ForeignId }).ToList());
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(s => s.GetExisting(It.IsAny<List<int>>()))
+                .Returns<List<int>>(ids => _scenes.Where(m => ids.Contains(m.Id)).ToList());
         }
 
         private static Movie CreateScene(int id, string title, string releaseDate, params (string Name, Gender Gender)[] performers)
@@ -210,6 +218,7 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
 
             Mocker.GetMock<ICreditService>()
                   .Verify(v => v.GetAllCreditsForMovieMetadata(It.IsAny<int>()), Times.Never());
+            Mocker.GetMock<IMovieRepository>().Verify(v => v.GetByStudioForeignId(It.IsAny<string>()), Times.Never());
         }
 
         [Test]
@@ -222,6 +231,16 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
             // Scenes 1 and 7 are both titled "Shower Sex"
             Mocker.GetMock<ICreditService>()
                   .Verify(v => v.GetAllCreditsForMovieMetadata(It.Is<int>(id => id != 1 && id != 7)), Times.Never());
+        }
+
+        [Test]
+        public void should_only_load_scenes_named_in_the_release_in_a_search()
+        {
+            FindScene("Helix Studios - Shower Sex - Joey Mills & Landon Vega [720p].mp4", Source.Search);
+
+            Mocker.GetMock<IMovieRepository>().Verify(v => v.GetByStudioForeignId(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMovieRepository>()
+                  .Verify(v => v.GetExisting(It.Is<List<int>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { 1, 7 }))), Times.Once());
         }
 
         [Test]

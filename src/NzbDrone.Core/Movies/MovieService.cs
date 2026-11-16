@@ -1310,23 +1310,33 @@ namespace NzbDrone.Core.Movies
             }
         }
 
-        private static bool IsDatelessTitleMatch(Movie movie, string parsedMovieTitle, string foreignId)
+        private List<Movie> FindDatelessCandidates(string studioForeignId, string parsedMovieTitle, string foreignId, bool search)
         {
-            if (foreignId.IsNotNullOrWhiteSpace() && foreignId == movie.ForeignId)
+            var ids = _movieRepository.GetStudioTitles(studioForeignId)
+                                      .Where(m => search ? ContainsDatelessTitle(m, parsedMovieTitle, foreignId) : IsDatelessTitleMatch(m, parsedMovieTitle, foreignId))
+                                      .Select(m => m.Id)
+                                      .ToList();
+
+            return _movieRepository.GetExisting(ids);
+        }
+
+        private static bool IsDatelessTitleMatch(MovieTitleMatch scene, string parsedMovieTitle, string foreignId)
+        {
+            if (foreignId.IsNotNullOrWhiteSpace() && foreignId == scene.ForeignId)
             {
                 return true;
             }
 
-            var cleanTitle = Parser.Parser.NormalizeEpisodeTitle(movie.Title);
+            var cleanTitle = Parser.Parser.NormalizeEpisodeTitle(scene.Title);
 
             return cleanTitle.IsNotNullOrWhiteSpace() &&
                    (parsedMovieTitle.Equals(cleanTitle) || Parser.Parser.StripSpaces(parsedMovieTitle).Equals(Parser.Parser.StripSpaces(cleanTitle)));
         }
 
-        private static bool ContainsDatelessTitle(Movie movie, string parsedMovieTitle, string foreignId)
+        private static bool ContainsDatelessTitle(MovieTitleMatch scene, string parsedMovieTitle, string foreignId)
         {
-            return IsDatelessTitleMatch(movie, parsedMovieTitle, foreignId) ||
-                   ContainsWords(parsedMovieTitle, Parser.Parser.NormalizeEpisodeTitle(movie.Title));
+            return IsDatelessTitleMatch(scene, parsedMovieTitle, foreignId) ||
+                   ContainsWords(parsedMovieTitle, Parser.Parser.NormalizeEpisodeTitle(scene.Title));
         }
 
         // Whole words only, so "Alex" isn't found in "Alexander"
@@ -1486,13 +1496,18 @@ namespace NzbDrone.Core.Movies
             }
             else
             {
-                // Requires a higher level of matching if we had to fallback to studio only
-                movies = _movieRepository.GetByStudioForeignId(studioForeignId);
-
                 // Episode releases (Studio.E1234.Title) are verified against the scene code.
                 // Releases with neither date nor episode ("Studio - Title - Performers") are verified by match confidence below.
                 verifyEpisode = episode.IsNotNullOrWhiteSpace();
                 datelessRelease = !verifyEpisode;
+
+                // Requires a higher level of matching if we had to fallback to studio only.
+                // Without a date the whole studio catalogue is searched. Outside a search only an exact title or StashId is trusted, so only
+                // those scenes are compared, without loading any credits. An automatic search compares the scenes whose title is in the
+                // release name as whole words, the only ones a confident match can come from. Titles are compared before loading any scene.
+                movies = datelessRelease && !interactiveSearch
+                    ? FindDatelessCandidates(studioForeignId, Parser.Parser.NormalizeEpisodeTitle(releaseTokens), foreignId, search)
+                    : _movieRepository.GetByStudioForeignId(studioForeignId);
             }
 
             if (movies == null || !movies.Any())
@@ -1503,14 +1518,6 @@ namespace NzbDrone.Core.Movies
             // Movies with more than one movieFile is in the list, so filter to only one
             movies = movies.DistinctBy(movie => movie.Id).ToList();
             var parsedMovieTitle = Parser.Parser.NormalizeEpisodeTitle(releaseTokens);
-
-            // Without a date the whole studio catalogue is searched. Outside a search only an exact title or StashId is trusted, so only
-            // those scenes are compared, without loading any credits. An automatic search compares the scenes whose title is in the
-            // release name as whole words, the only ones a confident match can come from.
-            if (datelessRelease && !interactiveSearch)
-            {
-                movies = movies.Where(m => search ? ContainsDatelessTitle(m, parsedMovieTitle, foreignId) : IsDatelessTitleMatch(m, parsedMovieTitle, foreignId)).ToList();
-            }
 
             if (parsedMovieTitle.IsNotNullOrWhiteSpace() || foreignId.IsNotNullOrWhiteSpace())
             {
