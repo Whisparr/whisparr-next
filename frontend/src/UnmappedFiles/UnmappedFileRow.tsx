@@ -66,9 +66,17 @@ function UnmappedFileRow({
                 <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
               ) : null}
 
-              <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
+              {file.match.codeMatch ? (
+                <Label kind={kinds.SUCCESS}>{translate('CodeMatch')}</Label>
+              ) : null}
 
-              <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
+              {file.match.sameDate ? (
+                <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
+              ) : null}
+
+              {file.match.sameStudio ? (
+                <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
+              ) : null}
             </div>
           </div>
         ) : null}

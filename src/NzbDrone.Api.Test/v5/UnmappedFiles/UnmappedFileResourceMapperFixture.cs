@@ -66,6 +66,20 @@ namespace NzbDrone.Api.Test.v5.UnmappedFiles
         }
 
         [Test]
+        public void should_map_a_code_match_without_studio_or_date()
+        {
+            var file = File(false, false);
+            file.TopMatch.CodeMatch = true;
+
+            var match = file.ToResource(true).Match;
+
+            match.Should().NotBeNull();
+            match.CodeMatch.Should().BeTrue();
+            match.SameDate.Should().BeFalse();
+            match.SameStudio.Should().BeFalse();
+        }
+
+        [Test]
         public void should_map_the_suggestion_code()
         {
             var movie = new Movie();
@@ -73,9 +87,10 @@ namespace NzbDrone.Api.Test.v5.UnmappedFiles
             movie.MovieMetadata.Value.ItemType = ItemType.Jav;
             movie.MovieMetadata.Value.Code = "IPX-100";
 
-            var resource = new UnmappedFileSuggestion { Movie = movie }.ToResource(null);
+            var resource = new UnmappedFileSuggestion { Movie = movie, CodeMatch = true }.ToResource(null);
 
             resource.Code.Should().Be("IPX-100");
+            resource.CodeMatch.Should().BeTrue();
             resource.ItemType.Should().Be(ItemType.Jav);
         }
     }

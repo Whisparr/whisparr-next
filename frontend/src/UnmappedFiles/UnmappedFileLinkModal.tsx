@@ -82,6 +82,10 @@ function Result({ result, isLinking, onLinkPress }: ResultProps) {
             <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
           ) : null}
 
+          {result.codeMatch ? (
+            <Label kind={kinds.SUCCESS}>{translate('CodeMatch')}</Label>
+          ) : null}
+
           {result.sameDate ? (
             <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
           ) : null}

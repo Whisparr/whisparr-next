@@ -18,6 +18,9 @@ export interface UnmappedFileMatch {
   studioTitle?: string;
   releaseDate?: string;
   hashMatch: boolean;
+  codeMatch: boolean;
+  sameDate: boolean;
+  sameStudio: boolean;
 }
 
 export interface UnmappedFile {
@@ -40,6 +43,7 @@ export interface UnmappedFileSuggestion {
   code?: string;
   hasFile: boolean;
   hashMatch: boolean;
+  codeMatch: boolean;
   sameDate: boolean;
   sameStudio: boolean;
   titleSimilarity: number;

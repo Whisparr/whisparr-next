@@ -13,10 +13,13 @@ namespace NzbDrone.Core.RootFolders
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
 
-        // The only matches worth showing in the table: the studio and the date both agree with the file
+        // Only set when no other result carries the same code, so a code shared by two titles is never shown as a match
+        public bool CodeMatch { get; set; }
+
+        // The only matches worth showing in the table: the studio and the date both agree with the file, or the JAV code does
         public bool IsStrong()
         {
-            return SameStudio && SameDate;
+            return (SameStudio && SameDate) || CodeMatch;
         }
     }
 }

@@ -59,7 +59,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             _files[id] = file;
         }
 
-        private static UnmappedFileSuggestion Suggestion(string foreignId, string title = "Title", bool sameDate = true, bool sameStudio = true, bool hash = false)
+        private static UnmappedFileSuggestion Suggestion(string foreignId, string title = "Title", bool sameDate = true, bool sameStudio = true, bool hash = false, bool code = false)
         {
             var movie = new Movie();
 
@@ -68,7 +68,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             movie.MovieMetadata.Value.StudioTitle = "Studio";
             movie.MovieMetadata.Value.ReleaseDateUtc = new DateTime(2024, 3, 5, 0, 0, 0, DateTimeKind.Utc);
 
-            return new UnmappedFileSuggestion { Movie = movie, SameDate = sameDate, SameStudio = sameStudio, HashMatch = hash };
+            return new UnmappedFileSuggestion { Movie = movie, SameDate = sameDate, SameStudio = sameStudio, HashMatch = hash, CodeMatch = code };
         }
 
         private void GivenSuggestions(int id, params UnmappedFileSuggestion[] results)
@@ -174,6 +174,30 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Mocker.GetMock<ILocalizationService>().Verify(
                 l => l.GetLocalizedString("FindUnmappedFileMatchesComplete", It.Is<Dictionary<string, object>>(t => (int)t["checked"] == 2 && (int)t["matched"] == 1 && (int)t["failed"] == 0)),
                 Times.Once);
+        }
+
+        [Test]
+        public void should_store_a_unique_code_match_as_strong()
+        {
+            GivenFile(1);
+            GivenSuggestions(1, Suggestion("jav", sameDate: false, sameStudio: false, code: true), Suggestion("other", sameDate: false, sameStudio: false));
+
+            Subject.Execute(Command(1));
+
+            _saved.Single().TopMatch.CodeMatch.Should().BeTrue();
+            _saved.Single().TopMatch.IsStrong().Should().BeTrue();
+        }
+
+        [Test]
+        public void should_not_store_a_code_match_shared_by_two_results()
+        {
+            GivenFile(1);
+            GivenSuggestions(1, Suggestion("first", sameDate: false, sameStudio: false, code: true), Suggestion("second", sameDate: false, sameStudio: false, code: true));
+
+            Subject.Execute(Command(1));
+
+            _saved.Single().TopMatch.CodeMatch.Should().BeFalse();
+            _saved.Single().TopMatch.IsStrong().Should().BeFalse();
         }
 
         [Test]

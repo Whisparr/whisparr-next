@@ -109,9 +109,10 @@ namespace NzbDrone.Core.RootFolders
 
             try
             {
-                var top = _unmappedFileService.Suggest(file.Id, null, itemType).Results?.FirstOrDefault();
+                var results = _unmappedFileService.Suggest(file.Id, null, itemType).Results ?? new List<UnmappedFileSuggestion>();
+                var top = results.FirstOrDefault();
 
-                found = top == null ? null : ToMatch(top);
+                found = top == null ? null : ToMatch(top, results.Count(r => r.CodeMatch) == 1);
             }
             catch (ModelNotFoundException)
             {
@@ -141,7 +142,7 @@ namespace NzbDrone.Core.RootFolders
             Failed
         }
 
-        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion)
+        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion, bool uniqueCode)
         {
             return new UnmappedFileMatch
             {
@@ -151,7 +152,8 @@ namespace NzbDrone.Core.RootFolders
                 ReleaseDate = suggestion.Movie.GetReleaseDate(),
                 HashMatch = suggestion.HashMatch,
                 SameDate = suggestion.SameDate,
-                SameStudio = suggestion.SameStudio
+                SameStudio = suggestion.SameStudio,
+                CodeMatch = suggestion.CodeMatch && uniqueCode
             };
         }
     }

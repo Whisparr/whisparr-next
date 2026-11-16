@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using FluentAssertions;
 using Moq;
@@ -44,7 +45,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             movie.MovieMetadata.Value.Title = title;
             movie.MovieMetadata.Value.ItemType = ItemType.Scene;
             movie.MovieMetadata.Value.StudioTitle = studio;
-            movie.MovieMetadata.Value.ReleaseDateUtc = date == null ? null : DateTime.Parse(date + "T00:00:00Z").ToUniversalTime();
+            movie.MovieMetadata.Value.ReleaseDateUtc = date == null ? null : DateTime.Parse(date + "T00:00:00Z", CultureInfo.InvariantCulture).ToUniversalTime();
 
             return movie;
         }
@@ -191,6 +192,49 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             suggestions.Term.Should().Be(code);
             suggestions.Results.Select(r => r.Movie.ForeignId).Should().Equal("jav");
+        }
+
+        private static Movie Jav(string id, string code, string date = null)
+        {
+            var movie = Scene(id, "Unrelated Title", date);
+
+            movie.MovieMetadata.Value.ItemType = ItemType.Jav;
+            movie.MovieMetadata.Value.Code = code;
+
+            return movie;
+        }
+
+        [TestCase("ABP-123", true)]
+        [TestCase("abp123", true)]
+        [TestCase("ABP-124", false)]
+        [TestCase(null, false)]
+        public void should_flag_a_result_whose_code_matches_the_file(string resultCode, bool expected)
+        {
+            GivenJavFile(true);
+            GivenTypedSearch("ABP-123", ItemType.Jav, Jav("jav", resultCode));
+
+            Subject.Suggest(8, null, ItemType.Jav).Results.Single().CodeMatch.Should().Be(expected);
+        }
+
+        [Test]
+        public void should_rank_a_code_match_above_a_same_date_result()
+        {
+            _file.Path = "/media/Studio/ABP-123 Studio - 2024-03-05 - The Right Title.mp4";
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+            GivenTypedSearch("ABP-123", ItemType.Jav, Jav("other", "ABP-999", "2024-03-05"), Jav("jav", "ABP-123"));
+
+            var results = Subject.Suggest(7, null, ItemType.Jav).Results;
+
+            results.Select(r => r.Movie.ForeignId).Should().Equal("jav", "other");
+        }
+
+        [Test]
+        public void should_not_flag_a_code_match_on_a_file_without_a_code()
+        {
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+            GivenSearch("The Right Title", Jav("jav", "ABP-123"));
+
+            Subject.Suggest(7, null, ItemType.Scene).Results.Single().CodeMatch.Should().BeFalse();
         }
 
         [Test]

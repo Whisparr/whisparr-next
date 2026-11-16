@@ -25,6 +25,9 @@ namespace NzbDrone.Core.RootFolders
     {
         public Movie Movie { get; set; }
         public bool HashMatch { get; set; }
+
+        // The result's JAV code is the one read from the file name
+        public bool CodeMatch { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
         public int TitleSimilarity { get; set; }
@@ -147,8 +150,9 @@ namespace NzbDrone.Core.RootFolders
                 Term = searchTerm,
                 Results = movies
                     .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
-                    .Select(m => Score(m, parsed, fileTitle, hashIds))
+                    .Select(m => Score(m, parsed, fileTitle, hashIds, hasJavCode ? javCode : null))
                     .OrderByDescending(s => s.HashMatch)
+                    .ThenByDescending(s => s.CodeMatch)
                     .ThenByDescending(s => javIds.Contains(s.Movie.ForeignId))
                     .ThenByDescending(s => s.SameDate)
                     .ThenByDescending(s => s.TitleSimilarity)
@@ -226,7 +230,7 @@ namespace NzbDrone.Core.RootFolders
             return _searchProxy.SearchForNewEntity(term, itemType).OfType<Movie>().ToList();
         }
 
-        private static UnmappedFileSuggestion Score(Movie movie, ParsedMovieInfo parsed, string fileTitle, HashSet<string> hashIds)
+        private static UnmappedFileSuggestion Score(Movie movie, ParsedMovieInfo parsed, string fileTitle, HashSet<string> hashIds, string fileCode)
         {
             var releaseDate = movie.GetReleaseDate()?.ToString("yyyy-MM-dd");
             var studio = movie.MovieMetadata.Value.StudioTitle;
@@ -235,6 +239,7 @@ namespace NzbDrone.Core.RootFolders
             {
                 Movie = movie,
                 HashMatch = hashIds.Contains(movie.ForeignId),
+                CodeMatch = fileCode != null && JavCode.TryNormalize(movie.MovieMetadata.Value.Code, out var code) && code == fileCode,
                 SameDate = parsed?.ReleaseDate != null && parsed.ReleaseDate == releaseDate,
                 SameStudio = parsed?.StudioTitle != null && studio != null && parsed.StudioTitle.CleanMovieTitle() == studio.CleanMovieTitle(),
                 TitleSimilarity = GetTitleSimilarity(fileTitle, movie.Title)
