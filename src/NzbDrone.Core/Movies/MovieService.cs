@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using DryIoc.ImTools;
@@ -1457,6 +1458,20 @@ namespace NzbDrone.Core.Movies
                 // Requires a higher level of matching if we had to fallback to studio only
                 if (movies == null || !movies.Any())
                 {
+                    // MatchMovies only keeps a match released on the parsed date, so a studio without one can't match.
+                    // Checking first saves loading the whole catalogue, and credits for every scene, on each release of a new scene.
+                    if (!DateTime.TryParseExact(releaseDate, Movie.RELEASE_DATE_FORMAT, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+                    {
+                        _logger.Debug("{0}: Release date {1} isn't a full date, skipping title matching.", methodName, releaseDate);
+                        return null;
+                    }
+
+                    if (!_movieRepository.StudioHasSceneReleasedOn(studioForeignId, day))
+                    {
+                        _logger.Debug("{0}: No scene of studio {1} was released on {2}, skipping title matching.", methodName, studioForeignId, releaseDate);
+                        return null;
+                    }
+
                     movies = _movieRepository.GetByStudioForeignId(studioForeignId);
                     verifyDate = true;
                 }
