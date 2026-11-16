@@ -5,6 +5,7 @@ using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Extras;
 using NzbDrone.Core.History;
@@ -13,6 +14,7 @@ using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
 
@@ -34,6 +36,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         private readonly IHistoryService _historyService;
         private readonly IEventAggregator _eventAggregator;
         private readonly IManageCommandQueue _commandQueueManager;
+        private readonly IMovieService _movieService;
         private readonly Logger _logger;
 
         public ImportApprovedMovie(IUpgradeMediaFiles movieFileUpgrader,
@@ -45,6 +48,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                                    IHistoryService historyService,
                                    IEventAggregator eventAggregator,
                                    IManageCommandQueue commandQueueManager,
+                                   IMovieService movieService,
                                    Logger logger)
         {
             _movieFileUpgrader = movieFileUpgrader;
@@ -56,7 +60,21 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             _historyService = historyService;
             _eventAggregator = eventAggregator;
             _commandQueueManager = commandQueueManager;
+            _movieService = movieService;
             _logger = logger;
+        }
+
+        // Only for a log line, so a file whose movie is gone must not fail the import
+        private string DescribeMovie(int movieId)
+        {
+            try
+            {
+                return _movieService.GetMovie(movieId).ToString();
+            }
+            catch (ModelNotFoundException)
+            {
+                return $"movie {movieId}";
+            }
         }
 
         public List<ImportResult> Import(List<ImportDecision> decisions, bool newDownload, DownloadClientItem downloadClientItem = null, ImportMode importMode = ImportMode.Auto)
@@ -216,7 +234,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     }
                     else
                     {
-                        _logger.Info("Not rescanning {0}: {1} is already the file of another movie (id {2}). Relink or remove that file to import this download", localMovie.Movie, e.TargetPath, owner.MovieId);
+                        _logger.Info("Not rescanning {0}: {1} is already the file of {2}. Relink or remove that file to import this download", localMovie.Movie, e.TargetPath, DescribeMovie(owner.MovieId));
                     }
                 }
                 catch (RecycleBinException e)
