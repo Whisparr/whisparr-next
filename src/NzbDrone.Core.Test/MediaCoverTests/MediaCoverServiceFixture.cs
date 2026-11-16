@@ -55,6 +55,24 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             (Subject as IHandle<ApplicationShutdownRequested>)?.Handle(new ApplicationShutdownRequested());
         }
 
+        [TestCase("https://cdn.theporndb.net/scene/8e/52/e6/abc/background/c/bg-molly-i-love-it-large.webp", "https://cdn.theporndb.net/scene/8e/52/e6/abc/background/bg-molly-i-love-it.webp")]
+        [TestCase("https://cdn.theporndb.net/scene/1/background/c/bg-x-medium.JPG", "https://cdn.theporndb.net/scene/1/background/bg-x.JPG")]
+        public void should_map_a_resized_image_url_to_the_original(string url, string original)
+        {
+            MediaCoverService.TryGetOriginalImageUrl(url, out var originalUrl).Should().BeTrue();
+            originalUrl.Should().Be(original);
+        }
+
+        [TestCase("https://cdn.theporndb.net/scene/1/background/bg-x.webp")]
+        [TestCase("https://cdn.theporndb.net/scene/1/background/c/bg-x-thumb.webp")]
+        [TestCase("https://image.tmdb.org/t/p/original/c/abc-large.jpg")]
+        [TestCase(null)]
+        public void should_not_map_an_image_url_that_is_not_a_resized_copy(string url)
+        {
+            MediaCoverService.TryGetOriginalImageUrl(url, out var originalUrl).Should().BeFalse();
+            originalUrl.Should().BeNull();
+        }
+
         [Test]
         public void should_convert_cover_urls_to_local()
         {
@@ -1359,6 +1377,34 @@ namespace NzbDrone.Core.Test.MediaCoverTests
 
             Mocker.GetMock<ICoverExistsSpecification>()
                   .Verify(v => v.RecordSource(RemoteUrl, path), Times.Once());
+        }
+
+        [Test]
+        public void should_download_the_original_tpdb_image_when_the_resized_copy_is_missing()
+        {
+            const string resizedUrl = "https://cdn.theporndb.net/scene/1/background/c/bg-x-large.webp";
+            const string originalUrl = "https://cdn.theporndb.net/scene/1/background/bg-x.webp";
+
+            var movie = GivenMovie(7, resizedUrl);
+            var path = Subject.GetMovieCoverPath(movie.Id, MediaCoverTypes.Poster);
+
+            Mocker.GetMock<ICoverExistsSpecification>()
+                  .Setup(v => v.AlreadyExists(resizedUrl, path))
+                  .Returns(false);
+
+            var request = new HttpRequest(resizedUrl);
+
+            Mocker.GetMock<IHttpClient>()
+                  .Setup(v => v.DownloadFile(resizedUrl, It.IsAny<string>()))
+                  .Throws(new HttpException(new HttpResponse(request, new HttpHeader(), Array.Empty<byte>(), HttpStatusCode.NotFound)));
+
+            Subject.HandleAsync(new MovieUpdatedEvent(movie));
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(originalUrl, path), Times.Once());
+
+            Mocker.GetMock<ICoverExistsSpecification>()
+                  .Verify(v => v.RecordSource(resizedUrl, path), Times.Once());
         }
 
         [Test]

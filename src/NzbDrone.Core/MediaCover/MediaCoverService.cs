@@ -4,8 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading;
 using NLog;
+using NzbDrone.Common;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
@@ -53,6 +55,10 @@ namespace NzbDrone.Core.MediaCover
         // hand out points at a file that is not on disk yet. Only newly added items are checked;
         // after this window the cover is assumed present rather than paying a stat per request.
         private static readonly TimeSpan CoverExistsCheckWindow = TimeSpan.FromDays(1);
+
+        private static readonly Regex ResizedImageUrlRegex = new Regex(@"^(?<dir>https?://cdn\.theporndb\.net/.+/)c/(?<name>[^/]+)-(?:large|medium|small)(?<ext>\.[a-z0-9]+)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled,
+            RegexDefaults.Timeout);
 
         // Resizing is CPU bound, so limit the number of concurrent resizing tasks
         private static SemaphoreSlim _semaphore = new SemaphoreSlim((int)Math.Ceiling(Environment.ProcessorCount / 2.0));
@@ -778,8 +784,29 @@ namespace NzbDrone.Core.MediaCover
             var fileName = GetMovieCoverPath(movie.Id, cover.CoverType);
 
             _logger.Trace("Downloading {0} for {1} {2}", cover.CoverType, movie.ToString(), cover.RemoteUrl);
-            _httpClient.DownloadFile(cover.RemoteUrl, fileName);
+
+            try
+            {
+                _httpClient.DownloadFile(cover.RemoteUrl, fileName);
+            }
+            catch (HttpException e) when (e.Response?.StatusCode == HttpStatusCode.NotFound && TryGetOriginalImageUrl(cover.RemoteUrl, out var originalUrl))
+            {
+                _logger.Debug("{0} for {1} not found at {2}, downloading the original {3}", cover.CoverType, movie, cover.RemoteUrl, originalUrl);
+                _httpClient.DownloadFile(originalUrl, fileName);
+            }
+
+            // Recorded as the remote URL, so the next refresh sees this cover as current
             _coverExistsSpecification.RecordSource(cover.RemoteUrl, fileName);
+        }
+
+        // TPDB lists resized copies (<dir>/c/<name>-large<ext>) it never generated for some scenes; the original <dir>/<name><ext> is there
+        internal static bool TryGetOriginalImageUrl(string url, out string originalUrl)
+        {
+            var match = ResizedImageUrlRegex.Match(url ?? string.Empty);
+
+            originalUrl = match.Success ? match.Groups["dir"].Value + match.Groups["name"].Value + match.Groups["ext"].Value : null;
+
+            return match.Success;
         }
 
         private void DownloadCover(Performer performer, MediaCover cover)
