@@ -12,15 +12,21 @@ const PATH = UNMAPPED_FILES_PATH;
 export type UnmappedItemType = 'scene' | 'movie' | 'jav';
 
 // Present only when the stored top suggestion matches on both studio and date
-export interface UnmappedFileMatch {
+// Why a result matched the file; both the stored match and the modal's results carry these
+export interface UnmappedFileMatchFlags {
+  hashMatch: boolean;
+  codeMatch: boolean;
+  sameTitle: boolean;
+  sameYear: boolean;
+  sameDate: boolean;
+  sameStudio: boolean;
+}
+
+export interface UnmappedFileMatch extends UnmappedFileMatchFlags {
   foreignId: string;
   title: string;
   studioTitle?: string;
   releaseDate?: string;
-  hashMatch: boolean;
-  codeMatch: boolean;
-  sameDate: boolean;
-  sameStudio: boolean;
 }
 
 export interface UnmappedFile {
@@ -33,7 +39,7 @@ export interface UnmappedFile {
   match?: UnmappedFileMatch;
 }
 
-export interface UnmappedFileSuggestion {
+export interface UnmappedFileSuggestion extends UnmappedFileMatchFlags {
   foreignId: string;
   title: string;
   studioTitle?: string;
@@ -42,10 +48,6 @@ export interface UnmappedFileSuggestion {
   isExisting: boolean;
   code?: string;
   hasFile: boolean;
-  hashMatch: boolean;
-  codeMatch: boolean;
-  sameDate: boolean;
-  sameStudio: boolean;
   titleSimilarity: number;
 }
 

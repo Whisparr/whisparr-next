@@ -80,6 +80,32 @@ namespace NzbDrone.Api.Test.v5.UnmappedFiles
         }
 
         [Test]
+        public void should_map_a_title_and_year_match()
+        {
+            var file = File(false, false);
+            file.TopMatch.SameTitle = true;
+            file.TopMatch.SameYear = true;
+
+            var match = file.ToResource(true).Match;
+
+            match.Should().NotBeNull();
+            match.SameTitle.Should().BeTrue();
+            match.SameYear.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_map_the_suggestion_title_and_year_flags()
+        {
+            var movie = new Movie();
+            movie.MovieMetadata.Value.ForeignId = "movie";
+
+            var resource = new UnmappedFileSuggestion { Movie = movie, SameTitle = true, SameYear = true }.ToResource(null);
+
+            resource.SameTitle.Should().BeTrue();
+            resource.SameYear.Should().BeTrue();
+        }
+
+        [Test]
         public void should_map_the_suggestion_code()
         {
             var movie = new Movie();

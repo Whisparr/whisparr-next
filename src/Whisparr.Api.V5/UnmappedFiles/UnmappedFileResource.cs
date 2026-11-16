@@ -14,7 +14,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public bool Exists { get; set; }
         public bool Dismissed { get; set; }
 
-        // Only set when the stored top suggestion matches on both studio and date, or on a JAV code no other result shares
+        // Only set when the stored top suggestion matches on studio and date, on a JAV code no other result shares,
+        // or on title and year
         public UnmappedFileMatchResource Match { get; set; }
     }
 
@@ -26,6 +27,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public DateTime? ReleaseDate { get; set; }
         public bool HashMatch { get; set; }
         public bool CodeMatch { get; set; }
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
     }
@@ -44,6 +47,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public bool HasFile { get; set; }
         public bool HashMatch { get; set; }
         public bool CodeMatch { get; set; }
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
         public int TitleSimilarity { get; set; }
@@ -94,6 +99,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
                         ReleaseDate = match.ReleaseDate,
                         HashMatch = match.HashMatch,
                         CodeMatch = match.CodeMatch,
+                        SameTitle = match.SameTitle,
+                        SameYear = match.SameYear,
                         SameDate = match.SameDate,
                         SameStudio = match.SameStudio
                     }
@@ -114,6 +121,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
                 HasFile = existing?.HasFile ?? false,
                 HashMatch = model.HashMatch,
                 CodeMatch = model.CodeMatch,
+                SameTitle = model.SameTitle,
+                SameYear = model.SameYear,
                 SameDate = model.SameDate,
                 SameStudio = model.SameStudio,
                 TitleSimilarity = model.TitleSimilarity

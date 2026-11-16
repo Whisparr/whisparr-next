@@ -21,6 +21,7 @@ import { useQualityProfiles } from 'Settings/Profiles/Quality/useQualityProfiles
 import { InputChanged } from 'typings/inputs';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
+import UnmappedFileMatchLabels from './UnmappedFileMatchLabels';
 import {
   UnmappedFile,
   UnmappedFileSuggestion,
@@ -78,21 +79,7 @@ function Result({ result, isLinking, onLinkPress }: ResultProps) {
         </div>
 
         <div className={styles.labels}>
-          {result.hashMatch ? (
-            <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
-          ) : null}
-
-          {result.codeMatch ? (
-            <Label kind={kinds.SUCCESS}>{translate('CodeMatch')}</Label>
-          ) : null}
-
-          {result.sameDate ? (
-            <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
-          ) : null}
-
-          {result.sameStudio ? (
-            <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
-          ) : null}
+          <UnmappedFileMatchLabels match={result} />
 
           <Label>
             {translate('TitleSimilarity', { percent: result.titleSimilarity })}

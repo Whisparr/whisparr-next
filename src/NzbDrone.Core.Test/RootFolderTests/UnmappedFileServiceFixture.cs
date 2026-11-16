@@ -12,6 +12,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
@@ -235,6 +236,68 @@ namespace NzbDrone.Core.Test.RootFolderTests
             GivenSearch("The Right Title", Jav("jav", "ABP-123"));
 
             Subject.Suggest(7, null, ItemType.Scene).Results.Single().CodeMatch.Should().BeFalse();
+        }
+
+        private static Movie Feature(string id, string title, int year, params string[] alternativeTitles)
+        {
+            var movie = Scene(id, title);
+
+            movie.MovieMetadata.Value.ItemType = ItemType.Movie;
+            movie.MovieMetadata.Value.Year = year;
+            movie.MovieMetadata.Value.AlternativeTitles = alternativeTitles.Select(t => new AlternativeTitle(t)).ToList();
+
+            return movie;
+        }
+
+        [Test]
+        public void should_flag_and_rank_a_movie_by_title_and_year()
+        {
+            GivenFile(9, "The.Movie.Title.2019.1080p.BluRay.mkv");
+            GivenSearch("The Movie Title",
+                Feature("other-title", "Another Movie", 2019),
+                Feature("other-year", "The Movie Title", 2018),
+                Feature("exact", "The Movie Title!", 2019));
+
+            var results = Subject.Suggest(9, null, ItemType.Movie).Results;
+
+            results.Select(r => r.Movie.ForeignId).Should().Equal("exact", "other-year", "other-title");
+            results[0].SameTitle.Should().BeTrue();
+            results[0].SameYear.Should().BeTrue();
+            results[1].SameTitle.Should().BeTrue();
+            results[1].SameYear.Should().BeFalse();
+            results[2].SameTitle.Should().BeFalse();
+            results[2].SameYear.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_match_the_title_on_an_alternative_title()
+        {
+            GivenFile(9, "The.Movie.Title.2019.1080p.BluRay.mkv");
+            GivenSearch("The Movie Title", Feature("alt", "Original Name", 2019, "The Movie Title"));
+
+            Subject.Suggest(9, null, ItemType.Movie).Results.Single().SameTitle.Should().BeTrue();
+        }
+
+        [TestCase("Pirates.II.Stagnettis.Revenge.2008.720p.mkv", "Pirates II Stagnettis Revenge", "Pirates 2: Stagnetti's Revenge")]
+        [TestCase("Pirates.2.Stagnettis.Revenge.2008.720p.mkv", "Pirates 2 Stagnettis Revenge", "Pirates II: Stagnetti's Revenge")]
+        public void should_match_the_title_across_roman_and_arabic_numerals(string name, string term, string title)
+        {
+            GivenFile(9, name);
+            GivenSearch(term, Feature("movie", title, 2008));
+
+            var result = Subject.Suggest(9, null, ItemType.Movie).Results.Single();
+
+            result.SameTitle.Should().BeTrue();
+            result.SameYear.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_not_flag_a_year_the_file_name_does_not_have()
+        {
+            GivenFile(9, "The Movie Title.mkv");
+            GivenSearch("The Movie Title", Feature("movie", "The Movie Title", 2019));
+
+            Subject.Suggest(9, null, ItemType.Movie).Results.Single().SameYear.Should().BeFalse();
         }
 
         [Test]

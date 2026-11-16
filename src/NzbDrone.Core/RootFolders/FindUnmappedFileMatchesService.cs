@@ -153,7 +153,9 @@ namespace NzbDrone.Core.RootFolders
                 HashMatch = suggestion.HashMatch,
                 SameDate = suggestion.SameDate,
                 SameStudio = suggestion.SameStudio,
-                CodeMatch = suggestion.CodeMatch && uniqueCode
+                CodeMatch = suggestion.CodeMatch && uniqueCode,
+                SameTitle = suggestion.SameTitle,
+                SameYear = suggestion.SameYear
             };
         }
     }

@@ -188,6 +188,25 @@ namespace NzbDrone.Core.Test.RootFolderTests
             _saved.Single().TopMatch.IsStrong().Should().BeTrue();
         }
 
+        [TestCase(true, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        public void should_store_a_title_and_year_match_as_strong(bool sameTitle, bool sameYear, bool strong)
+        {
+            GivenFile(1);
+            var suggestion = Suggestion("movie", sameDate: false, sameStudio: false);
+            suggestion.SameTitle = sameTitle;
+            suggestion.SameYear = sameYear;
+            GivenSuggestions(1, suggestion);
+
+            Subject.Execute(Command(1));
+
+            var match = _saved.Single().TopMatch;
+            match.SameTitle.Should().Be(sameTitle);
+            match.SameYear.Should().Be(sameYear);
+            match.IsStrong().Should().Be(strong);
+        }
+
         [Test]
         public void should_not_store_a_code_match_shared_by_two_results()
         {

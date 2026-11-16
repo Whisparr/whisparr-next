@@ -8,6 +8,7 @@ import { icons, kinds } from 'Helpers/Props';
 import { SelectStateInputProps } from 'typings/props';
 import translate from 'Utilities/String/translate';
 import UnmappedFileLinkModal from './UnmappedFileLinkModal';
+import UnmappedFileMatchLabels from './UnmappedFileMatchLabels';
 import { UnmappedFile, UnmappedItemType } from './useUnmappedFiles';
 import styles from './UnmappedFileRow.module.css';
 
@@ -62,21 +63,7 @@ function UnmappedFileRow({
             <div>{file.match.title}</div>
 
             <div className={styles.labels}>
-              {file.match.hashMatch ? (
-                <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
-              ) : null}
-
-              {file.match.codeMatch ? (
-                <Label kind={kinds.SUCCESS}>{translate('CodeMatch')}</Label>
-              ) : null}
-
-              {file.match.sameDate ? (
-                <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
-              ) : null}
-
-              {file.match.sameStudio ? (
-                <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
-              ) : null}
+              <UnmappedFileMatchLabels match={file.match} />
             </div>
           </div>
         ) : null}
