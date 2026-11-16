@@ -56,7 +56,7 @@ namespace NzbDrone.Core.MediaCover
         // after this window the cover is assumed present rather than paying a stat per request.
         private static readonly TimeSpan CoverExistsCheckWindow = TimeSpan.FromDays(1);
 
-        private static readonly Regex ResizedImageUrlRegex = new Regex(@"^(?<dir>https?://.+/)c/(?<name>[^/]+)-(?:large|medium|small)(?<ext>\.[a-z0-9]+)$",
+        private static readonly Regex ResizedImageUrlRegex = new Regex(@"^(?<dir>https?://cdn\.theporndb\.net/.+/)c/(?<name>[^/]+)-(?:large|medium|small)(?<ext>\.[a-z0-9]+)$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled,
             RegexDefaults.Timeout);
 
