@@ -13,6 +13,7 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
     {
         private Mock<IMovieRepository> _movieRepositoryMock;
         private Mock<IConfigService> _configServiceMock;
+        private Mock<ICreditService> _creditServiceMock;
         private MovieService _movieService;
 
         [SetUp]
@@ -20,11 +21,12 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
         {
             _movieRepositoryMock = new Mock<IMovieRepository>();
             _configServiceMock = new Mock<IConfigService>();
+            _creditServiceMock = new Mock<ICreditService>();
 
             // Correct constructor order: IMovieRepository, IStudioService, IEventAggregator, IConfigService, IBuildMoviePaths, IAutoTaggingService, ICacheManager, Logger
             _movieService = new MovieService(
                 _movieRepositoryMock.Object,
-                null, // ICreditsService
+                _creditServiceMock.Object,
                 null, // IStudioService
                 null, // IEventAggregator
                 _configServiceMock.Object,
@@ -125,10 +127,6 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
         {
             // A new scene isn't in the library yet, so the studio fallback can't find anything released that day.
             var studioId = "studio-1";
-            var credits = new Mock<ICreditService>();
-            var logger = NzbDrone.Common.Instrumentation.NzbDroneLogger.GetLogger(typeof(MovieService));
-            var service = new MovieService(_movieRepositoryMock.Object, credits.Object, null, null, _configServiceMock.Object, null, null, null, null, logger);
-
             var other = new Movie { Id = 1 };
             other.MovieMetadata.Value.Title = "Some Other Scene";
             other.MovieMetadata.Value.StudioForeignId = studioId;
@@ -138,11 +136,25 @@ namespace NzbDrone.Core.Test.MovieTests.MovieServiceTests
             _movieRepositoryMock.Setup(r => r.StudioHasSceneReleasedOn(studioId, new DateTime(2026, 11, 14))).Returns(false);
             _movieRepositoryMock.Setup(r => r.GetByStudioForeignId(studioId)).Returns(new List<Movie> { other });
 
-            var result = service.InvokeFindByStudioAndReleaseDate(studioId, "2026-11-14", "alyssa pure red bikini", "", "");
+            var result = _movieService.InvokeFindByStudioAndReleaseDate(studioId, "2026-11-14", "alyssa pure red bikini", "", "");
 
             Assert.That(result, Is.Null);
             _movieRepositoryMock.Verify(r => r.GetByStudioForeignId(It.IsAny<string>()), Times.Never);
-            credits.Verify(c => c.GetAllCreditsForMovieMetadata(It.IsAny<int>()), Times.Never);
+            _creditServiceMock.Verify(c => c.GetAllCreditsForMovieMetadata(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void Should_not_match_titles_against_studio_catalogue_when_the_release_date_is_partial()
+        {
+            var studioId = "studio-1";
+
+            _movieRepositoryMock.Setup(r => r.FindByStudioAndDate(studioId, It.IsAny<string>())).Returns(new List<Movie>());
+
+            var result = _movieService.InvokeFindByStudioAndReleaseDate(studioId, "2026-11", "red bikini", "", "");
+
+            Assert.That(result, Is.Null);
+            _movieRepositoryMock.Verify(r => r.StudioHasSceneReleasedOn(It.IsAny<string>(), It.IsAny<DateTime>()), Times.Never);
+            _movieRepositoryMock.Verify(r => r.GetByStudioForeignId(It.IsAny<string>()), Times.Never);
         }
 
         [Test]

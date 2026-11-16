@@ -227,7 +227,7 @@ namespace NzbDrone.Core.Movies
 
             using (var conn = _database.OpenConnection())
             {
-                return conn.Query<int>(sql.RawSql, sql.Parameters).Any();
+                return conn.QueryFirstOrDefault<int?>(sql.RawSql, sql.Parameters).HasValue;
             }
         }
 
