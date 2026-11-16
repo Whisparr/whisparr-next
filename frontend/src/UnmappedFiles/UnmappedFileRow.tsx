@@ -8,11 +8,12 @@ import { icons, kinds } from 'Helpers/Props';
 import { SelectStateInputProps } from 'typings/props';
 import translate from 'Utilities/String/translate';
 import UnmappedFileLinkModal from './UnmappedFileLinkModal';
-import { UnmappedFile } from './useUnmappedFiles';
+import { UnmappedFile, UnmappedItemType } from './useUnmappedFiles';
 import styles from './UnmappedFileRow.module.css';
 
 interface UnmappedFileRowProps {
   file: UnmappedFile;
+  defaultItemType: UnmappedItemType;
   isSelected: boolean;
   onSelectedChange: (options: SelectStateInputProps) => void;
   onDismissPress: (id: number, dismissed: boolean) => void;
@@ -20,6 +21,7 @@ interface UnmappedFileRowProps {
 
 function UnmappedFileRow({
   file,
+  defaultItemType,
   isSelected,
   onSelectedChange,
   onDismissPress,
@@ -90,6 +92,7 @@ function UnmappedFileRow({
       {isLinkModalOpen ? (
         <UnmappedFileLinkModal
           file={file}
+          defaultItemType={defaultItemType}
           isOpen={isLinkModalOpen}
           onModalClose={handleLinkModalClose}
         />

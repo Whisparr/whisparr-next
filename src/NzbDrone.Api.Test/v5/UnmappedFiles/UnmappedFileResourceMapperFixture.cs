@@ -1,6 +1,7 @@
 using System;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.RootFolders;
 using Whisparr.Api.V5.UnmappedFiles;
 
@@ -62,6 +63,20 @@ namespace NzbDrone.Api.Test.v5.UnmappedFiles
             file.TopMatch = null;
 
             file.ToResource(false).Match.Should().BeNull();
+        }
+
+        [Test]
+        public void should_map_the_suggestion_code()
+        {
+            var movie = new Movie();
+            movie.MovieMetadata.Value.ForeignId = "jav";
+            movie.MovieMetadata.Value.ItemType = ItemType.Jav;
+            movie.MovieMetadata.Value.Code = "IPX-100";
+
+            var resource = new UnmappedFileSuggestion { Movie = movie }.ToResource(null);
+
+            resource.Code.Should().Be("IPX-100");
+            resource.ItemType.Should().Be(ItemType.Jav);
         }
     }
 }

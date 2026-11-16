@@ -16,6 +16,7 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import useDebounce from 'Helpers/Hooks/useDebounce';
 import { kinds } from 'Helpers/Props';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import { useQualityProfiles } from 'Settings/Profiles/Quality/useQualityProfiles';
 import { InputChanged } from 'typings/inputs';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
@@ -44,6 +45,16 @@ const ITEM_TYPE_OPTIONS: EnhancedSelectInputValue<UnmappedItemType>[] = [
   },
 ];
 
+const JAV_ITEM_TYPE_OPTIONS: EnhancedSelectInputValue<UnmappedItemType>[] = [
+  ...ITEM_TYPE_OPTIONS,
+  {
+    key: 'jav',
+    get value() {
+      return translate('Jav');
+    },
+  },
+];
+
 interface ResultProps {
   readonly result: UnmappedFileSuggestion;
   readonly isLinking: boolean;
@@ -61,7 +72,7 @@ function Result({ result, isLinking, onLinkPress }: ResultProps) {
         <div>{result.title}</div>
 
         <div className={styles.subtitle}>
-          {[result.studioTitle, result.releaseDate?.slice(0, 10)]
+          {[result.code, result.studioTitle, result.releaseDate?.slice(0, 10)]
             .filter(Boolean)
             .join(' · ')}
         </div>
@@ -102,17 +113,19 @@ function Result({ result, isLinking, onLinkPress }: ResultProps) {
 
 interface UnmappedFileLinkModalProps {
   readonly file: UnmappedFile;
+  readonly defaultItemType: UnmappedItemType;
   readonly isOpen: boolean;
   readonly onModalClose: () => void;
 }
 
 function UnmappedFileLinkModal({
   file,
+  defaultItemType,
   isOpen,
   onModalClose,
 }: UnmappedFileLinkModalProps) {
   const [term, setTerm] = useState<string | null>(null);
-  const [itemType, setItemType] = useState<UnmappedItemType>('scene');
+  const [itemType, setItemType] = useState<UnmappedItemType>(defaultItemType);
   const debouncedTerm = useDebounce(term ?? '', 400);
 
   // Nothing is searched until the modal opens, and the file's own title is used until something is typed
@@ -123,6 +136,7 @@ function UnmappedFileLinkModal({
     isOpen
   );
 
+  const javAvailable = useJavAvailable();
   const { qualityProfileId, monitor } = useAddMovieDefaults();
   const { data: qualityProfiles } = useQualityProfiles();
   const link = useLinkUnmappedFile();
@@ -176,7 +190,7 @@ function UnmappedFileLinkModal({
             <EnhancedSelectInput
               name="itemType"
               value={itemType}
-              values={ITEM_TYPE_OPTIONS}
+              values={javAvailable ? JAV_ITEM_TYPE_OPTIONS : ITEM_TYPE_OPTIONS}
               onChange={handleItemTypeChange}
             />
           </div>

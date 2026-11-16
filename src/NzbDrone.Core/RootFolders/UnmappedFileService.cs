@@ -50,6 +50,7 @@ namespace NzbDrone.Core.RootFolders
         private const int MaxHashLookups = 3;
 
         private static readonly Regex TrailingTagsRegex = new Regex(@"\s*(?:[\[\(]|\b(?:\d{3,4}p|4k|web[- ]?dl|web[- ]?rip|blu[- ]?ray|hdtv|xxx)\b).*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+        private static readonly Regex LeadingTagsRegex = new Regex(@"^(?:\s*(?:\[[^\]]*\]|\([^\)]*\)))+\s*", RegexOptions.Compiled, RegexDefaults.Timeout);
         private static readonly Regex SeparatorsRegex = new Regex(@"[._]+", RegexOptions.Compiled, RegexDefaults.Timeout);
 
         private readonly IImportFileRepository _importFileRepository;
@@ -96,11 +97,16 @@ namespace NzbDrone.Core.RootFolders
         {
             var file = _importFileRepository.Get(id);
             var parsed = Parse(file);
-            var searchTerm = term.IsNotNullOrWhiteSpace() ? term.Trim() : GetSearchTerm(file, parsed);
             var fileTitle = GetSearchTerm(file, parsed);
             var hashIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var movies = new List<Movie>();
             var javAvailable = _javAvailability.IsAvailable();
+            string javCode = null;
+            var hasJavCode = javAvailable && TryGetJavCode(file, parsed, out javCode);
+
+            // A JAV lookup by title rarely hits, so JAV mode searches the file's code unless something was typed
+            var defaultTerm = itemType == ItemType.Jav && hasJavCode ? javCode : fileTitle;
+            var searchTerm = term.IsNotNullOrWhiteSpace() ? term.Trim() : defaultTerm;
 
             if (itemType == ItemType.Jav && !javAvailable)
             {
@@ -109,7 +115,7 @@ namespace NzbDrone.Core.RootFolders
 
             var javIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (itemType != ItemType.Jav && javAvailable && (JavCode.TryNormalize(parsed?.Code, out var javCode) || JavCode.TryExtract(Path.GetFileName(file.Path), out javCode)))
+            if (itemType != ItemType.Jav && hasJavCode)
             {
                 try
                 {
@@ -250,14 +256,28 @@ namespace NzbDrone.Core.RootFolders
 
         internal static string GetSearchTerm(ImportFile file, ParsedMovieInfo parsed)
         {
-            var title = parsed?.ReleaseTokens ?? parsed?.PrimaryMovieTitle;
+            var term = CleanSearchTerm(parsed?.ReleaseTokens ?? parsed?.PrimaryMovieTitle);
 
+            // A parse can leave only a tag as the title, e.g. "[Tag] (2024) ..." reads as a movie titled "[Tag]"
+            return term.IsNotNullOrWhiteSpace() ? term : CleanSearchTerm(Path.GetFileNameWithoutExtension(file.Path));
+        }
+
+        private static string CleanSearchTerm(string title)
+        {
             if (title.IsNullOrWhiteSpace())
             {
-                title = Path.GetFileNameWithoutExtension(file.Path);
+                return string.Empty;
             }
 
-            return TrailingTagsRegex.Replace(SeparatorsRegex.Replace(title, " "), string.Empty).Trim(' ', '-');
+            // Leading tags go first, or the trailing-tag cut starts at the first '[' and leaves nothing
+            var untagged = LeadingTagsRegex.Replace(SeparatorsRegex.Replace(title, " "), string.Empty);
+
+            return TrailingTagsRegex.Replace(untagged, string.Empty).Trim(' ', '-');
+        }
+
+        private static bool TryGetJavCode(ImportFile file, ParsedMovieInfo parsed, out string code)
+        {
+            return JavCode.TryNormalize(parsed?.Code, out code) || JavCode.TryExtract(Path.GetFileName(file.Path), out code);
         }
 
         private static ParsedMovieInfo Parse(ImportFile file)

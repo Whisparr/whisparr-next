@@ -9,7 +9,7 @@ export const UNMAPPED_FILES_PATH = '/unmappedfile';
 
 const PATH = UNMAPPED_FILES_PATH;
 
-export type UnmappedItemType = 'scene' | 'movie';
+export type UnmappedItemType = 'scene' | 'movie' | 'jav';
 
 // Present only when the stored top suggestion matches on both studio and date
 export interface UnmappedFileMatch {
@@ -37,6 +37,7 @@ export interface UnmappedFileSuggestion {
   releaseDate?: string;
   itemType: UnmappedItemType;
   isExisting: boolean;
+  code?: string;
   hasFile: boolean;
   hashMatch: boolean;
   sameDate: boolean;

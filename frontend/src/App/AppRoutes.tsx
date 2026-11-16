@@ -112,6 +112,15 @@ function AppRoutes() {
 
       <Route path="/unmapped" element={<UnmappedFiles />} />
 
+      <Route
+        path="/jav/unmapped"
+        element={
+          <JavRoute>
+            <UnmappedFiles key="jav" itemType="jav" />
+          </JavRoute>
+        }
+      />
+
       {/*
         Calendar
       */}

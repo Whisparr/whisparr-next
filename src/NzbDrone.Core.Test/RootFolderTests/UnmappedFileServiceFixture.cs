@@ -172,6 +172,55 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.Suggest(8, "typed", ItemType.Jav).Results.Select(r => r.Movie.ForeignId).Should().Equal("jav");
         }
 
+        private void GivenFile(int id, string name)
+        {
+            Mocker.GetMock<IImportFileRepository>().Setup(r => r.Get(id)).Returns(new ImportFile { Id = id, RootFolderId = 1, Path = "/media/jav/" + name, Name = name });
+        }
+
+        [TestCase("STARS 080 uncensored leak.mp4", "STARS-080")]
+        [TestCase("[FHD] MIDV-018.mp4", "MIDV-018")]
+        [TestCase("ipx_100.mkv", "IPX-100")]
+        [TestCase("300MIUM-642.mp4", "300MIUM-642")]
+        public void explicit_jav_suggest_searches_the_file_code(string name, string code)
+        {
+            GivenFile(9, name);
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+            GivenTypedSearch(code, ItemType.Jav, Scene("jav", "Title Without The Code"));
+
+            var suggestions = Subject.Suggest(9, null, ItemType.Jav);
+
+            suggestions.Term.Should().Be(code);
+            suggestions.Results.Select(r => r.Movie.ForeignId).Should().Equal("jav");
+        }
+
+        [Test]
+        public void explicit_jav_suggest_falls_back_to_the_title_without_a_code()
+        {
+            GivenFile(9, "Some Title ABP-456.mp4");
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+
+            Subject.Suggest(9, null, ItemType.Jav).Term.Should().Be("Some Title ABP-456");
+        }
+
+        [Test]
+        public void explicit_jav_suggest_keeps_the_typed_term()
+        {
+            GivenFile(9, "ABP-123.mp4");
+            Mocker.GetMock<IJavAvailability>().Setup(a => a.IsAvailable()).Returns(true);
+
+            Subject.Suggest(9, "momo sakai", ItemType.Jav).Term.Should().Be("momo sakai");
+        }
+
+        [TestCase("[FHD] Some Scene Title.mp4", "Some Scene Title")]
+        [TestCase("[Tag] (2024) [Other] Some Scene Title [1080p].mp4", "Some Scene Title")]
+        [TestCase("[FHD] MIDV-018.mp4", "MIDV-018")]
+        public void should_drop_leading_tags_from_the_search_term(string name, string expected)
+        {
+            GivenFile(9, name);
+
+            Subject.Suggest(9, null, ItemType.Scene).Term.Should().Be(expected);
+        }
+
         [Test]
         public void explicit_jav_suggest_is_empty_when_unavailable()
         {

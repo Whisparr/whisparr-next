@@ -28,9 +28,15 @@ import {
   setUnmappedFilesSort,
   useUnmappedFilesOptions,
 } from './unmappedFilesOptionsStore';
-import useUnmappedFiles, { useDismissUnmappedFiles } from './useUnmappedFiles';
+import useUnmappedFiles, {
+  UnmappedItemType,
+  useDismissUnmappedFiles,
+} from './useUnmappedFiles';
 
-function UnmappedFiles() {
+// The file list is shared; the entry point only picks the item type the link modal starts on
+function UnmappedFiles({
+  itemType = 'scene',
+}: Readonly<{ itemType?: UnmappedItemType }>) {
   const [term, setTerm] = useState('');
   const [showDismissed, setShowDismissed] = useState(false);
   const debouncedTerm = useDebounce(term, 300);
@@ -236,6 +242,7 @@ function UnmappedFiles() {
                     <UnmappedFileRow
                       key={item.id}
                       file={item}
+                      defaultItemType={itemType}
                       isSelected={selectedState[item.id] || false}
                       onSelectedChange={handleSelectedChange}
                       onDismissPress={handleDismissPress}
