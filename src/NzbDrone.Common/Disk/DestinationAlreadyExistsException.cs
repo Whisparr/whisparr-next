@@ -5,6 +5,8 @@ namespace NzbDrone.Common.Disk
 {
     public class DestinationAlreadyExistsException : IOException
     {
+        public string TargetPath { get; init; }
+
         public DestinationAlreadyExistsException()
         {
         }

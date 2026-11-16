@@ -8,12 +8,15 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.MediaFiles.Fingerprints;
 using NzbDrone.Core.MediaFiles.MovieImport;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
@@ -156,6 +159,47 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Add(It.IsAny<MovieFile>()), Times.Never());
             Mocker.GetMock<IDiskTransferService>()
                   .Verify(v => v.TransferFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>(), true), Times.Never());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        // ownerMovieId: 0 is an untracked file, 1 the scene being imported, 99 another scene, 98 a scene since deleted
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 0, true)]
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 99, false)]
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 98, false)]
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 1, false)]
+        [TestCase(null, 99, true)]
+        public void import_collision_rescans_only_when_destination_is_untracked(string target, int ownerMovieId, bool expectRescan)
+        {
+            _approvedDecisions.First().LocalMovie.Movie.Id.Should().Be(1);
+
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
+                  .Throws(new DestinationAlreadyExistsException("exists") { TargetPath = target });
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FindByFullPath(It.IsAny<string>()))
+                  .Returns(ownerMovieId == 0 ? null : new MovieFile { Id = 7, MovieId = ownerMovieId });
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.GetMovie(99))
+                  .Returns(new Movie { Id = 99 });
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.GetMovie(98))
+                  .Throws(new ModelNotFoundException(typeof(Movie), 98));
+
+            Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
+
+            // A rescan can't link a file another scene already tracks, and the download is retried on every check.
+            Mocker.GetMock<IManageCommandQueue>()
+                  .Verify(v => v.Push(It.IsAny<RescanMovieCommand>(), It.IsAny<CommandPriority>(), It.IsAny<CommandTrigger>()),
+                          expectRescan ? Times.Once() : Times.Never());
+
+            if (target == null)
+            {
+                Mocker.GetMock<IMediaFileService>().Verify(v => v.FindByFullPath(It.IsAny<string>()), Times.Never());
+            }
 
             ExceptionVerification.ExpectedWarns(1);
         }
