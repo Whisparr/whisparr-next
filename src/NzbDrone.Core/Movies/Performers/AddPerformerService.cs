@@ -4,6 +4,7 @@ using System.Linq;
 using FluentValidation;
 using FluentValidation.Results;
 using NLog;
+using NzbDrone.Common.Cache;
 using NzbDrone.Common.EnsureThat;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Messaging.Commands;
@@ -21,19 +22,25 @@ namespace NzbDrone.Core.Movies.Performers
 
     public class AddPerformerService : IAddPerformerService
     {
+        // A missing performer is credited on many scenes; without this, every scene's refresh asks again.
+        private static readonly TimeSpan MissingPerformerLifetime = TimeSpan.FromHours(24);
+
         private readonly IPerformerService _performerService;
         private readonly IProvideMovieInfo _performerInfo;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IMetadataSourceService _metadataSourceService;
+        private readonly ICached<bool> _missingPerformers;
         private readonly Logger _logger;
 
         public AddPerformerService(IPerformerService performerService,
                                    IProvideMovieInfo performerInfo,
                                    IManageCommandQueue commandQueueManager,
                                    IMetadataSourceService metadataSourceService,
+                                   ICacheManager cacheManager,
                                    Logger logger)
         {
             _metadataSourceService = metadataSourceService;
+            _missingPerformers = cacheManager.GetCache<bool>(GetType(), "missingPerformers");
             _performerService = performerService;
             _performerInfo = performerInfo;
             _commandQueueManager = commandQueueManager;
@@ -103,6 +110,13 @@ namespace NzbDrone.Core.Movies.Performers
                         continue;
                     }
 
+                    // Already warned about when first found missing
+                    if (ignoreErrors && _missingPerformers.Find(m.ForeignId))
+                    {
+                        _logger.Debug("Performer {0} was not added: not found in the metadata source", m.ForeignId);
+                        continue;
+                    }
+
                     var performer = AddSkyhookData(m);
                     performer = SetPropertiesAndValidate(performer);
 
@@ -158,6 +172,11 @@ namespace NzbDrone.Core.Movies.Performers
         {
             var performer = new Performer();
 
+            if (_missingPerformers.Find(newPerformer.ForeignId))
+            {
+                throw PerformerNotFound(newPerformer.ForeignId);
+            }
+
             try
             {
                 performer = _performerInfo.GetPerformerInfo(newPerformer.ForeignId);
@@ -165,16 +184,22 @@ namespace NzbDrone.Core.Movies.Performers
             catch (MovieNotFoundException ex)
             {
                 _logger.Warn(ex, "Performer {0} was not found in the metadata source.", newPerformer.ForeignId);
+                _missingPerformers.Set(newPerformer.ForeignId, true, MissingPerformerLifetime);
 
-                throw new ValidationException(new List<ValidationFailure>
-                                              {
-                                                  new ValidationFailure("StashId", $"A performer with this ID was not found: {newPerformer.ForeignId}", newPerformer.ForeignId)
-                                              });
+                throw PerformerNotFound(newPerformer.ForeignId);
             }
 
             performer.ApplyChanges(newPerformer);
 
             return performer;
+        }
+
+        private static ValidationException PerformerNotFound(string foreignId)
+        {
+            return new ValidationException(new List<ValidationFailure>
+                                           {
+                                               new ValidationFailure("StashId", $"A performer with this ID was not found: {foreignId}", foreignId)
+                                           });
         }
 
         private Performer SetPropertiesAndValidate(Performer newPerformer)
