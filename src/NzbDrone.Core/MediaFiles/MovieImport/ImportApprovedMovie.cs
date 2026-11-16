@@ -210,9 +210,13 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     {
                         _commandQueueManager.Push(new RescanMovieCommand(localMovie.Movie.Id));
                     }
+                    else if (owner.MovieId == localMovie.Movie.Id)
+                    {
+                        _logger.Info("Not rescanning {0}: {1} is already its file", localMovie.Movie, e.TargetPath);
+                    }
                     else
                     {
-                        _logger.Warn("Not rescanning {0}: {1} is already the file of movie {2}", localMovie.Movie, e.TargetPath, owner.MovieId);
+                        _logger.Info("Not rescanning {0}: {1} is already the file of another movie (id {2}). Relink or remove that file to import this download", localMovie.Movie, e.TargetPath, owner.MovieId);
                     }
                 }
                 catch (RecycleBinException e)

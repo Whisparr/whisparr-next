@@ -261,7 +261,9 @@ namespace NzbDrone.Common.Test.DiskTests
         {
             WithExistingFile(_targetPath);
 
-            Assert.Throws<DestinationAlreadyExistsException>(() => Subject.TransferFile(_sourcePath, _targetPath, TransferMode.Move, false));
+            // The importer looks up the owner of TargetPath to decide whether a rescan can help
+            Assert.Throws<DestinationAlreadyExistsException>(() => Subject.TransferFile(_sourcePath, _targetPath, TransferMode.Move, false))
+                  .TargetPath.Should().Be(_targetPath);
 
             Mocker.GetMock<IDiskProvider>()
                 .Verify(v => v.DeleteFile(_targetPath), Times.Never());

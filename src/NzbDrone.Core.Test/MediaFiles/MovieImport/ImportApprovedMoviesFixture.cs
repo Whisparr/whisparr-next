@@ -162,18 +162,17 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             ExceptionVerification.ExpectedWarns(1);
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public void import_collision_rescans_only_when_destination_is_untracked(bool trackedByAnotherScene)
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", false)]
+        [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", true)]
+        [TestCase(null, false)]
+        public void import_collision_rescans_only_when_destination_is_untracked(string target, bool trackedByAnotherScene)
         {
-            const string target = "/library/Studio/Studio - 2026-08-13 - Title.mp4";
-
             Mocker.GetMock<IUpgradeMediaFiles>()
                   .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
                   .Throws(new DestinationAlreadyExistsException("exists") { TargetPath = target });
 
             Mocker.GetMock<IMediaFileService>()
-                  .Setup(s => s.FindByFullPath(target))
+                  .Setup(s => s.FindByFullPath(It.IsAny<string>()))
                   .Returns(trackedByAnotherScene ? new MovieFile { Id = 7, MovieId = 99 } : null);
 
             Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
@@ -183,7 +182,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
                   .Verify(v => v.Push(It.IsAny<RescanMovieCommand>(), It.IsAny<CommandPriority>(), It.IsAny<CommandTrigger>()),
                           trackedByAnotherScene ? Times.Never() : Times.Once());
 
-            ExceptionVerification.ExpectedWarns(trackedByAnotherScene ? 2 : 1);
+            ExceptionVerification.ExpectedWarns(1);
         }
 
         [Test]
