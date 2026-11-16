@@ -113,6 +113,11 @@ function AppRoutes() {
       <Route path="/unmapped" element={<UnmappedFiles />} />
 
       <Route
+        path="/movies/unmapped"
+        element={<UnmappedFiles key="movie" itemType="movie" />}
+      />
+
+      <Route
         path="/jav/unmapped"
         element={
           <JavRoute>

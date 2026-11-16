@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NzbDrone.Core.Messaging.Commands;
+using NzbDrone.Core.Movies;
 
 namespace NzbDrone.Core.RootFolders.Commands
 {
@@ -9,6 +10,9 @@ namespace NzbDrone.Core.RootFolders.Commands
         private string _completionMessage;
 
         public List<int> FileIds { get; set; } = new();
+
+        // Set by the page it was started from: Scenes, Movies or JAV
+        public ItemType ItemType { get; set; } = ItemType.Scene;
 
         public override bool SendUpdatesToClient => true;
         public override string CompletionMessage => _completionMessage;

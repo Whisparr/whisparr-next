@@ -92,6 +92,10 @@ let LINKS: SidebarItem[] = [
         title: () => translate('Collections'),
         to: '/collections',
       },
+      {
+        title: () => translate('UnmappedFiles'),
+        to: '/movies/unmapped',
+      },
     ],
   },
 

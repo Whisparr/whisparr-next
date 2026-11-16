@@ -226,6 +226,29 @@ namespace NzbDrone.Core.Test.RootFolderTests
             _saved.Should().ContainSingle();
         }
 
+        [TestCase(ItemType.Movie)]
+        [TestCase(ItemType.Jav)]
+        public void should_search_as_the_item_type_of_the_page_it_was_started_from(ItemType itemType)
+        {
+            GivenFile(1);
+            Mocker.GetMock<IUnmappedFileService>()
+                .Setup(s => s.Suggest(1, null, itemType))
+                .Returns(new UnmappedFileSuggestions { Term = "t", Results = new List<UnmappedFileSuggestion> { Suggestion("typed") } });
+
+            var command = Command(1);
+            command.ItemType = itemType;
+            Subject.Execute(command);
+
+            _saved.Should().ContainSingle(f => f.TopMatch.ForeignId == "typed");
+            Mocker.GetMock<IUnmappedFileService>().Verify(s => s.Suggest(1, null, ItemType.Scene), Times.Never);
+        }
+
+        [Test]
+        public void should_search_as_scenes_by_default()
+        {
+            new FindUnmappedFileMatchesCommand().ItemType.Should().Be(ItemType.Scene);
+        }
+
         [Test]
         public void should_report_progress_as_done_of_total()
         {

@@ -62,7 +62,7 @@ namespace NzbDrone.Core.RootFolders
             foreach (var id in ids)
             {
                 var outcome = files.TryGetValue(id, out var file) && !file.Dismissed && _diskProvider.FileExists(file.Path)
-                    ? FindMatch(file)
+                    ? FindMatch(file, message.ItemType)
                     : Outcome.Skipped;
 
                 if (outcome == Outcome.Checked)
@@ -103,13 +103,13 @@ namespace NzbDrone.Core.RootFolders
             }
         }
 
-        private Outcome FindMatch(ImportFile file)
+        private Outcome FindMatch(ImportFile file, ItemType itemType)
         {
             UnmappedFileMatch found;
 
             try
             {
-                var top = _unmappedFileService.Suggest(file.Id, null, ItemType.Scene).Results?.FirstOrDefault();
+                var top = _unmappedFileService.Suggest(file.Id, null, itemType).Results?.FirstOrDefault();
 
                 found = top == null ? null : ToMatch(top);
             }

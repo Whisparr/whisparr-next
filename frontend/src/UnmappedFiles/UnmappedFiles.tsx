@@ -33,7 +33,7 @@ import useUnmappedFiles, {
   useDismissUnmappedFiles,
 } from './useUnmappedFiles';
 
-// The file list is shared; the entry point only picks the item type the link modal starts on
+// The file list is shared; the entry point picks the item type that Find Matches and the link modal search as
 function UnmappedFiles({
   itemType = 'scene',
 }: Readonly<{ itemType?: UnmappedItemType }>) {
@@ -101,8 +101,9 @@ function UnmappedFiles({
     executeCommand({
       name: commandNames.FIND_UNMAPPED_FILE_MATCHES,
       fileIds: matchableIds,
+      itemType,
     });
-  }, [executeCommand, matchableIds]);
+  }, [executeCommand, itemType, matchableIds]);
 
   const handleShowDismissedPress = useCallback(() => {
     setShowDismissed((value) => !value);
