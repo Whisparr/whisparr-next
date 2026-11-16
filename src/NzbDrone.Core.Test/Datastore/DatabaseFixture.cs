@@ -1,4 +1,5 @@
 using System;
+using System.Data.SQLite;
 using System.Linq;
 using Dapper;
 using FluentAssertions;
@@ -25,6 +26,35 @@ namespace NzbDrone.Core.Test.Datastore
         public void vacuum()
         {
             Mocker.Resolve<IDatabase>().Vacuum();
+        }
+
+        [TestCase(500, true)]
+        [TestCase(5, false)]
+        public void sqlite_vacuum_should_only_run_when_there_are_enough_free_pages(int deletedRows, bool vacuumed)
+        {
+            var path = GetTempFilePath();
+
+            using (var conn = new SQLiteConnection($"Data Source={path};Pooling=False"))
+            {
+                conn.Open();
+                conn.Execute("CREATE TABLE \"Rows\" (\"Id\" INTEGER PRIMARY KEY, \"Data\" TEXT)");
+                conn.Execute("INSERT INTO \"Rows\" (\"Data\") VALUES (@Data)", Enumerable.Range(0, 1000).Select(_ => new { Data = new string('x', 4000) }));
+                conn.Execute("DELETE FROM \"Rows\" WHERE \"Id\" <= @Count", new { Count = deletedRows });
+                conn.ExecuteScalar<long>("PRAGMA freelist_count;").Should().BeGreaterThan(0);
+            }
+
+            new Database("Test", () =>
+            {
+                var conn = new SQLiteConnection($"Data Source={path};Pooling=False");
+                conn.Open();
+                return conn;
+            }).Vacuum();
+
+            using (var conn = new SQLiteConnection($"Data Source={path};Pooling=False"))
+            {
+                conn.Open();
+                (conn.ExecuteScalar<long>("PRAGMA freelist_count;") == 0).Should().Be(vacuumed);
+            }
         }
 
         [Test]

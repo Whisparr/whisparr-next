@@ -37,7 +37,7 @@ namespace NzbDrone.Core.Housekeeping
                 }
             }
 
-            // Vacuuming the log db isn't needed since that's done in a separate housekeeping task
+            // The log db isn't vacuumed here: its daily trim frees space the next day's logs reuse
             _logger.Debug("Compressing main database after housekeeping");
             _mainDb.Vacuum();
         }

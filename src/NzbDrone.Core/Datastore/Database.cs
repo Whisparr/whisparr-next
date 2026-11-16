@@ -19,6 +19,8 @@ namespace NzbDrone.Core.Datastore
 
     public class Database : IDatabase
     {
+        private const int VacuumFreePagePercent = 10;
+
         private readonly string _databaseName;
         private readonly Func<IDbConnection> _datamapperFactory;
 
@@ -71,9 +73,15 @@ namespace NzbDrone.Core.Datastore
         {
             try
             {
-                _logger.Info("Vacuuming {0} database", _databaseName);
                 using (var db = _datamapperFactory())
                 {
+                    if (db is SQLiteConnection && !HasFreePagesToReclaim(db))
+                    {
+                        _logger.Debug("Skipping vacuum of {0} database, it has little free space to reclaim", _databaseName);
+                        return;
+                    }
+
+                    _logger.Info("Vacuuming {0} database", _databaseName);
                     db.Execute("Vacuum;");
                 }
 
@@ -83,6 +91,15 @@ namespace NzbDrone.Core.Datastore
             {
                 _logger.Error(e, "An Error occurred while vacuuming database.");
             }
+        }
+
+        // VACUUM rewrites the whole file under an exclusive lock, minutes for a multi-GB library, and only gives back free pages
+        private static bool HasFreePagesToReclaim(IDbConnection db)
+        {
+            var pageCount = db.ExecuteScalar<long>("PRAGMA page_count;");
+            var freePages = db.ExecuteScalar<long>("PRAGMA freelist_count;");
+
+            return freePages * 100 >= pageCount * VacuumFreePagePercent;
         }
     }
 
