@@ -249,12 +249,26 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
             Db.Update(metadata[scene.MovieMetadataId]);
             Db.Update(metadata[other.MovieMetadataId]);
 
-            var results = Subject.GetStudioSceneTitles("helix");
+            var results = Subject.GetStudioTitles("helix");
 
             results.Should().ContainSingle();
             results[0].Id.Should().Be(scene.Id);
             results[0].Title.Should().Be("Shower Sex");
             results[0].ForeignId.Should().Be(metadata[scene.MovieMetadataId].ForeignId);
+        }
+
+        [Test]
+        public void should_get_existing_movies_and_skip_deleted_ids()
+        {
+            var profile = GivenProfile();
+            var scene = GivenTitledMovie(profile.Id, "Shower Sex", ItemType.Scene);
+
+            var results = Subject.GetExisting(new List<int> { scene.Id, scene.Id + 1000 });
+
+            results.Should().ContainSingle();
+            results[0].Id.Should().Be(scene.Id);
+            results[0].MovieMetadata.Value.Title.Should().Be("Shower Sex");
+            Subject.GetExisting(new List<int>()).Should().BeEmpty();
         }
 
         [Test]

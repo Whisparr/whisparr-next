@@ -1311,12 +1311,12 @@ namespace NzbDrone.Core.Movies
 
         private List<Movie> FindDatelessCandidates(string studioForeignId, string parsedMovieTitle, string foreignId, bool search)
         {
-            var ids = _movieRepository.GetStudioSceneTitles(studioForeignId)
+            var ids = _movieRepository.GetStudioTitles(studioForeignId)
                                       .Where(m => search ? ContainsDatelessTitle(m, parsedMovieTitle, foreignId) : IsDatelessTitleMatch(m, parsedMovieTitle, foreignId))
                                       .Select(m => m.Id)
                                       .ToList();
 
-            return _movieRepository.Get(ids).ToList();
+            return _movieRepository.GetExisting(ids);
         }
 
         private static bool IsDatelessTitleMatch(MovieTitleMatch scene, string parsedMovieTitle, string foreignId)
