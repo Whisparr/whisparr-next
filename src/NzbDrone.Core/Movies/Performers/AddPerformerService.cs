@@ -22,7 +22,7 @@ namespace NzbDrone.Core.Movies.Performers
 
     public class AddPerformerService : IAddPerformerService
     {
-        // A performer the metadata source doesn't have is credited on many scenes, and every refresh of each asked again.
+        // A missing performer is credited on many scenes; without this, every scene's refresh asks again.
         private static readonly TimeSpan MissingPerformerLifetime = TimeSpan.FromHours(24);
 
         private readonly IPerformerService _performerService;
@@ -107,6 +107,13 @@ namespace NzbDrone.Core.Movies.Performers
                     if (performersToAdd.Any(f => f.ForeignId == m.ForeignId))
                     {
                         _logger.Debug("Foreign ID {0} was not added due to validation failure: Performer already exists on list", m.ForeignId);
+                        continue;
+                    }
+
+                    // Already warned about when first found missing
+                    if (ignoreErrors && _missingPerformers.Find(m.ForeignId))
+                    {
+                        _logger.Debug("Performer {0} was not added: not found in the metadata source", m.ForeignId);
                         continue;
                     }
 

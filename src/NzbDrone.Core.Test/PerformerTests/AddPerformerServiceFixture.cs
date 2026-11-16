@@ -197,7 +197,8 @@ namespace NzbDrone.Core.Test.PerformerTests
             Mocker.GetMock<IPerformerService>()
                   .Verify(v => v.AddPerformers(It.Is<List<Performer>>(l => l.Count == 0)), Times.Exactly(2));
 
-            ExceptionVerification.ExpectedWarns(3);
+            // Only the first batch warns: not found, then the skipped credit
+            ExceptionVerification.ExpectedWarns(2);
         }
 
         private static Performer GivenNewPerformer(bool monitored)
