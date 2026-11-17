@@ -31,6 +31,9 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public bool SameYear { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
+
+        // The page a match was found from; each page shows only its own
+        public ItemType ItemType { get; set; }
     }
 
     public class UnmappedFileSuggestionResource
@@ -102,7 +105,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
                         SameTitle = match.SameTitle,
                         SameYear = match.SameYear,
                         SameDate = match.SameDate,
-                        SameStudio = match.SameStudio
+                        SameStudio = match.SameStudio,
+                        ItemType = match.ItemType ?? ItemType.Scene
                     }
             };
         }

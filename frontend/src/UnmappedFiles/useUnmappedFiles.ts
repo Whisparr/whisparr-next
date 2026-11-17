@@ -11,7 +11,6 @@ const PATH = UNMAPPED_FILES_PATH;
 
 export type UnmappedItemType = 'scene' | 'movie' | 'jav';
 
-// Present only when the stored top suggestion matches on both studio and date
 // Why a result matched the file; both the stored match and the modal's results carry these
 export interface UnmappedFileMatchFlags {
   hashMatch: boolean;
@@ -23,6 +22,8 @@ export interface UnmappedFileMatchFlags {
 }
 
 export interface UnmappedFileMatch extends UnmappedFileMatchFlags {
+  // The page's item type the match was found from; each page shows only its own
+  itemType: UnmappedItemType;
   foreignId: string;
   title: string;
   studioTitle?: string;

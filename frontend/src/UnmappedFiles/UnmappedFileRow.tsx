@@ -29,6 +29,10 @@ function UnmappedFileRow({
 }: Readonly<UnmappedFileRowProps>) {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
+  // The pages share one stored match per file, so a Movies run's match isn't shown on Scenes and vice versa
+  const match =
+    file.match?.itemType === defaultItemType ? file.match : undefined;
+
   const handleLinkPress = useCallback(() => {
     setIsLinkModalOpen(true);
   }, []);
@@ -58,12 +62,12 @@ function UnmappedFileRow({
           </Label>
         )}
 
-        {file.match ? (
+        {match ? (
           <div className={styles.match}>
-            <div>{file.match.title}</div>
+            <div>{match.title}</div>
 
             <div className={styles.labels}>
-              <UnmappedFileMatchLabels match={file.match} />
+              <UnmappedFileMatchLabels match={match} />
             </div>
           </div>
         ) : null}

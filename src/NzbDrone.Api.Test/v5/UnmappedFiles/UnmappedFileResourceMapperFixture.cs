@@ -93,6 +93,17 @@ namespace NzbDrone.Api.Test.v5.UnmappedFiles
             match.SameYear.Should().BeTrue();
         }
 
+        [TestCase(ItemType.Jav, ItemType.Jav)]
+        [TestCase(ItemType.Movie, ItemType.Movie)]
+        [TestCase(null, ItemType.Scene)]
+        public void should_map_the_item_type_the_match_was_found_as(ItemType? stored, ItemType expected)
+        {
+            var file = File(true, true);
+            file.TopMatch.ItemType = stored;
+
+            file.ToResource(true).Match.ItemType.Should().Be(expected);
+        }
+
         [Test]
         public void should_map_the_suggestion_title_and_year_flags()
         {

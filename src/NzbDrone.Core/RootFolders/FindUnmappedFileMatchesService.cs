@@ -109,10 +109,9 @@ namespace NzbDrone.Core.RootFolders
 
             try
             {
-                var results = _unmappedFileService.Suggest(file.Id, null, itemType).Results ?? new List<UnmappedFileSuggestion>();
-                var top = results.FirstOrDefault();
+                var top = _unmappedFileService.Suggest(file.Id, null, itemType).Results?.FirstOrDefault();
 
-                found = top == null ? null : ToMatch(top, results.Count(r => r.CodeMatch) == 1);
+                found = top == null ? null : ToMatch(top, itemType);
             }
             catch (ModelNotFoundException)
             {
@@ -142,7 +141,7 @@ namespace NzbDrone.Core.RootFolders
             Failed
         }
 
-        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion, bool uniqueCode)
+        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion, ItemType searchedAs)
         {
             return new UnmappedFileMatch
             {
@@ -153,9 +152,12 @@ namespace NzbDrone.Core.RootFolders
                 HashMatch = suggestion.HashMatch,
                 SameDate = suggestion.SameDate,
                 SameStudio = suggestion.SameStudio,
-                CodeMatch = suggestion.CodeMatch && uniqueCode,
-                SameTitle = suggestion.SameTitle,
-                SameYear = suggestion.SameYear
+                CodeMatch = suggestion.CodeMatch,
+
+                // A generic scene title ("Hot Date") repeats across studios within a year, so title and year only carry a movie
+                SameTitle = suggestion.SameTitle && suggestion.Movie.MovieMetadata.Value.ItemType == ItemType.Movie,
+                SameYear = suggestion.SameYear,
+                ItemType = searchedAs
             };
         }
     }

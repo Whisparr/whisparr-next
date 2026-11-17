@@ -60,10 +60,10 @@ namespace NzbDrone.Core.RootFolders
 
         private static readonly Regex TrailingTagsRegex = new Regex(@"\s*(?:[\[\(]|\b(?:\d{3,4}p|4k|web[- ]?dl|web[- ]?rip|blu[- ]?ray|hdtv|xxx)\b).*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
 
-        // Largest first, so "12" becomes "xii" rather than "i" + "ii"
-        private static readonly List<ArabicRomanNumeral> ArabicRomanNumerals = RomanNumeralParser.GetArabicRomanNumeralsMapping()
-            .OrderByDescending(n => n.ArabicNumeral)
-            .ToList();
+        private static readonly Dictionary<string, string> RomanNumerals = RomanNumeralParser.GetArabicRomanNumeralsMapping()
+            .ToDictionary(n => n.ArabicNumeralAsString, n => n.RomanNumeralLowerCase);
+
+        private static readonly Regex WholeNumberRegex = new Regex(@"\b\d+\b", RegexOptions.Compiled, RegexDefaults.Timeout);
 
         private static readonly Regex LeadingTagsRegex = new Regex(@"^(?:\s*(?:\[[^\]]*\]|\([^\)]*\)))+\s*", RegexOptions.Compiled, RegexDefaults.Timeout);
         private static readonly Regex SeparatorsRegex = new Regex(@"[._]+", RegexOptions.Compiled, RegexDefaults.Timeout);
@@ -150,12 +150,17 @@ namespace NzbDrone.Core.RootFolders
 
             movies.AddRange(Search(searchTerm, itemType));
 
+            var scored = movies
+                .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
+                .Select(m => Score(m, parsed, fileTitle, hashIds, hasJavCode ? javCode : null))
+                .ToList();
+
+            ClearSharedCodeMatches(scored);
+
             return new UnmappedFileSuggestions
             {
                 Term = searchTerm,
-                Results = movies
-                    .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
-                    .Select(m => Score(m, parsed, fileTitle, hashIds, hasJavCode ? javCode : null))
+                Results = scored
                     .OrderByDescending(s => s.HashMatch)
                     .ThenByDescending(s => s.CodeMatch)
                     .ThenByDescending(s => javIds.Contains(s.Movie.ForeignId))
@@ -269,9 +274,18 @@ namespace NzbDrone.Core.RootFolders
             };
         }
 
+        // A code two titles share (a mis-tagged entry at the source) can't say which one the file is
+        private static void ClearSharedCodeMatches(List<UnmappedFileSuggestion> suggestions)
+        {
+            if (suggestions.Count(s => s.CodeMatch) > 1)
+            {
+                suggestions.ForEach(s => s.CodeMatch = false);
+            }
+        }
+
         private static bool IsSameTitle(string fileTitle, MovieMetadata metadata)
         {
-            var clean = ToRomanNumerals(fileTitle.CleanMovieTitle());
+            var clean = CleanForTitleMatch(fileTitle);
 
             if (clean.IsNullOrWhiteSpace())
             {
@@ -281,13 +295,21 @@ namespace NzbDrone.Core.RootFolders
             var titles = new[] { metadata.Title }
                 .Concat((metadata.AlternativeTitles ?? new List<AlternativeTitle>()).Select(t => t.Title));
 
-            return titles.Any(t => ToRomanNumerals(t.CleanMovieTitle()) == clean);
+            return titles.Any(t => CleanForTitleMatch(t) == clean);
         }
 
-        // "Pirates 2" and "Pirates II" are the same title; the parser's own title match treats them so too
-        private static string ToRomanNumerals(string cleanTitle)
+        // "Pirates 2" and "Pirates II" are the same title. Only whole numbers are converted, before cleaning
+        // strips the spaces, so "21" never reads as "2" + "1" ("iii", the same as "3")
+        private static string CleanForTitleMatch(string title)
         {
-            return ArabicRomanNumerals.Aggregate(cleanTitle, (title, numeral) => title.Replace(numeral.ArabicNumeralAsString, numeral.RomanNumeralLowerCase));
+            if (title.IsNullOrWhiteSpace())
+            {
+                return string.Empty;
+            }
+
+            var converted = WholeNumberRegex.Replace(title, m => RomanNumerals.TryGetValue(m.Value, out var roman) ? roman : m.Value);
+
+            return converted.CleanMovieTitle();
         }
 
         internal static int GetTitleSimilarity(string a, string b)

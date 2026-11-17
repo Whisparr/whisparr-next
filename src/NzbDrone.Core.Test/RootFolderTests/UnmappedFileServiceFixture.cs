@@ -218,6 +218,15 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_not_flag_a_code_shared_by_two_results()
+        {
+            GivenJavFile(true);
+            GivenTypedSearch("ABP-123", ItemType.Jav, Jav("first", "ABP-123"), Jav("second", "ABP-123"));
+
+            Subject.Suggest(8, null, ItemType.Jav).Results.Should().OnlyContain(r => !r.CodeMatch);
+        }
+
+        [Test]
         public void should_rank_a_code_match_above_a_same_date_result()
         {
             _file.Path = "/media/Studio/ABP-123 Studio - 2024-03-05 - The Right Title.mp4";
@@ -289,6 +298,17 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             result.SameTitle.Should().BeTrue();
             result.SameYear.Should().BeTrue();
+        }
+
+        [TestCase("Saw.21.2021.mkv", "Saw 21", "Saw III")]
+        [TestCase("Saw.111.2021.mkv", "Saw 111", "Saw 12")]
+        [TestCase("Saw.12.2021.mkv", "Saw 12", "Saw I II")]
+        public void should_not_match_a_different_number_rewritten_digit_by_digit(string name, string term, string title)
+        {
+            GivenFile(9, name);
+            GivenSearch(term, Feature("movie", title, 2021));
+
+            Subject.Suggest(9, null, ItemType.Movie).Results.Single().SameTitle.Should().BeFalse();
         }
 
         [Test]
