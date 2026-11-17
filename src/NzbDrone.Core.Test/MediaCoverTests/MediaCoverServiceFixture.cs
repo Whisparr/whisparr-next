@@ -1717,6 +1717,9 @@ namespace NzbDrone.Core.Test.MediaCoverTests
         [Test]
         public void should_skip_a_new_movie_already_queued_by_an_update()
         {
+            // One worker stays mid-download, so another has to drain the backlog.
+            Assume.That(MediaCoverService.MovieCoverWorkerCount, Is.GreaterThanOrEqualTo(2));
+
             const string updateUrl = "https://example.com/download-7";
             var gate = GivenBlockedWorkers();
             var downloadStarted = new ManualResetEventSlim();
@@ -1995,6 +1998,53 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             {
                 ReleaseBlockedWorkers(gate);
             }
+        }
+
+        [Test]
+        public void should_keep_the_worker_alive_when_the_migration_gate_read_fails()
+        {
+            var processed = new CountdownEvent(1);
+
+            Mocker.GetMock<ILegacyMigrationGate>()
+                  .SetupGet(v => v.AutomationPaused)
+                  .Throws(new InvalidOperationException("database is locked"));
+            Mocker.GetMock<IEventAggregator>()
+                  .Setup(v => v.PublishEvent(It.IsAny<MediaCoversUpdatedEvent>()))
+                  .Callback<MediaCoversUpdatedEvent>(_ => processed.Signal());
+            GivenAnyNewMovie();
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Subject.QueueNewMovieCovers(new[] { 51 });
+
+            processed.Wait(5000).Should().BeTrue();
+
+            var updateCompleted = GivenCompletionSignal(52);
+            Subject.Handle(new MovieUpdatedEvent(GivenMovie(52)));
+
+            updateCompleted.Wait(5000).Should().BeTrue();
+            Subject.MovieCoverQueueTest.WorkerCountAlive.Should().Be(MediaCoverService.MovieCoverWorkerCount);
+
+            // One for the producer's read, one for the worker's wake-up.
+            ExceptionVerification.ExpectedWarns(2);
+        }
+
+        [Test]
+        public void should_queue_new_movie_covers_when_the_migration_gate_read_fails()
+        {
+            var processed = GivenCompletionSignal(1);
+
+            Mocker.GetMock<ILegacyMigrationGate>()
+                  .SetupGet(v => v.AutomationPaused)
+                  .Throws(new InvalidOperationException("database is locked"));
+            GivenAnyNewMovie();
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Assert.DoesNotThrow(() => Subject.QueueNewMovieCovers(new[] { 1 }));
+
+            processed.Wait(5000).Should().BeTrue();
+
+            // One for the producer's read, one for the worker's wake-up.
+            ExceptionVerification.ExpectedWarns(2);
         }
 
         // Starts the worker pool and parks every worker in AlreadyExists on a movie update. Updates

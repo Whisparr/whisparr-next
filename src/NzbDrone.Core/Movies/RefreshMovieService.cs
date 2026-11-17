@@ -435,7 +435,7 @@ namespace NzbDrone.Core.Movies
             }
             finally
             {
-                // Queued first so a failing scan can't skip it; it only queues, so it can't throw on I/O.
+                // Queued first so a failing scan can't skip it; the queue call never throws for a migration gate failure.
                 if (coverIds.Count > 0)
                 {
                     _queueNewMovieCovers.QueueNewMovieCovers(coverIds);

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Extensions;
@@ -286,6 +287,24 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Mocker.GetMock<IQueueNewMovieCovers>()
                   .Verify(v => v.QueueNewMovieCovers(It.IsAny<IEnumerable<int>>()), Times.Never());
+        }
+
+        [Test]
+        public void should_queue_covers_before_scanning_new_scenes()
+        {
+            var scenes = GivenNewScenes(3);
+            var calls = new List<string>();
+
+            Mocker.GetMock<IQueueNewMovieCovers>()
+                  .Setup(v => v.QueueNewMovieCovers(It.IsAny<IEnumerable<int>>()))
+                  .Callback(() => calls.Add("queue"));
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(v => v.Scan(It.IsAny<IEnumerable<int>>(), It.IsAny<bool>()))
+                  .Callback(() => calls.Add("scan"));
+
+            Subject.RefreshNewScenes(scenes);
+
+            calls.Should().Equal("queue", "scan");
         }
 
         private void VerifyCoversQueued(List<Movie> scenes)
