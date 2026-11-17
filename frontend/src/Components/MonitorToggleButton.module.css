@@ -13,4 +13,9 @@
     color: var(--disabledColor);
     cursor: not-allowed;
   }
+
+  &.unmonitoredJav {
+    color: var(--disabledColor);
+    opacity: 0.5;
+  }
 }

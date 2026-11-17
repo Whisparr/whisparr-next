@@ -96,7 +96,12 @@ function MonitorToggleButton(props: Readonly<MonitorToggleButtonProps>) {
 
   let iconName = icons.UNMONITORED;
 
-  if (monitorType) {
+  // There is no unmonitored disc, so an unmonitored JAV toggle is the disc dimmed
+  const isJav = type === 'javMonitor';
+
+  if (isJav) {
+    iconName = icons.DISC;
+  } else if (monitorType) {
     const iconSet =
       monitorType === 'movie'
         ? { monitored: icons.FILM, unmonitored: icons.FILMUNMONITOR }
@@ -130,7 +135,11 @@ function MonitorToggleButton(props: Readonly<MonitorToggleButtonProps>) {
 
   return (
     <SpinnerIconButton
-      className={classNames(className, isDisabled && styles.isDisabled)}
+      className={classNames(
+        className,
+        isDisabled && styles.isDisabled,
+        isJav && !monitoredValue && styles.unmonitoredJav
+      )}
       name={iconName}
       size={size}
       title={title}
