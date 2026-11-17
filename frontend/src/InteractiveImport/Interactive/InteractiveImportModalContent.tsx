@@ -510,16 +510,16 @@ function InteractiveImportModalContent(
   );
 
   const onImportModeChange = useCallback<
-    ({ value }: { value: ImportMode }) => void
+    ({ value }: { value: string }) => void
   >(({ value }) => {
-    setInteractiveImportMode(value);
+    setInteractiveImportMode(value as ImportMode);
   }, []);
 
   const onSelectModalSelect = useCallback<
-    ({ value }: { value: SelectType }) => void
+    ({ value }: { value: string }) => void
   >(
     ({ value }) => {
-      setSelectModalOpen(value);
+      setSelectModalOpen(value as SelectType);
     },
     [setSelectModalOpen]
   );
