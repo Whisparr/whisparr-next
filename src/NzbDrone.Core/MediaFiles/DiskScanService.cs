@@ -127,6 +127,17 @@ namespace NzbDrone.Core.MediaFiles
                 return;
             }
 
+            // Run after the scene lock is released: the shared pass takes it again (R2)
+            if (!ScanOwnFolder(movie, manual))
+            {
+                _logger.Debug("{0} shares its folder with videos no item tracks, identifying them instead of importing them", movie);
+                ScanSharedFolder(movie.Path, new List<Movie> { movie }, manual);
+            }
+        }
+
+        // False, having changed nothing, when a scene's folder holds videos it may not own; the caller scans it as shared
+        private bool ScanOwnFolder(Movie movie, bool manual)
+        {
             var sem = ScanLocks.GetOrAdd(movie.Id, _ => new SemaphoreSlim(1, 1));
 
             _logger.Trace("Acquiring scan lock for movie id {0} ({1})", movie.Id, movie.Title);
@@ -143,14 +154,14 @@ namespace NzbDrone.Core.MediaFiles
                     {
                         _logger.Warn("Movie's root folder ({0}) doesn't exist.", rootFolder);
                         _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.RootFolderDoesNotExist));
-                        return;
+                        return true;
                     }
 
                     if (_diskProvider.FolderEmpty(rootFolder))
                     {
                         _logger.Warn("Movie's root folder ({0}) is empty. Rescan will not update movies as a failsafe.", rootFolder);
                         _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.RootFolderIsEmpty));
-                        return;
+                        return true;
                     }
                 }
 
@@ -159,7 +170,7 @@ namespace NzbDrone.Core.MediaFiles
                 if (!movieFolderExists)
                 {
                     ScanMissingFolder(movie);
-                    return;
+                    return true;
                 }
 
                 var videoFilesStopwatch = Stopwatch.StartNew();
@@ -170,6 +181,11 @@ namespace NzbDrone.Core.MediaFiles
                 var onDisk = new HashSet<string>(mediaFileList, PathEqualityComparer.Instance);
 
                 var trackedFiles = _mediaFileService.GetFilesByMovie(movie.Id);
+
+                if (MayNotOwnFolder(movie, mediaFileList, trackedFiles))
+                {
+                    return false;
+                }
 
                 RelinkRenamedFiles(movie, trackedFiles, onDisk, () => HashCandidates(MediaFileService.FilterExistingFiles(mediaFileList, trackedFiles, movie)));
 
@@ -197,33 +213,64 @@ namespace NzbDrone.Core.MediaFiles
                 var possibleExtraFiles = FilterPaths(movie.Path, filesOnDisk);
 
                 RemoveEmptyMovieFolder(movie);
-
-                // Check if movie is in the scene layout, then cleanup the unmapped file
-                if (movie.MovieMetadata.Value.ItemType.UsesSceneLayout())
-                {
-                    var existingUnmappedFiles = _mediaFileRepository.GetUnmappedFiles();
-                    if (existingUnmappedFiles != null)
-                    {
-                        foreach (var unmappedFile in existingUnmappedFiles)
-                        {
-                            var owned = unmappedFile.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(unmappedFile.OriginalFilePath);
-
-                            if (owned)
-                            {
-                                var reason = DeleteMediaFileReason.Manual;
-                                _mediaFileRepository.Delete(unmappedFile);
-                                _eventAggregator.PublishEvent(new MovieFileDeletedEvent(unmappedFile, reason));
-                                break;
-                            }
-                        }
-                    }
-                }
+                RemoveOwnedUnmappedFile(movie);
 
                 CompletedScanning(movie, possibleExtraFiles);
+
+                return true;
             }
             finally
             {
                 ReleaseScanLock(movie, sem);
+            }
+        }
+
+        // A scene linked in place keeps the folder it was found in, which can be a flat folder of other videos with
+        // no sibling item to mark it shared. This pass would take every one of them as the scene's upgrade, so the shared
+        // pass identifies them by name and hash instead. A scene whose file isn't on disk still takes a lone video, as a
+        // movie would: a fresh drop, or its own file renamed.
+        // Only the listing this pass already made is read; the extra query runs only when there are untracked videos.
+        private bool MayNotOwnFolder(Movie movie, List<string> videoFiles, List<MovieFile> trackedFiles)
+        {
+            if (!IsScene(movie))
+            {
+                return false;
+            }
+
+            var untracked = MediaFileService.FilterExistingFiles(videoFiles, trackedFiles, movie);
+
+            if (untracked.Count == 0)
+            {
+                return false;
+            }
+
+            var unowned = _mediaFileService.FilterFilesTrackedByAnyItem(movie.Path, untracked);
+            var hasFileOnDisk = videoFiles.Count > untracked.Count;
+
+            return unowned.Count > 1 || (unowned.Count == 1 && hasFileOnDisk);
+        }
+
+        // Check if movie is in the scene layout, then cleanup the unmapped file
+        private void RemoveOwnedUnmappedFile(Movie movie)
+        {
+            if (!movie.MovieMetadata.Value.ItemType.UsesSceneLayout())
+            {
+                return;
+            }
+
+            var existingUnmappedFiles = _mediaFileRepository.GetUnmappedFiles();
+
+            if (existingUnmappedFiles == null)
+            {
+                return;
+            }
+
+            var owned = existingUnmappedFiles.FirstOrDefault(f => f.OriginalFilePath.IsNotNullOrWhiteSpace() && movie.Path.IsParentPath(f.OriginalFilePath));
+
+            if (owned != null)
+            {
+                _mediaFileRepository.Delete(owned);
+                _eventAggregator.PublishEvent(new MovieFileDeletedEvent(owned, DeleteMediaFileReason.Manual));
             }
         }
 
