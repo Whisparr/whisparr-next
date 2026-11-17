@@ -18,6 +18,7 @@ import { icons } from 'Helpers/Props';
 import Movie from 'Movie/Movie';
 import Performer from 'Performer/Performer';
 import useLibrarySearch from 'Search/useLibrarySearch';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import Studio from 'Studio/Studio';
 import translate from 'Utilities/String/translate';
 import MovieSearchResult from './MovieSearchResult';
@@ -27,6 +28,7 @@ import styles from './MovieSearchInput.module.css';
 
 const ADD_NEW_MOVIE = 'addNewMovie';
 const ADD_NEW_SCENE = 'addNewScene';
+const ADD_NEW_JAV = 'addNewJav';
 const ADD_NEW_PERFORMER = 'addNewPerformer';
 const ADD_NEW_STUDIO = 'addNewStudio';
 
@@ -34,6 +36,7 @@ interface AddNewSuggestion {
   type:
     | typeof ADD_NEW_MOVIE
     | typeof ADD_NEW_SCENE
+    | typeof ADD_NEW_JAV
     | typeof ADD_NEW_PERFORMER
     | typeof ADD_NEW_STUDIO;
   title: string;
@@ -42,6 +45,7 @@ interface AddNewSuggestion {
 const ADD_NEW_LABEL_KEYS: Record<AddNewSuggestion['type'], string> = {
   [ADD_NEW_MOVIE]: 'AddNewMovie',
   [ADD_NEW_SCENE]: 'AddNewScene',
+  [ADD_NEW_JAV]: 'AddNewJav',
   [ADD_NEW_PERFORMER]: 'AddNewPerformer',
   [ADD_NEW_STUDIO]: 'AddNewStudio',
 };
@@ -131,6 +135,8 @@ function getSuggestionPath(suggestion: Suggestion, term: string) {
       return `/add/new/movie?term=${encodeURIComponent(term)}`;
     case ADD_NEW_SCENE:
       return `/add/new/scene?term=${encodeURIComponent(term)}`;
+    case ADD_NEW_JAV:
+      return `/add/new/jav?term=${encodeURIComponent(term)}`;
     case ADD_NEW_PERFORMER:
       return `/add/new/performer?term=${encodeURIComponent(term)}`;
     case ADD_NEW_STUDIO:
@@ -150,6 +156,7 @@ function MovieSearchInput() {
   const [debouncedValue] = useDebounce(value, 250);
 
   const { data, isLoading } = useLibrarySearch(debouncedValue);
+  const javAvailable = useJavAvailable();
 
   const { bindShortcut, unbindShortcut } = useKeyboardShortcuts();
   const autosuggestRef = useRef<Autosuggest>(null);
@@ -197,17 +204,23 @@ function MovieSearchInput() {
       });
     }
 
-    result.push({
-      title: translate('Add'),
-      suggestions: [
-        { type: ADD_NEW_MOVIE, title: value },
-        { type: ADD_NEW_SCENE, title: value },
-        { type: ADD_NEW_PERFORMER, title: value },
-        { type: ADD_NEW_STUDIO, title: value },
-      ],
-    });
+    const addSuggestions: AddNewSuggestion[] = [
+      { type: ADD_NEW_MOVIE, title: value },
+      { type: ADD_NEW_SCENE, title: value },
+    ];
+
+    if (javAvailable) {
+      addSuggestions.push({ type: ADD_NEW_JAV, title: value });
+    }
+
+    addSuggestions.push(
+      { type: ADD_NEW_PERFORMER, title: value },
+      { type: ADD_NEW_STUDIO, title: value }
+    );
+
+    result.push({ title: translate('Add'), suggestions: addSuggestions });
     return result;
-  }, [resultSections, value, isLoading]);
+  }, [resultSections, value, isLoading, javAvailable]);
 
   const focusInput = useCallback((event: ExtendedKeyboardEvent) => {
     event.preventDefault();

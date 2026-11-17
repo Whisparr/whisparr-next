@@ -1,7 +1,10 @@
 import React from 'react';
 import { useAppDimension } from 'App/appStore';
 import useMeasure from 'Helpers/Hooks/useMeasure';
-import { useMovieIndexOption } from 'Movie/Index/movieIndexOptionsStore';
+import {
+  javIndexOptionsStore,
+  useMovieIndexOption,
+} from 'Movie/Index/movieIndexOptionsStore';
 import MovieIndexPoster from 'Movie/Index/Posters/MovieIndexPoster';
 import Movie from 'Movie/Movie';
 import { usePerformerIndexOption } from 'Performer/Index/performerIndexOptionsStore';
@@ -23,6 +26,7 @@ import styles from './SearchPosterGrid.module.css';
 const COLUMN_WIDTH: Record<LibrarySearchType, [number, number]> = {
   scene: [310, 300],
   movie: [182, 172],
+  jav: [182, 172],
   performer: [182, 172],
   studio: [262, 252],
 };
@@ -30,9 +34,13 @@ const COLUMN_WIDTH: Record<LibrarySearchType, [number, number]> = {
 const ASPECT_RATIO: Record<LibrarySearchType, number> = {
   scene: 170 / 300,
   movie: 250 / 170,
+  jav: 4 / 3,
   performer: 250 / 170,
   studio: 170 / 250,
 };
+
+// JAV posters follow the size chosen on the JAV index, which has its own store.
+const useJavIndexOption = javIndexOptionsStore.useMovieIndexOption;
 
 const COLUMN_PADDING = Number.parseInt(dimensions.movieIndexColumnPadding, 10);
 const COLUMN_PADDING_SMALL_SCREEN = Number.parseInt(
@@ -69,6 +77,7 @@ function usePosterSize(type: LibrarySearchType) {
   const sizes: Record<LibrarySearchType, string> = {
     scene: useSceneIndexOption('posterOptions').size,
     movie: useMovieIndexOption('posterOptions').size,
+    jav: useJavIndexOption('posterOptions').size,
     performer: usePerformerIndexOption('posterOptions').size,
     studio: useStudioIndexOption('posterOptions').size,
   };
@@ -77,7 +86,7 @@ function usePosterSize(type: LibrarySearchType) {
 }
 
 type SearchPosterGridProps =
-  | { type: 'scene' | 'movie'; items: readonly Movie[] }
+  | { type: 'scene' | 'movie' | 'jav'; items: readonly Movie[] }
   | { type: 'performer'; items: readonly Performer[] }
   | { type: 'studio'; items: readonly Studio[] };
 
@@ -113,7 +122,7 @@ function SearchPosterGrid(props: Readonly<SearchPosterGridProps>) {
           </div>
         ))}
 
-      {props.type === 'movie' &&
+      {(props.type === 'movie' || props.type === 'jav') &&
         props.items.map((movie) => (
           <div key={movie.id} style={cellStyle}>
             <MovieIndexPoster movie={movie} {...common} />

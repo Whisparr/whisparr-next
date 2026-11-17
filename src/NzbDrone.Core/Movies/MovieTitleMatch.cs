@@ -7,5 +7,6 @@ namespace NzbDrone.Core.Movies
         public string CleanTitle { get; set; }
         public ItemType ItemType { get; set; }
         public string ForeignId { get; set; }
+        public string Code { get; set; }
     }
 }

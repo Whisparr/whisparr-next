@@ -24,7 +24,56 @@ namespace NzbDrone.Core.LibrarySearch
     /// </remarks>
     public static class LibrarySearchRanker
     {
-        public static LibrarySearchScore Score(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean)
+        /// <summary>Uppercase letters and digits only, so GAR-204, gar204 and "gar 204" all become GAR204.</summary>
+        public static string NormalizeCode(string value)
+        {
+            if (value.IsNullOrWhiteSpace())
+            {
+                return string.Empty;
+            }
+
+            var normalized = new StringBuilder(value.Length);
+
+            foreach (var c in value.Where(char.IsLetterOrDigit))
+            {
+                normalized.Append(char.ToUpperInvariant(c));
+            }
+
+            return normalized.ToString();
+        }
+
+        public static LibrarySearchScore Score(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean, string code = null)
+        {
+            var titleScore = ScoreTitle(query, cleanQuery, title, cleanTitle, foreignId, clean);
+            var codeScore = ScoreCode(query, code);
+
+            return codeScore.HasValue && (codeScore.Value.Tier, codeScore.Value.Distance).CompareTo((titleScore.Tier, titleScore.Distance)) < 0
+                ? codeScore.Value
+                : titleScore;
+        }
+
+        // An exact code is the whole code, a prefix is the start of it (the query GAR lists every GAR code).
+        private static LibrarySearchScore? ScoreCode(string query, string code)
+        {
+            var normalizedQuery = NormalizeCode(query);
+            var normalizedCode = NormalizeCode(code);
+
+            if (normalizedQuery.Length == 0 || normalizedCode.Length == 0)
+            {
+                return null;
+            }
+
+            if (normalizedCode == normalizedQuery)
+            {
+                return new LibrarySearchScore(LibrarySearchTier.Exact, 0);
+            }
+
+            return normalizedCode.StartsWith(normalizedQuery, StringComparison.Ordinal)
+                ? new LibrarySearchScore(LibrarySearchTier.Prefix, normalizedCode.Length - normalizedQuery.Length)
+                : null;
+        }
+
+        private static LibrarySearchScore ScoreTitle(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean)
         {
             cleanTitle ??= string.Empty;
 
@@ -48,12 +97,12 @@ namespace NzbDrone.Core.LibrarySearch
             return new LibrarySearchScore(LibrarySearchTier.Substring, distance);
         }
 
-        public static List<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> title, Func<T, string> cleanTitle, Func<T, string> foreignId, Func<string, string> clean)
+        public static List<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> title, Func<T, string> cleanTitle, Func<T, string> foreignId, Func<string, string> clean, Func<T, string> code = null)
         {
             var cleanQuery = clean(query);
 
             return items
-                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, title(item), cleanTitle(item), foreignId(item), clean)))
+                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, title(item), cleanTitle(item), foreignId(item), clean, code?.Invoke(item))))
                 .OrderBy(x => x.Score.Tier)
                 .ThenBy(x => x.Score.Distance)
                 .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)

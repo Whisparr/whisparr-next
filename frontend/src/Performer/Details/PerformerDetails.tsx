@@ -221,6 +221,8 @@ function PerformerDetails() {
   const totalMovieCount = performer.totalMovieCount ?? 0;
   const totalSceneCount = performer.totalSceneCount ?? 0;
   const sceneCount = performer.sceneCount ?? 0;
+  const javCount = performer.javCount ?? 0;
+  const totalJavCount = performer.totalJavCount ?? 0;
   const sizeOnDisk = performer.sizeOnDisk ?? 0;
   // Computed variables
   // A performer can already be monitored and later lose their link, so leave
@@ -551,6 +553,19 @@ function PerformerDetails() {
                     <Icon name={icons.SCENE} size={17} />
                     <span className={styles.sceneCount}>
                       {translate('Scenes')}: {sceneCount} / {totalSceneCount}
+                    </span>
+                  </Label>
+                )}
+
+                {(javCount > 0 || totalJavCount > 0) && (
+                  <Label
+                    className={styles.detailsLabel}
+                    title={translate('JavCount')}
+                    size={sizes.LARGE}
+                  >
+                    <Icon name={icons.DISC} size={17} />
+                    <span className={styles.sceneCount}>
+                      {translate('Jav')}: {javCount} / {totalJavCount}
                     </span>
                   </Label>
                 )}

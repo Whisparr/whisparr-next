@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.LibrarySearch;
@@ -78,9 +79,51 @@ namespace NzbDrone.Core.Test.LibrarySearchTests
                 .Should().Be("Brazzers");
         }
 
-        private static LibrarySearchScore ScoreMovie(string query, string title, string foreignId = null)
+        [TestCase("GAR-204")]
+        [TestCase("gar204")]
+        [TestCase("gar 204")]
+        public void should_score_exact_code_as_exact(string query)
         {
-            return LibrarySearchRanker.Score(query, query.CleanMovieTitle(), title, title.CleanMovieTitle(), foreignId, t => t.CleanMovieTitle());
+            ScoreMovie(query, "A Long English Title Nothing Alike", code: "GAR-204")
+                .Should().Be(new LibrarySearchScore(LibrarySearchTier.Exact, 0));
+        }
+
+        [Test]
+        public void should_score_code_start_as_prefix_with_remaining_length_as_distance()
+        {
+            ScoreMovie("GAR", "A Long English Title Nothing Alike", code: "GAR-204")
+                .Should().Be(new LibrarySearchScore(LibrarySearchTier.Prefix, 3));
+        }
+
+        [Test]
+        public void should_not_score_code_infix_as_a_code_hit()
+        {
+            ScoreMovie("204", "A Long English Title Nothing Alike", code: "GAR-204").Tier.Should().Be(LibrarySearchTier.Substring);
+        }
+
+        [Test]
+        public void should_keep_better_title_score_over_code_score()
+        {
+            ScoreMovie("GAR", "Gar Goes Home", code: "GARX-204").Tier.Should().Be(LibrarySearchTier.Prefix);
+            ScoreMovie("Gar Goes Home", "Gar Goes Home", code: "GAR-204").Tier.Should().Be(LibrarySearchTier.Exact);
+        }
+
+        [Test]
+        public void should_rank_exact_code_before_title_substring()
+        {
+            var items = new[]
+            {
+                (Title: "Biggar204 Party", Code: (string)null),
+                (Title: "A Long English Title", Code: "GAR-204")
+            };
+
+            LibrarySearchRanker.Rank(items, "gar204", i => i.Title, i => i.Title.CleanMovieTitle(), _ => null, t => t.CleanMovieTitle(), i => i.Code)
+                .Select(i => i.Code).Should().Equal("GAR-204", null);
+        }
+
+        private static LibrarySearchScore ScoreMovie(string query, string title, string foreignId = null, string code = null)
+        {
+            return LibrarySearchRanker.Score(query, query.CleanMovieTitle(), title, title.CleanMovieTitle(), foreignId, t => t.CleanMovieTitle(), code);
         }
 
         private static List<string> Rank(string query, params string[] titles)
