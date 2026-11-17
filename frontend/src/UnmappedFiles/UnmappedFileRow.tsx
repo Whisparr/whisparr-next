@@ -8,11 +8,13 @@ import { icons, kinds } from 'Helpers/Props';
 import { SelectStateInputProps } from 'typings/props';
 import translate from 'Utilities/String/translate';
 import UnmappedFileLinkModal from './UnmappedFileLinkModal';
-import { UnmappedFile } from './useUnmappedFiles';
+import UnmappedFileMatchLabels from './UnmappedFileMatchLabels';
+import { UnmappedFile, UnmappedItemType } from './useUnmappedFiles';
 import styles from './UnmappedFileRow.module.css';
 
 interface UnmappedFileRowProps {
   file: UnmappedFile;
+  defaultItemType: UnmappedItemType;
   isSelected: boolean;
   onSelectedChange: (options: SelectStateInputProps) => void;
   onDismissPress: (id: number, dismissed: boolean) => void;
@@ -20,11 +22,16 @@ interface UnmappedFileRowProps {
 
 function UnmappedFileRow({
   file,
+  defaultItemType,
   isSelected,
   onSelectedChange,
   onDismissPress,
 }: Readonly<UnmappedFileRowProps>) {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+
+  // The pages share one stored match per file, so a Movies run's match isn't shown on Scenes and vice versa
+  const match =
+    file.match?.itemType === defaultItemType ? file.match : undefined;
 
   const handleLinkPress = useCallback(() => {
     setIsLinkModalOpen(true);
@@ -55,18 +62,12 @@ function UnmappedFileRow({
           </Label>
         )}
 
-        {file.match ? (
+        {match ? (
           <div className={styles.match}>
-            <div>{file.match.title}</div>
+            <div>{match.title}</div>
 
             <div className={styles.labels}>
-              {file.match.hashMatch ? (
-                <Label kind={kinds.SUCCESS}>{translate('HashMatch')}</Label>
-              ) : null}
-
-              <Label kind={kinds.INFO}>{translate('SameDate')}</Label>
-
-              <Label kind={kinds.INFO}>{translate('SameStudio')}</Label>
+              <UnmappedFileMatchLabels match={match} />
             </div>
           </div>
         ) : null}
@@ -90,6 +91,7 @@ function UnmappedFileRow({
       {isLinkModalOpen ? (
         <UnmappedFileLinkModal
           file={file}
+          defaultItemType={defaultItemType}
           isOpen={isLinkModalOpen}
           onModalClose={handleLinkModalClose}
         />

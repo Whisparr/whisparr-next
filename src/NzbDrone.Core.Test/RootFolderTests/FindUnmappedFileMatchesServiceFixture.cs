@@ -59,7 +59,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             _files[id] = file;
         }
 
-        private static UnmappedFileSuggestion Suggestion(string foreignId, string title = "Title", bool sameDate = true, bool sameStudio = true, bool hash = false)
+        private static UnmappedFileSuggestion Suggestion(string foreignId, string title = "Title", bool sameDate = true, bool sameStudio = true, bool hash = false, bool code = false)
         {
             var movie = new Movie();
 
@@ -68,7 +68,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
             movie.MovieMetadata.Value.StudioTitle = "Studio";
             movie.MovieMetadata.Value.ReleaseDateUtc = new DateTime(2024, 3, 5, 0, 0, 0, DateTimeKind.Utc);
 
-            return new UnmappedFileSuggestion { Movie = movie, SameDate = sameDate, SameStudio = sameStudio, HashMatch = hash };
+            return new UnmappedFileSuggestion { Movie = movie, SameDate = sameDate, SameStudio = sameStudio, HashMatch = hash, CodeMatch = code };
         }
 
         private void GivenSuggestions(int id, params UnmappedFileSuggestion[] results)
@@ -177,6 +177,54 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_store_a_unique_code_match_as_strong()
+        {
+            GivenFile(1);
+            GivenSuggestions(1, Suggestion("jav", sameDate: false, sameStudio: false, code: true), Suggestion("other", sameDate: false, sameStudio: false));
+
+            Subject.Execute(Command(1));
+
+            _saved.Single().TopMatch.CodeMatch.Should().BeTrue();
+            _saved.Single().TopMatch.IsStrong().Should().BeTrue();
+        }
+
+        [TestCase(ItemType.Movie, true, true, true)]
+        [TestCase(ItemType.Movie, true, false, false)]
+        [TestCase(ItemType.Movie, false, true, false)]
+        [TestCase(ItemType.Scene, true, true, false)]
+        [TestCase(ItemType.Jav, true, true, false)]
+        public void should_store_a_title_and_year_match_as_strong_only_for_a_movie(ItemType resultType, bool sameTitle, bool sameYear, bool strong)
+        {
+            GivenFile(1);
+            var suggestion = Suggestion("result", sameDate: false, sameStudio: false);
+            suggestion.Movie.MovieMetadata.Value.ItemType = resultType;
+            suggestion.SameTitle = sameTitle;
+            suggestion.SameYear = sameYear;
+            GivenSuggestions(1, suggestion);
+
+            Subject.Execute(Command(1));
+
+            _saved.Single().TopMatch.IsStrong().Should().Be(strong);
+        }
+
+        [TestCase(ItemType.Scene)]
+        [TestCase(ItemType.Movie)]
+        [TestCase(ItemType.Jav)]
+        public void should_store_the_item_type_the_run_searched_as(ItemType itemType)
+        {
+            GivenFile(1);
+            Mocker.GetMock<IUnmappedFileService>()
+                .Setup(s => s.Suggest(1, null, itemType))
+                .Returns(new UnmappedFileSuggestions { Term = "t", Results = new List<UnmappedFileSuggestion> { Suggestion("one") } });
+
+            var command = Command(1);
+            command.ItemType = itemType;
+            Subject.Execute(command);
+
+            _saved.Single().TopMatch.ItemType.Should().Be(itemType);
+        }
+
+        [Test]
         public void should_set_the_completion_message()
         {
             Mocker.GetMock<ILocalizationService>()
@@ -224,6 +272,29 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             action.Should().NotThrow();
             _saved.Should().ContainSingle();
+        }
+
+        [TestCase(ItemType.Movie)]
+        [TestCase(ItemType.Jav)]
+        public void should_search_as_the_item_type_of_the_page_it_was_started_from(ItemType itemType)
+        {
+            GivenFile(1);
+            Mocker.GetMock<IUnmappedFileService>()
+                .Setup(s => s.Suggest(1, null, itemType))
+                .Returns(new UnmappedFileSuggestions { Term = "t", Results = new List<UnmappedFileSuggestion> { Suggestion("typed") } });
+
+            var command = Command(1);
+            command.ItemType = itemType;
+            Subject.Execute(command);
+
+            _saved.Should().ContainSingle(f => f.TopMatch.ForeignId == "typed");
+            Mocker.GetMock<IUnmappedFileService>().Verify(s => s.Suggest(1, null, ItemType.Scene), Times.Never);
+        }
+
+        [Test]
+        public void should_search_as_scenes_by_default()
+        {
+            new FindUnmappedFileMatchesCommand().ItemType.Should().Be(ItemType.Scene);
         }
 
         [Test]

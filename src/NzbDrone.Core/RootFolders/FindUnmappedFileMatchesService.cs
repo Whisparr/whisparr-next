@@ -62,7 +62,7 @@ namespace NzbDrone.Core.RootFolders
             foreach (var id in ids)
             {
                 var outcome = files.TryGetValue(id, out var file) && !file.Dismissed && _diskProvider.FileExists(file.Path)
-                    ? FindMatch(file)
+                    ? FindMatch(file, message.ItemType)
                     : Outcome.Skipped;
 
                 if (outcome == Outcome.Checked)
@@ -103,15 +103,15 @@ namespace NzbDrone.Core.RootFolders
             }
         }
 
-        private Outcome FindMatch(ImportFile file)
+        private Outcome FindMatch(ImportFile file, ItemType itemType)
         {
             UnmappedFileMatch found;
 
             try
             {
-                var top = _unmappedFileService.Suggest(file.Id, null, ItemType.Scene).Results?.FirstOrDefault();
+                var top = _unmappedFileService.Suggest(file.Id, null, itemType).Results?.FirstOrDefault();
 
-                found = top == null ? null : ToMatch(top);
+                found = top == null ? null : ToMatch(top, itemType);
             }
             catch (ModelNotFoundException)
             {
@@ -141,7 +141,7 @@ namespace NzbDrone.Core.RootFolders
             Failed
         }
 
-        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion)
+        private static UnmappedFileMatch ToMatch(UnmappedFileSuggestion suggestion, ItemType searchedAs)
         {
             return new UnmappedFileMatch
             {
@@ -151,7 +151,13 @@ namespace NzbDrone.Core.RootFolders
                 ReleaseDate = suggestion.Movie.GetReleaseDate(),
                 HashMatch = suggestion.HashMatch,
                 SameDate = suggestion.SameDate,
-                SameStudio = suggestion.SameStudio
+                SameStudio = suggestion.SameStudio,
+                CodeMatch = suggestion.CodeMatch,
+
+                // A generic scene title ("Hot Date") repeats across studios within a year, so title and year only carry a movie
+                SameTitle = suggestion.SameTitle && suggestion.Movie.MovieMetadata.Value.ItemType == ItemType.Movie,
+                SameYear = suggestion.SameYear,
+                ItemType = searchedAs
             };
         }
     }

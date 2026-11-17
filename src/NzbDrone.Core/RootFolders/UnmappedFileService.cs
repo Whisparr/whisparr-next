@@ -15,9 +15,11 @@ using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Parser.RomanNumerals;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -25,6 +27,13 @@ namespace NzbDrone.Core.RootFolders
     {
         public Movie Movie { get; set; }
         public bool HashMatch { get; set; }
+
+        // The result's JAV code is the one read from the file name
+        public bool CodeMatch { get; set; }
+
+        // The cleaned title, or one of the alternative titles, equals the file's; with SameYear, the movie match
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
         public int TitleSimilarity { get; set; }
@@ -50,6 +59,13 @@ namespace NzbDrone.Core.RootFolders
         private const int MaxHashLookups = 3;
 
         private static readonly Regex TrailingTagsRegex = new Regex(@"\s*(?:[\[\(]|\b(?:\d{3,4}p|4k|web[- ]?dl|web[- ]?rip|blu[- ]?ray|hdtv|xxx)\b).*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
+        private static readonly Dictionary<string, string> RomanNumerals = RomanNumeralParser.GetArabicRomanNumeralsMapping()
+            .ToDictionary(n => n.ArabicNumeralAsString, n => n.RomanNumeralLowerCase);
+
+        private static readonly Regex WholeNumberRegex = new Regex(@"\b\d+\b", RegexOptions.Compiled, RegexDefaults.Timeout);
+
+        private static readonly Regex LeadingTagsRegex = new Regex(@"^(?:\s*(?:\[[^\]]*\]|\([^\)]*\)))+\s*", RegexOptions.Compiled, RegexDefaults.Timeout);
         private static readonly Regex SeparatorsRegex = new Regex(@"[._]+", RegexOptions.Compiled, RegexDefaults.Timeout);
 
         private readonly IImportFileRepository _importFileRepository;
@@ -96,11 +112,16 @@ namespace NzbDrone.Core.RootFolders
         {
             var file = _importFileRepository.Get(id);
             var parsed = Parse(file);
-            var searchTerm = term.IsNotNullOrWhiteSpace() ? term.Trim() : GetSearchTerm(file, parsed);
             var fileTitle = GetSearchTerm(file, parsed);
             var hashIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var movies = new List<Movie>();
             var javAvailable = _javAvailability.IsAvailable();
+            string javCode = null;
+            var hasJavCode = javAvailable && TryGetJavCode(file, parsed, out javCode);
+
+            // A JAV lookup by title rarely hits, so JAV mode searches the file's code unless something was typed
+            var defaultTerm = itemType == ItemType.Jav && hasJavCode ? javCode : fileTitle;
+            var searchTerm = term.IsNotNullOrWhiteSpace() ? term.Trim() : defaultTerm;
 
             if (itemType == ItemType.Jav && !javAvailable)
             {
@@ -109,19 +130,12 @@ namespace NzbDrone.Core.RootFolders
 
             var javIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (itemType != ItemType.Jav && javAvailable && (JavCode.TryNormalize(parsed?.Code, out var javCode) || JavCode.TryExtract(Path.GetFileName(file.Path), out javCode)))
+            if (itemType != ItemType.Jav && hasJavCode)
             {
-                try
-                {
-                    var javResults = Search(javCode, ItemType.Jav);
+                var javResults = SearchJavCode(javCode);
 
-                    movies.AddRange(javResults);
-                    javResults.ForEach(m => javIds.Add(m.ForeignId));
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug(ex, "JAV search for {0} failed; suggesting scenes only", javCode);
-                }
+                movies.AddRange(javResults);
+                javResults.ForEach(m => javIds.Add(m.ForeignId));
             }
 
             foreach (var candidate in (file.Candidates ?? []).Where(c => c.SceneId.IsNotNullOrWhiteSpace()).Take(MaxHashLookups))
@@ -136,15 +150,22 @@ namespace NzbDrone.Core.RootFolders
 
             movies.AddRange(Search(searchTerm, itemType));
 
+            var scored = movies
+                .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
+                .Select(m => Score(m, parsed, fileTitle, hashIds, hasJavCode ? javCode : null))
+                .ToList();
+
+            ClearSharedCodeMatches(scored);
+
             return new UnmappedFileSuggestions
             {
                 Term = searchTerm,
-                Results = movies
-                    .DistinctBy(m => m.ForeignId, StringComparer.OrdinalIgnoreCase)
-                    .Select(m => Score(m, parsed, fileTitle, hashIds))
+                Results = scored
                     .OrderByDescending(s => s.HashMatch)
+                    .ThenByDescending(s => s.CodeMatch)
                     .ThenByDescending(s => javIds.Contains(s.Movie.ForeignId))
                     .ThenByDescending(s => s.SameDate)
+                    .ThenByDescending(s => s.SameTitle && s.SameYear)
                     .ThenByDescending(s => s.TitleSimilarity)
                     .ThenByDescending(s => s.SameStudio)
                     .ToList()
@@ -215,12 +236,27 @@ namespace NzbDrone.Core.RootFolders
             _importFileRepository.SaveDismissed(files);
         }
 
+        // An extra lookup alongside the chosen type's search, so a failure leaves that search's results
+        private List<Movie> SearchJavCode(string javCode)
+        {
+            try
+            {
+                return Search(javCode, ItemType.Jav);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "JAV search for {0} failed; suggesting scenes only", javCode);
+
+                return new List<Movie>();
+            }
+        }
+
         private List<Movie> Search(string term, ItemType itemType)
         {
             return _searchProxy.SearchForNewEntity(term, itemType).OfType<Movie>().ToList();
         }
 
-        private static UnmappedFileSuggestion Score(Movie movie, ParsedMovieInfo parsed, string fileTitle, HashSet<string> hashIds)
+        private static UnmappedFileSuggestion Score(Movie movie, ParsedMovieInfo parsed, string fileTitle, HashSet<string> hashIds, string fileCode)
         {
             var releaseDate = movie.GetReleaseDate()?.ToString("yyyy-MM-dd");
             var studio = movie.MovieMetadata.Value.StudioTitle;
@@ -229,10 +265,51 @@ namespace NzbDrone.Core.RootFolders
             {
                 Movie = movie,
                 HashMatch = hashIds.Contains(movie.ForeignId),
+                CodeMatch = fileCode != null && JavCode.TryNormalize(movie.MovieMetadata.Value.Code, out var code) && code == fileCode,
+                SameTitle = IsSameTitle(fileTitle, movie.MovieMetadata.Value),
+                SameYear = parsed != null && parsed.Year > 0 && parsed.Year == movie.MovieMetadata.Value.Year,
                 SameDate = parsed?.ReleaseDate != null && parsed.ReleaseDate == releaseDate,
                 SameStudio = parsed?.StudioTitle != null && studio != null && parsed.StudioTitle.CleanMovieTitle() == studio.CleanMovieTitle(),
                 TitleSimilarity = GetTitleSimilarity(fileTitle, movie.Title)
             };
+        }
+
+        // A code two titles share (a mis-tagged entry at the source) can't say which one the file is
+        private static void ClearSharedCodeMatches(List<UnmappedFileSuggestion> suggestions)
+        {
+            if (suggestions.Count(s => s.CodeMatch) > 1)
+            {
+                suggestions.ForEach(s => s.CodeMatch = false);
+            }
+        }
+
+        private static bool IsSameTitle(string fileTitle, MovieMetadata metadata)
+        {
+            var clean = CleanForTitleMatch(fileTitle);
+
+            if (clean.IsNullOrWhiteSpace())
+            {
+                return false;
+            }
+
+            var titles = new[] { metadata.Title }
+                .Concat((metadata.AlternativeTitles ?? new List<AlternativeTitle>()).Select(t => t.Title));
+
+            return titles.Any(t => CleanForTitleMatch(t) == clean);
+        }
+
+        // "Pirates 2" and "Pirates II" are the same title. Only whole numbers are converted, before cleaning
+        // strips the spaces, so "21" never reads as "2" + "1" ("iii", the same as "3")
+        private static string CleanForTitleMatch(string title)
+        {
+            if (title.IsNullOrWhiteSpace())
+            {
+                return string.Empty;
+            }
+
+            var converted = WholeNumberRegex.Replace(title, m => RomanNumerals.TryGetValue(m.Value, out var roman) ? roman : m.Value);
+
+            return converted.CleanMovieTitle();
         }
 
         internal static int GetTitleSimilarity(string a, string b)
@@ -250,14 +327,28 @@ namespace NzbDrone.Core.RootFolders
 
         internal static string GetSearchTerm(ImportFile file, ParsedMovieInfo parsed)
         {
-            var title = parsed?.ReleaseTokens ?? parsed?.PrimaryMovieTitle;
+            var term = CleanSearchTerm(parsed?.ReleaseTokens ?? parsed?.PrimaryMovieTitle);
 
+            // A parse can leave only a tag as the title, e.g. "[Tag] (2024) ..." reads as a movie titled "[Tag]"
+            return term.IsNotNullOrWhiteSpace() ? term : CleanSearchTerm(Path.GetFileNameWithoutExtension(file.Path));
+        }
+
+        private static string CleanSearchTerm(string title)
+        {
             if (title.IsNullOrWhiteSpace())
             {
-                title = Path.GetFileNameWithoutExtension(file.Path);
+                return string.Empty;
             }
 
-            return TrailingTagsRegex.Replace(SeparatorsRegex.Replace(title, " "), string.Empty).Trim(' ', '-');
+            // Leading tags go first, or the trailing-tag cut starts at the first '[' and leaves nothing
+            var untagged = LeadingTagsRegex.Replace(SeparatorsRegex.Replace(title, " "), string.Empty);
+
+            return TrailingTagsRegex.Replace(untagged, string.Empty).Trim(' ', '-');
+        }
+
+        private static bool TryGetJavCode(ImportFile file, ParsedMovieInfo parsed, out string code)
+        {
+            return JavCode.TryNormalize(parsed?.Code, out code) || JavCode.TryExtract(Path.GetFileName(file.Path), out code);
         }
 
         private static ParsedMovieInfo Parse(ImportFile file)

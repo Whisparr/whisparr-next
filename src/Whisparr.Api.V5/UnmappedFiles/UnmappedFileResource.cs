@@ -14,7 +14,8 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public bool Exists { get; set; }
         public bool Dismissed { get; set; }
 
-        // Only set when the stored top suggestion matches on both studio and date
+        // Only set when the stored top suggestion matches on studio and date, on a JAV code no other result shares,
+        // or on title and year
         public UnmappedFileMatchResource Match { get; set; }
     }
 
@@ -25,6 +26,14 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public string StudioTitle { get; set; }
         public DateTime? ReleaseDate { get; set; }
         public bool HashMatch { get; set; }
+        public bool CodeMatch { get; set; }
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
+        public bool SameDate { get; set; }
+        public bool SameStudio { get; set; }
+
+        // The page a match was found from; each page shows only its own
+        public ItemType ItemType { get; set; }
     }
 
     public class UnmappedFileSuggestionResource
@@ -34,9 +43,15 @@ namespace Whisparr.Api.V5.UnmappedFiles
         public string StudioTitle { get; set; }
         public DateTime? ReleaseDate { get; set; }
         public ItemType ItemType { get; set; }
+
+        // Shown so a code-only JAV hit can be told apart from a weak title match
+        public string Code { get; set; }
         public bool IsExisting { get; set; }
         public bool HasFile { get; set; }
         public bool HashMatch { get; set; }
+        public bool CodeMatch { get; set; }
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
         public int TitleSimilarity { get; set; }
@@ -85,7 +100,13 @@ namespace Whisparr.Api.V5.UnmappedFiles
                         Title = match.Title,
                         StudioTitle = match.StudioTitle,
                         ReleaseDate = match.ReleaseDate,
-                        HashMatch = match.HashMatch
+                        HashMatch = match.HashMatch,
+                        CodeMatch = match.CodeMatch,
+                        SameTitle = match.SameTitle,
+                        SameYear = match.SameYear,
+                        SameDate = match.SameDate,
+                        SameStudio = match.SameStudio,
+                        ItemType = match.ItemType ?? ItemType.Scene
                     }
             };
         }
@@ -99,9 +120,13 @@ namespace Whisparr.Api.V5.UnmappedFiles
                 StudioTitle = model.Movie.MovieMetadata.Value.StudioTitle,
                 ReleaseDate = model.Movie.GetReleaseDate(),
                 ItemType = model.Movie.MovieMetadata.Value.ItemType,
+                Code = model.Movie.MovieMetadata.Value.Code,
                 IsExisting = existing != null,
                 HasFile = existing?.HasFile ?? false,
                 HashMatch = model.HashMatch,
+                CodeMatch = model.CodeMatch,
+                SameTitle = model.SameTitle,
+                SameYear = model.SameYear,
                 SameDate = model.SameDate,
                 SameStudio = model.SameStudio,
                 TitleSimilarity = model.TitleSimilarity

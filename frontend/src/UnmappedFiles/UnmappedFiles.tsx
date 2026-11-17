@@ -28,9 +28,15 @@ import {
   setUnmappedFilesSort,
   useUnmappedFilesOptions,
 } from './unmappedFilesOptionsStore';
-import useUnmappedFiles, { useDismissUnmappedFiles } from './useUnmappedFiles';
+import useUnmappedFiles, {
+  UnmappedItemType,
+  useDismissUnmappedFiles,
+} from './useUnmappedFiles';
 
-function UnmappedFiles() {
+// The file list is shared; the entry point picks the item type that Find Matches and the link modal search as
+function UnmappedFiles({
+  itemType = 'scene',
+}: Readonly<{ itemType?: UnmappedItemType }>) {
   const [term, setTerm] = useState('');
   const [showDismissed, setShowDismissed] = useState(false);
   const debouncedTerm = useDebounce(term, 300);
@@ -95,8 +101,9 @@ function UnmappedFiles() {
     executeCommand({
       name: commandNames.FIND_UNMAPPED_FILE_MATCHES,
       fileIds: matchableIds,
+      itemType,
     });
-  }, [executeCommand, matchableIds]);
+  }, [executeCommand, itemType, matchableIds]);
 
   const handleShowDismissedPress = useCallback(() => {
     setShowDismissed((value) => !value);
@@ -236,6 +243,7 @@ function UnmappedFiles() {
                     <UnmappedFileRow
                       key={item.id}
                       file={item}
+                      defaultItemType={itemType}
                       isSelected={selectedState[item.id] || false}
                       onSelectedChange={handleSelectedChange}
                       onDismissPress={handleDismissPress}

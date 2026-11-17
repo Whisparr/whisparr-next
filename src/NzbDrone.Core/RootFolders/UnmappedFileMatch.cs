@@ -1,4 +1,5 @@
 using System;
+using NzbDrone.Core.Movies;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -13,10 +14,20 @@ namespace NzbDrone.Core.RootFolders
         public bool SameDate { get; set; }
         public bool SameStudio { get; set; }
 
-        // The only matches worth showing in the table: the studio and the date both agree with the file
+        // Only set when no other result carries the same code, so a code shared by two titles is never shown as a match
+        public bool CodeMatch { get; set; }
+        public bool SameTitle { get; set; }
+        public bool SameYear { get; set; }
+
+        // The item type the run searched as; each page shows only its own. Null on matches stored before
+        // runs had a type, which were all Scene runs
+        public ItemType? ItemType { get; set; }
+
+        // The only matches worth showing in the table: studio and date agree with the file, the JAV code does,
+        // or (for movies) the title and year do
         public bool IsStrong()
         {
-            return SameStudio && SameDate;
+            return (SameStudio && SameDate) || CodeMatch || (SameTitle && SameYear);
         }
     }
 }

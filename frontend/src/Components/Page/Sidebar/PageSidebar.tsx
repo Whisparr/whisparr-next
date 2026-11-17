@@ -92,6 +92,10 @@ let LINKS: SidebarItem[] = [
         title: () => translate('Collections'),
         to: '/collections',
       },
+      {
+        title: () => translate('UnmappedFiles'),
+        to: '/movies/unmapped',
+      },
     ],
   },
 
@@ -104,6 +108,10 @@ let LINKS: SidebarItem[] = [
       {
         title: () => translate('AddNew'),
         to: '/add/new/jav',
+      },
+      {
+        title: () => translate('UnmappedFiles'),
+        to: '/jav/unmapped',
       },
     ],
   },
@@ -450,9 +458,9 @@ function PageSidebar({
         return;
       }
 
-      if (isSidebarVisible && (x > 210 || x < 180)) {
-        return;
-      } else if (!isSidebarVisible && x > 40) {
+      const outsideHandle = isSidebarVisible ? x > 210 || x < 180 : x > 40;
+
+      if (outsideHandle) {
         return;
       }
 
