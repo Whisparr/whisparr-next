@@ -9,6 +9,7 @@ using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.LegacyMigration;
+using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Commands;
@@ -233,6 +234,64 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Mocker.GetMock<IEventAggregator>()
                   .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
+        }
+
+        [Test]
+        public void should_queue_covers_for_new_scenes()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Subject.RefreshNewScenes(scenes);
+
+            VerifyCoversQueued(scenes);
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
+        }
+
+        [Test]
+        public void should_queue_covers_for_a_new_scene_that_failed_to_refresh()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                  .Setup(s => s.GetSceneInfo(scenes[1].ForeignId))
+                  .Throws(new IOException());
+
+            Subject.RefreshNewScenes(scenes);
+
+            VerifyCoversQueued(scenes);
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_queue_covers_for_collected_new_scenes_when_loop_throws()
+        {
+            var scenes = GivenNewScenes(3);
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovie(scenes[1].Id)).Throws(new IOException());
+
+            Assert.Throws<IOException>(() => Subject.RefreshNewScenes(scenes));
+
+            VerifyCoversQueued(scenes.Take(1).ToList());
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_not_queue_covers_when_there_are_no_new_scenes()
+        {
+            Subject.RefreshNewScenes(new List<Movie>());
+
+            Mocker.GetMock<IQueueNewMovieCovers>()
+                  .Verify(v => v.QueueNewMovieCovers(It.IsAny<IEnumerable<int>>()), Times.Never());
+        }
+
+        private void VerifyCoversQueued(List<Movie> scenes)
+        {
+            Mocker.GetMock<IQueueNewMovieCovers>()
+                  .Verify(v => v.QueueNewMovieCovers(It.Is<IEnumerable<int>>(ids => ids.SequenceEqual(scenes.Select(x => x.Id)))), Times.Once());
         }
 
         [Test]
