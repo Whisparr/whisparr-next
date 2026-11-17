@@ -463,10 +463,34 @@ namespace NzbDrone.Core.Test.MovieTests
             ExceptionVerification.ExpectedErrors(1);
         }
 
-        private void VerifyScanSkipped(Movie scene)
+        [Test]
+        public void should_skip_scan_of_new_scenes_whose_file_the_caller_linked()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Subject.RefreshNewScenes(scenes, rescan: false);
+
+            Mocker.GetMock<IDiskScanService>().Verify(v => v.Scan(It.IsAny<IEnumerable<int>>(), It.IsAny<bool>()), Times.Never());
+
+            VerifyScanSkipped(scenes[0], MovieScanSkippedReason.FileLinkedInPlace);
+            VerifyScanSkipped(scenes[1], MovieScanSkippedReason.FileLinkedInPlace);
+        }
+
+        [Test]
+        public void should_still_refresh_new_scenes_whose_file_the_caller_linked()
+        {
+            var scenes = GivenNewScenes(2);
+
+            Subject.RefreshNewScenes(scenes, rescan: false);
+
+            Mocker.GetMock<ICreditService>()
+                  .Verify(v => v.UpdateCredits(It.IsAny<List<Credit>>(), It.IsAny<MovieMetadata>()), Times.Exactly(2));
+        }
+
+        private void VerifyScanSkipped(Movie scene, MovieScanSkippedReason reason = MovieScanSkippedReason.MigrationInProgress)
         {
             Mocker.GetMock<IEventAggregator>()
-                  .Verify(v => v.PublishEvent(It.Is<MovieScanSkippedEvent>(e => e.Movie == scene && e.Reason == MovieScanSkippedReason.MigrationInProgress)), Times.Once());
+                  .Verify(v => v.PublishEvent(It.Is<MovieScanSkippedEvent>(e => e.Movie == scene && e.Reason == reason)), Times.Once());
         }
 
         [Test]
