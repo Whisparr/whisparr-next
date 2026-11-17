@@ -15,6 +15,8 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.LegacyMigration;
+using NzbDrone.Core.LegacyMigration.Events;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -40,6 +42,7 @@ namespace NzbDrone.Core.MediaCover
         IHandle<MovieUpdatedEvent>,
         IHandle<ApplicationStartedEvent>,
         IHandle<ApplicationShutdownRequested>,
+        IHandle<LegacyMigrationCompletedEvent>,
         IHandleAsync<PerformerUpdatedEvent>,
         IHandleAsync<StudioUpdatedEvent>,
         IHandleAsync<MoviesDeletedEvent>,
@@ -73,6 +76,7 @@ namespace NzbDrone.Core.MediaCover
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IEventAggregator _eventAggregator;
         private readonly IMovieService _movieService;
+        private readonly ILegacyMigrationGate _migrationGate;
         private readonly Logger _logger;
 
         private readonly object _movieCoverQueueLock;
@@ -115,10 +119,12 @@ namespace NzbDrone.Core.MediaCover
                                  IConfigFileProvider configFileProvider,
                                  IEventAggregator eventAggregator,
                                  IMovieService movieService,
+                                 ILegacyMigrationGate migrationGate,
                                  ICacheManager cacheManager,
                                  Logger logger)
         {
             _movieService = movieService;
+            _migrationGate = migrationGate;
             _mediaCoverProxy = mediaCoverProxy;
             _resizer = resizer;
             _httpClient = httpClient;
@@ -391,16 +397,37 @@ namespace NzbDrone.Core.MediaCover
                     return;
                 }
 
-                // One permit per id added, none for a duplicate. Never touches the slot semaphore, so
-                // this can't block behind a full update queue.
+                // One permit per id added, none for a duplicate, and none while the migration runs (the
+                // completion handler releases them). Never touches the slot semaphore, so this can't
+                // block behind a full update queue.
+                var paused = _migrationGate.AutomationPaused;
+
                 foreach (var movieId in movieIds)
                 {
                     if (_newMovieCoverBacklogIds.Add(movieId))
                     {
                         _newMovieCoverBacklog.Enqueue(movieId);
-                        _queuedMovieCovers.Release();
+
+                        if (!paused)
+                        {
+                            _queuedMovieCovers.Release();
+                        }
                     }
                 }
+            }
+        }
+
+        public void Handle(LegacyMigrationCompletedEvent message)
+        {
+            lock (_movieCoverQueueLock)
+            {
+                if (_movieCoverLifecycleState != MovieCoverLifecycleState.Running || _newMovieCoverBacklog.Count == 0)
+                {
+                    return;
+                }
+
+                // Replaces the wake-ups the workers used up while the backlog was held.
+                _queuedMovieCovers.Release(_newMovieCoverBacklog.Count);
             }
         }
 
@@ -1021,6 +1048,9 @@ namespace NzbDrone.Core.MediaCover
                 {
                     _queuedMovieCovers.Wait(CancellationToken.None);
 
+                    // Read before the lock; the gate is cached but isn't ours to hold the lock across.
+                    var backlogPaused = _migrationGate.AutomationPaused;
+
                     int movieId;
                     Movie movie;
                     var fromBacklog = false;
@@ -1034,7 +1064,9 @@ namespace NzbDrone.Core.MediaCover
                                 return;
                             }
 
-                            if (_newMovieCoverBacklog.Count == 0)
+                            // While the migration runs the backlog is held: this wake-up is used up, and
+                            // the completion handler releases one permit per held id.
+                            if (backlogPaused || _newMovieCoverBacklog.Count == 0)
                             {
                                 continue;
                             }

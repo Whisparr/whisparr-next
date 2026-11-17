@@ -15,6 +15,8 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.LegacyMigration;
+using NzbDrone.Core.LegacyMigration.Events;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Messaging.Events;
@@ -1916,6 +1918,83 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             completed.Wait(5000).Should().BeTrue();
             updated.Should().BeFalse();
             Mocker.GetMock<IHttpClient>().Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_hold_new_movie_covers_while_the_migration_is_running()
+        {
+            var processed = new CountdownEvent(2);
+            var paused = true;
+
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(v => v.AutomationPaused).Returns(() => Volatile.Read(ref paused));
+            Mocker.GetMock<IEventAggregator>()
+                  .Setup(v => v.PublishEvent(It.IsAny<MediaCoversUpdatedEvent>()))
+                  .Callback<MediaCoversUpdatedEvent>(_ => processed.Signal());
+            GivenAnyNewMovie();
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Subject.QueueNewMovieCovers(new[] { 21, 22 });
+            Thread.Sleep(500);
+
+            Mocker.GetMock<IMovieService>().Verify(v => v.GetMovie(It.IsAny<int>()), Times.Never());
+            Subject.MovieCoverQueueTest.NewMovieCoverBacklogCount.Should().Be(2);
+
+            Volatile.Write(ref paused, false);
+            Subject.Handle(new LegacyMigrationCompletedEvent());
+
+            processed.Wait(5000).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_process_movie_updates_while_the_migration_is_running()
+        {
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(v => v.AutomationPaused).Returns(true);
+            var completed = GivenCompletionSignal(40);
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Subject.Handle(new MovieUpdatedEvent(GivenMovie(40)));
+
+            completed.Wait(5000).Should().BeTrue();
+        }
+
+        [Test]
+        public void should_resume_new_movie_covers_queued_before_the_migration_started()
+        {
+            var processed = new CountdownEvent(3);
+            var paused = false;
+            var gate = GivenBlockedWorkers();
+
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(v => v.AutomationPaused).Returns(() => Volatile.Read(ref paused));
+            Mocker.GetMock<IEventAggregator>()
+                  .Setup(v => v.PublishEvent(It.IsAny<MediaCoversUpdatedEvent>()))
+                  .Callback<MediaCoversUpdatedEvent>(message =>
+                  {
+                      if (message.Movie.Id < 1000)
+                      {
+                          processed.Signal();
+                      }
+                  });
+            GivenAnyNewMovie();
+
+            try
+            {
+                Subject.QueueNewMovieCovers(new[] { 31, 32, 33 });
+                Volatile.Write(ref paused, true);
+                ReleaseBlockedWorkers(gate);
+                Thread.Sleep(500);
+
+                processed.CurrentCount.Should().Be(3);
+                Subject.MovieCoverQueueTest.NewMovieCoverBacklogCount.Should().Be(3);
+
+                Volatile.Write(ref paused, false);
+                Subject.Handle(new LegacyMigrationCompletedEvent());
+
+                processed.Wait(5000).Should().BeTrue();
+            }
+            finally
+            {
+                ReleaseBlockedWorkers(gate);
+            }
         }
 
         // Starts the worker pool and parks every worker in AlreadyExists on a movie update. Updates
