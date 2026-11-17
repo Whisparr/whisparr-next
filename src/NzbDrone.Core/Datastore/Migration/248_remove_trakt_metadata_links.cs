@@ -9,7 +9,7 @@ using NzbDrone.Core.Datastore.Migration.Framework;
 
 namespace NzbDrone.Core.Datastore.Migration
 {
-    [Migration(315)]
+    [Migration(248)]
     public class remove_trakt_metadata_links : NzbDroneMigrationBase
     {
         private const int TmdbLink = 0;
