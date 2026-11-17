@@ -14,6 +14,7 @@ using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -44,7 +45,8 @@ namespace NzbDrone.Core.MediaCover
         IHandleAsync<MoviesDeletedEvent>,
         IHandleAsync<PerformersDeletedEvent>,
         IHandleAsync<StudiosDeletedEvent>,
-        IMapCoversToLocal
+        IMapCoversToLocal,
+        IQueueNewMovieCovers
     {
         internal const int MovieCoverQueueCapacity = 100;
 
@@ -70,10 +72,16 @@ namespace NzbDrone.Core.MediaCover
         private readonly ICoverExistsSpecification _coverExistsSpecification;
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IEventAggregator _eventAggregator;
+        private readonly IMovieService _movieService;
         private readonly Logger _logger;
 
         private readonly object _movieCoverQueueLock;
         private readonly Queue<int> _movieCoverQueue;
+
+        // Ids of newly added movies whose covers are known to be missing. Unbounded and id-only, so
+        // a bulk add never blocks its caller; workers drain it after the update queue is empty.
+        private readonly Queue<int> _newMovieCoverBacklog;
+        private readonly HashSet<int> _newMovieCoverBacklogIds;
         private readonly Dictionary<int, PendingMovieCover> _pendingMovieCovers;
 
         // Retain admitted sequence high-water marks while needed to reject older producers.
@@ -106,9 +114,11 @@ namespace NzbDrone.Core.MediaCover
                                  ICoverExistsSpecification coverExistsSpecification,
                                  IConfigFileProvider configFileProvider,
                                  IEventAggregator eventAggregator,
+                                 IMovieService movieService,
                                  ICacheManager cacheManager,
                                  Logger logger)
         {
+            _movieService = movieService;
             _mediaCoverProxy = mediaCoverProxy;
             _resizer = resizer;
             _httpClient = httpClient;
@@ -124,6 +134,8 @@ namespace NzbDrone.Core.MediaCover
             _movieCoverWorkerCount = MovieCoverWorkerCount;
             _movieCoverQueueLock = new object();
             _movieCoverQueue = new Queue<int>();
+            _newMovieCoverBacklog = new Queue<int>();
+            _newMovieCoverBacklogIds = new HashSet<int>();
             _pendingMovieCovers = new Dictionary<int, PendingMovieCover>();
             _movieCoverHighWaterSequences = new Dictionary<int, long>();
             _movieCoverProducerCounts = new Dictionary<int, int>();
@@ -369,6 +381,29 @@ namespace NzbDrone.Core.MediaCover
             }
         }
 
+        public void QueueNewMovieCovers(IEnumerable<int> movieIds)
+        {
+            lock (_movieCoverQueueLock)
+            {
+                if (_movieCoverLifecycleState != MovieCoverLifecycleState.Running)
+                {
+                    _logger.Debug("Ignoring new movie covers because the media cover queue is not running");
+                    return;
+                }
+
+                // One permit per id added, none for a duplicate. Never touches the slot semaphore, so
+                // this can't block behind a full update queue.
+                foreach (var movieId in movieIds)
+                {
+                    if (_newMovieCoverBacklogIds.Add(movieId))
+                    {
+                        _newMovieCoverBacklog.Enqueue(movieId);
+                        _queuedMovieCovers.Release();
+                    }
+                }
+            }
+        }
+
         public void Handle(ApplicationStartedEvent message)
         {
             lock (_movieCoverQueueLock)
@@ -592,7 +627,7 @@ namespace NzbDrone.Core.MediaCover
             return Path.Combine(_coverRootFolder, "studio", studioId.ToString());
         }
 
-        private bool EnsureCovers(Movie movie)
+        private bool EnsureCovers(Movie movie, bool coversKnownMissing = false)
         {
             var updated = false;
             var toResize = new List<Tuple<MediaCover, bool>>();
@@ -609,7 +644,7 @@ namespace NzbDrone.Core.MediaCover
 
                 try
                 {
-                    alreadyExists = _coverExistsSpecification.AlreadyExists(cover.RemoteUrl, fileName);
+                    alreadyExists = !coversKnownMissing && _coverExistsSpecification.AlreadyExists(cover.RemoteUrl, fileName);
 
                     if (!alreadyExists)
                     {
@@ -988,6 +1023,7 @@ namespace NzbDrone.Core.MediaCover
 
                     int movieId;
                     Movie movie;
+                    var fromBacklog = false;
 
                     lock (_movieCoverQueueLock)
                     {
@@ -998,23 +1034,49 @@ namespace NzbDrone.Core.MediaCover
                                 return;
                             }
 
-                            continue;
-                        }
+                            if (_newMovieCoverBacklog.Count == 0)
+                            {
+                                continue;
+                            }
 
-                        movieId = _movieCoverQueue.Dequeue();
-                        movie = _pendingMovieCovers[movieId].Movie;
-                        _pendingMovieCovers.Remove(movieId);
-                        _activeMovieCoverWorkerCounts[movieId] = _activeMovieCoverWorkerCounts.GetValueOrDefault(movieId) + 1;
-                        _movieCoverQueueSlots.Release();
+                            movieId = _newMovieCoverBacklog.Dequeue();
+                            _newMovieCoverBacklogIds.Remove(movieId);
+
+                            if (_pendingMovieCovers.ContainsKey(movieId) ||
+                                _activeMovieCoverWorkerCounts.ContainsKey(movieId) ||
+                                _deletedMovieCoversWithActiveWork.Contains(movieId))
+                            {
+                                continue;
+                            }
+
+                            _activeMovieCoverWorkerCounts[movieId] = _activeMovieCoverWorkerCounts.GetValueOrDefault(movieId) + 1;
+                            movie = null;
+                            fromBacklog = true;
+                        }
+                        else
+                        {
+                            movieId = _movieCoverQueue.Dequeue();
+                            movie = _pendingMovieCovers[movieId].Movie;
+                            _pendingMovieCovers.Remove(movieId);
+                            _activeMovieCoverWorkerCounts[movieId] = _activeMovieCoverWorkerCounts.GetValueOrDefault(movieId) + 1;
+                            _movieCoverQueueSlots.Release();
+                        }
                     }
 
                     try
                     {
-                        HandleAsync(new MovieUpdatedEvent(movie));
+                        if (fromBacklog)
+                        {
+                            ProcessNewMovieCovers(movieId);
+                        }
+                        else
+                        {
+                            HandleAsync(new MovieUpdatedEvent(movie));
+                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, "Error processing media covers for movie {0}", movie.Id);
+                        _logger.Error(ex, "Error processing media covers for movie {0}", movieId);
                     }
                     finally
                     {
@@ -1033,6 +1095,24 @@ namespace NzbDrone.Core.MediaCover
                     ReconcileShutdown(Thread.CurrentThread);
                 }
             }
+        }
+
+        private void ProcessNewMovieCovers(int movieId)
+        {
+            Movie movie;
+
+            try
+            {
+                movie = _movieService.GetMovie(movieId);
+            }
+            catch (ModelNotFoundException)
+            {
+                _logger.Debug("Skipping covers for movie {0} because it no longer exists", movieId);
+                return;
+            }
+
+            var updated = EnsureCovers(movie, coversKnownMissing: true);
+            _eventAggregator.PublishEvent(new MediaCoversUpdatedEvent(movie, updated));
         }
 
         private void CompleteMovieCoverProcessing(int movieId)
@@ -1122,6 +1202,20 @@ namespace NzbDrone.Core.MediaCover
                     _movieCoverQueue.Enqueue(movieId);
                 }
 
+                // No permit is drained for backlog ids: an extra wake-up finds nothing and continues,
+                // while draining could take a permit that belongs to an update queue entry.
+                if (_newMovieCoverBacklogIds.RemoveWhere(deletedMovieIds.Contains) > 0)
+                {
+                    var retainedBacklogIds = _newMovieCoverBacklog.Where(movieId => !deletedMovieIds.Contains(movieId)).ToArray();
+
+                    _newMovieCoverBacklog.Clear();
+
+                    foreach (var movieId in retainedBacklogIds)
+                    {
+                        _newMovieCoverBacklog.Enqueue(movieId);
+                    }
+                }
+
                 foreach (var movieId in deletedMovieIds)
                 {
                     _pendingMovieCovers.Remove(movieId);
@@ -1177,6 +1271,17 @@ namespace NzbDrone.Core.MediaCover
                     lock (_owner._movieCoverQueueLock)
                     {
                         return _owner._pendingMovieCovers.Count;
+                    }
+                }
+            }
+
+            internal int NewMovieCoverBacklogCount
+            {
+                get
+                {
+                    lock (_owner._movieCoverQueueLock)
+                    {
+                        return _owner._newMovieCoverBacklog.Count;
                     }
                 }
             }
