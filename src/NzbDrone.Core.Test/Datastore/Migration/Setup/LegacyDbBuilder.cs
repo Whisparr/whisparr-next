@@ -16,7 +16,7 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
     public static class LegacyDbBuilder
     {
         // The last Eros migration, so a fresh database migrated this far has the Eros schema.
-        public const long ErosVersion = 247;
+        public const long ErosVersion = 248;
 
         public static void CreateErosSqlite(string path)
         {
