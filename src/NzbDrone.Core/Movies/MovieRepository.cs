@@ -42,6 +42,7 @@ namespace NzbDrone.Core.Movies
         List<MoviePathEntry> AllMoviePathEntries();
         List<MoviePathEntry> NonScenePathEntries();
         List<int> AllMovieIds();
+        List<int> AllMovieIdsAddedSince(DateTime since);
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
         List<string> AllMovieTpdbIds();
@@ -440,6 +441,19 @@ namespace NzbDrone.Core.Movies
             using (var conn = _database.OpenConnection())
             {
                 return conn.Query<int>("SELECT \"Id\" FROM \"Movies\" ").ToList();
+            }
+        }
+
+        public List<int> AllMovieIdsAddedSince(DateTime since)
+        {
+            var sql = new SqlBuilder(_database.DatabaseType)
+                .Select("\"Movies\".\"Id\"")
+                .Where<Movie>(x => x.Added >= since)
+                .AddSelectTemplate(typeof(Movie));
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<int>(sql.RawSql, sql.Parameters).ToList();
             }
         }
 

@@ -52,6 +52,7 @@ namespace NzbDrone.Core.Movies
         List<MoviePathEntry> AllMoviePathEntries();
         List<MoviePathEntry> NonScenePathEntries();
         List<int> AllMovieIds();
+        List<int> AllMovieIdsAddedSince(DateTime since);
         List<int> AllMovieIdsOrderByLastInfoSync();
         List<int> AllMovieTmdbIds();
         List<string> AllMovieTpdbIds();
@@ -364,6 +365,11 @@ namespace NzbDrone.Core.Movies
         public List<int> AllMovieIds()
         {
             return _movieRepository.AllMovieIds();
+        }
+
+        public List<int> AllMovieIdsAddedSince(DateTime since)
+        {
+            return _movieRepository.AllMovieIdsAddedSince(since);
         }
 
         /// <summary> Get a list of all movie IDs in the repository. Order by yLastInfoSyn</summary>

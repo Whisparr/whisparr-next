@@ -397,21 +397,15 @@ namespace NzbDrone.Core.MediaCover
                     return;
                 }
 
-                // One permit per id added, none for a duplicate, and none while the migration runs (the
-                // completion handler releases them). Never touches the slot semaphore, so this can't
-                // block behind a full update queue.
-                var paused = IsNewMovieCoverBacklogPaused();
-
+                // One permit per id added and none for a duplicate. The migration gate isn't read here: a worker
+                // woken while the migration runs drops the wake-up, and the completion handler releases them again.
+                // Never touches the slot semaphore, so this can't block behind a full update queue.
                 foreach (var movieId in movieIds)
                 {
                     if (_newMovieCoverBacklogIds.Add(movieId))
                     {
                         _newMovieCoverBacklog.Enqueue(movieId);
-
-                        if (!paused)
-                        {
-                            _queuedMovieCovers.Release();
-                        }
+                        _queuedMovieCovers.Release();
                     }
                 }
             }
@@ -419,16 +413,44 @@ namespace NzbDrone.Core.MediaCover
 
         public void Handle(LegacyMigrationCompletedEvent message)
         {
+            // The backlog is held for the whole migration, so nothing it added has covers yet. A restart drops the
+            // held ids and a resumed migration doesn't add those scenes again, so the database is the record of
+            // what to fetch. Read outside the lock; a failed read still releases what's held in memory.
+            var addedIds = new List<int>();
+
+            if (message.StartedAt.HasValue)
+            {
+                try
+                {
+                    addedIds = _movieService.AllMovieIdsAddedSince(message.StartedAt.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Couldn't read the items added by the migration, only covers queued since the last start will be fetched");
+                }
+            }
+
             // MarkCompleted is the only path that unpauses the gate, so this handler is the only resume point.
             lock (_movieCoverQueueLock)
             {
-                if (_movieCoverLifecycleState != MovieCoverLifecycleState.Running || _newMovieCoverBacklog.Count == 0)
+                if (_movieCoverLifecycleState != MovieCoverLifecycleState.Running)
                 {
                     return;
                 }
 
+                foreach (var movieId in addedIds)
+                {
+                    if (_newMovieCoverBacklogIds.Add(movieId))
+                    {
+                        _newMovieCoverBacklog.Enqueue(movieId);
+                    }
+                }
+
                 // Replaces the wake-ups the workers used up while the backlog was held.
-                _queuedMovieCovers.Release(_newMovieCoverBacklog.Count);
+                if (_newMovieCoverBacklog.Count > 0)
+                {
+                    _queuedMovieCovers.Release(_newMovieCoverBacklog.Count);
+                }
             }
         }
 
@@ -1066,6 +1088,10 @@ namespace NzbDrone.Core.MediaCover
                     Movie movie;
                     var fromBacklog = false;
 
+                    // Read before taking the lock: SaveProgress clears the gate's cache on every save, so during a
+                    // migration this can be a database read, and producers must not wait behind it.
+                    var backlogPaused = IsNewMovieCoverBacklogPaused();
+
                     lock (_movieCoverQueueLock)
                     {
                         if (_movieCoverQueue.Count == 0)
@@ -1077,15 +1103,16 @@ namespace NzbDrone.Core.MediaCover
 
                             // While the migration runs the backlog is held: this wake-up is used up, and
                             // the completion handler releases one permit per held id.
-                            if (_newMovieCoverBacklog.Count == 0 || IsNewMovieCoverBacklogPaused())
+                            if (_newMovieCoverBacklog.Count == 0 || backlogPaused)
                             {
                                 continue;
                             }
 
                             movieId = _newMovieCoverBacklog.Dequeue();
-                            _newMovieCoverBacklogIds.Remove(movieId);
 
-                            if (_activeMovieCoverWorkerCounts.ContainsKey(movieId) ||
+                            // Not in the id set: deleted while queued, or a duplicate entry left by a delete and re-add.
+                            if (!_newMovieCoverBacklogIds.Remove(movieId) ||
+                                _activeMovieCoverWorkerCounts.ContainsKey(movieId) ||
                                 _deletedMovieCoversWithActiveWork.Contains(movieId))
                             {
                                 continue;
@@ -1244,29 +1271,11 @@ namespace NzbDrone.Core.MediaCover
                     _movieCoverQueue.Enqueue(movieId);
                 }
 
-                // No permit is drained for backlog ids: an extra wake-up finds nothing and continues,
-                // while draining could take a permit that belongs to an update queue entry.
-                var removedBacklogIds = false;
-
                 foreach (var movieId in deletedMovieIds)
                 {
-                    removedBacklogIds |= _newMovieCoverBacklogIds.Remove(movieId);
-                }
-
-                if (removedBacklogIds)
-                {
-                    var retainedBacklogIds = _newMovieCoverBacklog.Where(_newMovieCoverBacklogIds.Contains).ToArray();
-
-                    _newMovieCoverBacklog.Clear();
-
-                    foreach (var movieId in retainedBacklogIds)
-                    {
-                        _newMovieCoverBacklog.Enqueue(movieId);
-                    }
-                }
-
-                foreach (var movieId in deletedMovieIds)
-                {
+                    // The queue entry stays and the worker skips it. No permit is drained either: an extra wake-up
+                    // finds nothing and continues, while draining could take a permit that belongs to an update.
+                    _newMovieCoverBacklogIds.Remove(movieId);
                     _pendingMovieCovers.Remove(movieId);
 
                     if (_movieCoverProducerCounts.ContainsKey(movieId) || _activeMovieCoverWorkerCounts.ContainsKey(movieId))
@@ -1330,7 +1339,8 @@ namespace NzbDrone.Core.MediaCover
                 {
                     lock (_owner._movieCoverQueueLock)
                     {
-                        return _owner._newMovieCoverBacklog.Count;
+                        // Live ids only: a deleted id's queue entry stays until a worker skips it
+                        return _owner._newMovieCoverBacklogIds.Count;
                     }
                 }
             }

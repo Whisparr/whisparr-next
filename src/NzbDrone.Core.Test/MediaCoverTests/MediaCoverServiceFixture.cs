@@ -2024,27 +2024,161 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             updateCompleted.Wait(5000).Should().BeTrue();
             Subject.MovieCoverQueueTest.WorkerCountAlive.Should().Be(MediaCoverService.MovieCoverWorkerCount);
 
-            // One for the producer's read, one for the worker's wake-up.
+            // One per worker wake-up: the new movie and the update.
             ExceptionVerification.ExpectedWarns(2);
         }
 
         [Test]
-        public void should_queue_new_movie_covers_when_the_migration_gate_read_fails()
+        public void should_not_read_the_migration_gate_when_queueing_new_movie_covers()
         {
-            var processed = GivenCompletionSignal(1);
+            var gate = GivenBlockedWorkers();
+            var reads = 0;
 
             Mocker.GetMock<ILegacyMigrationGate>()
                   .SetupGet(v => v.AutomationPaused)
+                  .Returns(() =>
+                  {
+                      Interlocked.Increment(ref reads);
+                      return false;
+                  });
+
+            try
+            {
+                Subject.QueueNewMovieCovers(new[] { 1, 2, 3 });
+
+                Volatile.Read(ref reads).Should().Be(0);
+                Subject.MovieCoverQueueTest.NewMovieCoverBacklogCount.Should().Be(3);
+            }
+            finally
+            {
+                ReleaseBlockedWorkers(gate);
+            }
+        }
+
+        [Test]
+        public void should_not_block_producers_while_a_worker_reads_the_migration_gate()
+        {
+            var readStarted = new ManualResetEventSlim();
+            var releaseRead = new ManualResetEventSlim();
+
+            Mocker.GetMock<ILegacyMigrationGate>()
+                  .SetupGet(v => v.AutomationPaused)
+                  .Returns(() =>
+                  {
+                      readStarted.Set();
+                      releaseRead.Wait(5000);
+                      return true;
+                  });
+            Subject.Handle(new ApplicationStartedEvent());
+
+            try
+            {
+                Subject.QueueNewMovieCovers(new[] { 61 });
+                readStarted.Wait(5000).Should().BeTrue();
+
+                // A worker is inside the gate read; producers take the same lock and must not wait for it.
+                var produce = Task.Run(() =>
+                {
+                    Subject.QueueNewMovieCovers(new[] { 62 });
+                    Subject.Handle(new MovieUpdatedEvent(GivenMovie(63)));
+                });
+
+                produce.Wait(1000).Should().BeTrue();
+            }
+            finally
+            {
+                releaseRead.Set();
+            }
+        }
+
+        [Test]
+        public void should_fetch_covers_held_across_a_restart_on_completion()
+        {
+            var startedAt = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+            var processed = new CountdownEvent(3);
+            var ids = new ConcurrentBag<int>();
+            var paused = true;
+
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(v => v.AutomationPaused).Returns(() => Volatile.Read(ref paused));
+            Mocker.GetMock<IMovieService>().Setup(v => v.AllMovieIdsAddedSince(startedAt)).Returns(new List<int> { 71, 72, 73 });
+            Mocker.GetMock<IEventAggregator>()
+                  .Setup(v => v.PublishEvent(It.IsAny<MediaCoversUpdatedEvent>()))
+                  .Callback<MediaCoversUpdatedEvent>(message =>
+                  {
+                      ids.Add(message.Movie.Id);
+                      processed.Signal();
+                  });
+            GivenAnyNewMovie();
+            Subject.Handle(new ApplicationStartedEvent());
+
+            // 72 was queued after the restart; 71 and 73 only exist in the database.
+            Subject.QueueNewMovieCovers(new[] { 72 });
+            Thread.Sleep(200);
+
+            Volatile.Write(ref paused, false);
+            Subject.Handle(new LegacyMigrationCompletedEvent { StartedAt = startedAt });
+
+            processed.Wait(5000).Should().BeTrue();
+            ids.Should().BeEquivalentTo(new[] { 71, 72, 73 });
+            Mocker.GetMock<IMovieService>().Verify(v => v.GetMovie(72), Times.Once());
+        }
+
+        [Test]
+        public void should_not_query_added_movies_on_completion_without_a_start_time()
+        {
+            Subject.Handle(new ApplicationStartedEvent());
+
+            Subject.Handle(new LegacyMigrationCompletedEvent());
+
+            Mocker.GetMock<IMovieService>().Verify(v => v.AllMovieIdsAddedSince(It.IsAny<DateTime>()), Times.Never());
+        }
+
+        [Test]
+        public void should_release_held_covers_when_the_added_movie_read_fails()
+        {
+            var processed = GivenCompletionSignal(81);
+            var paused = true;
+
+            Mocker.GetMock<ILegacyMigrationGate>().SetupGet(v => v.AutomationPaused).Returns(() => Volatile.Read(ref paused));
+            Mocker.GetMock<IMovieService>()
+                  .Setup(v => v.AllMovieIdsAddedSince(It.IsAny<DateTime>()))
                   .Throws(new InvalidOperationException("database is locked"));
             GivenAnyNewMovie();
             Subject.Handle(new ApplicationStartedEvent());
 
-            Assert.DoesNotThrow(() => Subject.QueueNewMovieCovers(new[] { 1 }));
+            Subject.QueueNewMovieCovers(new[] { 81 });
+            Thread.Sleep(200);
+
+            Volatile.Write(ref paused, false);
+            Subject.Handle(new LegacyMigrationCompletedEvent { StartedAt = DateTime.UtcNow });
 
             processed.Wait(5000).Should().BeTrue();
+            ExceptionVerification.ExpectedWarns(1);
+        }
 
-            // One for the producer's read, one for the worker's wake-up.
-            ExceptionVerification.ExpectedWarns(2);
+        [Test]
+        public void should_download_a_new_movie_deleted_and_added_again_once()
+        {
+            var gate = GivenBlockedWorkers();
+            var completed = GivenCompletionSignal(13);
+            GivenNewMovie(13);
+
+            try
+            {
+                Subject.QueueNewMovieCovers(new[] { 13 });
+                Subject.HandleAsync(new MoviesDeletedEvent(new List<Movie> { GivenMovie(13) }, false, false));
+                Subject.QueueNewMovieCovers(new[] { 13 });
+
+                Subject.MovieCoverQueueTest.NewMovieCoverBacklogCount.Should().Be(1);
+            }
+            finally
+            {
+                ReleaseBlockedWorkers(gate);
+            }
+
+            completed.Wait(5000).Should().BeTrue();
+            Thread.Sleep(200);
+            Mocker.GetMock<IMovieService>().Verify(v => v.GetMovie(13), Times.Once());
         }
 
         // Starts the worker pool and parks every worker in AlreadyExists on a movie update. Updates
