@@ -201,10 +201,6 @@ namespace NzbDrone.Core.LegacyMigration
             full.MatchTier = tier;
             _mediaFileService.Update(full);
 
-            existing.MovieId = full.MovieId;
-            existing.RelativePath = full.RelativePath;
-            existing.MatchTier = full.MatchTier;
-
             var oldMovie = _movieService.GetMovies(new[] { oldMovieId }).FirstOrDefault();
 
             if (oldMovie != null && oldMovie.MovieFileId == existing.Id)

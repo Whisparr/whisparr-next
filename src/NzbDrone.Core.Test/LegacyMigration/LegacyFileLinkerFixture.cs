@@ -228,7 +228,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Subject.Link(_movie, _file, f => { }, MatchTier.Hash).Should().Be(LinkOutcome.Linked);
 
-            existing.MatchTier.Should().Be(MatchTier.Hash);
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(It.Is<MovieFile>(f => f.Id == 5 && f.MatchTier == MatchTier.Hash)), Times.Once());
         }
 
         [TestCase(MatchTier.Hash)]
@@ -283,9 +283,6 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
 
-            existing.MovieId.Should().Be(7);
-            existing.MatchTier.Should().Be(MatchTier.Confirmed);
-            existing.RelativePath.Should().Be("scene.mp4");
             oldMovie.MovieFileId.Should().Be(0);
             _movie.MovieFileId.Should().Be(5);
             _movie.Path.Should().Be(@"C:\data\library\Studio".AsOsAgnostic());
