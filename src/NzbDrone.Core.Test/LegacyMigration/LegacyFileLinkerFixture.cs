@@ -43,6 +43,11 @@ namespace NzbDrone.Core.Test.LegacyMigration
                       return f;
                   });
 
+            // A move reloads the full row; FindByFullPath only returns a light one
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetMovie(It.IsAny<int>()))
+                  .Returns<int>(id => new MovieFile { Id = id });
+
             Mocker.GetMock<IRootFolderService>()
                   .Setup(s => s.All())
                   .Returns(new List<RootFolder> { new RootFolder { Id = 3, Path = _root } });
@@ -223,7 +228,7 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Subject.Link(_movie, _file, f => { }, MatchTier.Hash).Should().Be(LinkOutcome.Linked);
 
-            existing.MatchTier.Should().Be(MatchTier.Hash);
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(It.Is<MovieFile>(f => f.Id == 5 && f.MatchTier == MatchTier.Hash)), Times.Once());
         }
 
         [TestCase(MatchTier.Hash)]
@@ -278,14 +283,12 @@ namespace NzbDrone.Core.Test.LegacyMigration
 
             Subject.Link(_movie, _file, f => { }).Should().Be(LinkOutcome.Linked);
 
-            existing.MovieId.Should().Be(7);
-            existing.MatchTier.Should().Be(MatchTier.Confirmed);
-            existing.RelativePath.Should().Be("scene.mp4");
             oldMovie.MovieFileId.Should().Be(0);
             _movie.MovieFileId.Should().Be(5);
             _movie.Path.Should().Be(@"C:\data\library\Studio".AsOsAgnostic());
 
-            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(existing), Times.Once());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.GetMovie(5), Times.Once());
+            Mocker.GetMock<IMediaFileService>().Verify(s => s.Update(It.Is<MovieFile>(f => f.Id == 5 && f.MovieId == 7 && f.MatchTier == MatchTier.Confirmed && f.RelativePath == "scene.mp4")), Times.Once());
             Mocker.GetMock<IMediaFileService>().Verify(s => s.Add(It.IsAny<MovieFile>()), Times.Never());
             Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(oldMovie), Times.Once());
             Mocker.GetMock<IMovieService>().Verify(s => s.UpdateMovie(_movie), Times.Once());

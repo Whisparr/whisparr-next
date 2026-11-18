@@ -192,10 +192,14 @@ namespace NzbDrone.Core.LegacyMigration
         {
             var oldMovieId = existing.MovieId;
 
-            existing.MovieId = movie.Id;
-            existing.RelativePath = movieFolder.GetRelativePath(existing.Path);
-            existing.MatchTier = tier;
-            _mediaFileService.Update(existing);
+            // FindByFullPath fills only a few columns, and Update writes every one, so the move is made on the full row
+            var full = _mediaFileService.GetMovie(existing.Id);
+
+            full.Path = existing.Path;
+            full.MovieId = movie.Id;
+            full.RelativePath = movieFolder.GetRelativePath(existing.Path);
+            full.MatchTier = tier;
+            _mediaFileService.Update(full);
 
             var oldMovie = _movieService.GetMovies(new[] { oldMovieId }).FirstOrDefault();
 
