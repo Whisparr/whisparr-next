@@ -75,7 +75,9 @@ namespace NzbDrone.Host
             }
             catch (TerminateApplicationException e)
             {
+#pragma warning disable S6667 // A requested stop, not a failure: the message is enough, a stack trace would read as a crash.
                 Logger.Info(e.Message);
+#pragma warning restore S6667
                 LogManager.Configuration = null;
             }
 
@@ -85,8 +87,10 @@ namespace NzbDrone.Host
 
         private static void ClearDatabasePools()
         {
+#pragma warning disable S1215 // Finalizers must run first so abandoned connections return to the pools being cleared.
             GC.Collect();
             GC.WaitForPendingFinalizers();
+#pragma warning restore S1215
             SQLiteConnection.ClearAllPools();
             NpgsqlConnection.ClearAllPools();
         }
