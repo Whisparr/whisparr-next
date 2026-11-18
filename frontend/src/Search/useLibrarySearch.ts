@@ -17,11 +17,13 @@ export interface LibrarySearchResult {
   jav: LibrarySearchSection<Movie>;
 }
 
-export type LibrarySearchType = 'scene' | 'movie' | 'performer' | 'studio';
+export type LibrarySearchType =
+  'scene' | 'movie' | 'jav' | 'performer' | 'studio';
 
 interface LibrarySearchTypeMap {
   scene: Movie;
   movie: Movie;
+  jav: Movie;
   performer: Performer;
   studio: Studio;
 }

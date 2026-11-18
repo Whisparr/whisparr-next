@@ -22,6 +22,17 @@ import formatBytes from 'Utilities/Number/formatBytes';
 import translate from 'Utilities/String/translate';
 import styles from './SceneRow.module.css';
 
+function getMonitorType(itemType: Movie['itemType']) {
+  switch (itemType) {
+    case 'scene':
+      return 'sceneMonitor';
+    case 'jav':
+      return 'javMonitor';
+    default:
+      return 'movieMonitor';
+  }
+}
+
 interface SceneRowProps {
   movie: Movie;
   isSaving?: boolean;
@@ -127,9 +138,10 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
               <MonitorToggleButton
                 className={styles.monitorToggleButton}
                 size={20}
-                type={itemType === 'scene' ? 'sceneMonitor' : 'movieMonitor'}
+                type={getMonitorType(itemType)}
                 monitored={monitored}
                 moviesMonitored={monitored}
+                javMonitored={monitored}
                 isSaving={isSaving}
                 isDisabled={false}
                 onPress={onMonitorToggle}

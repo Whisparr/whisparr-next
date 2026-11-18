@@ -8,6 +8,7 @@ import PageContentBody from 'Components/Page/PageContentBody';
 import TablePager from 'Components/Table/TablePager';
 import Movie from 'Movie/Movie';
 import Performer from 'Performer/Performer';
+import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
 import Studio from 'Studio/Studio';
 import translate from 'Utilities/String/translate';
 import SearchPosterGrid from './SearchPosterGrid';
@@ -54,6 +55,12 @@ const TYPES: TypeInfo[] = [
     labelKey: 'Movies',
     addPath: '/add/new/movie',
   },
+  {
+    type: 'jav',
+    key: 'jav',
+    labelKey: 'Jav',
+    addPath: '/add/new/jav',
+  },
 ];
 
 const ADD_LABEL_KEYS: Record<LibrarySearchType, string> = {
@@ -61,10 +68,12 @@ const ADD_LABEL_KEYS: Record<LibrarySearchType, string> = {
   studio: 'AddNewStudio',
   scene: 'AddNewScene',
   movie: 'AddNewMovie',
+  jav: 'AddNewJav',
 };
 
-function isSearchType(value: string | null): value is LibrarySearchType {
-  return TYPES.some((t) => t.type === value);
+// JAV is only searched and offered while the instance has it available.
+function getVisibleTypes(javAvailable: boolean) {
+  return javAvailable ? TYPES : TYPES.filter((t) => t.type !== 'jav');
 }
 
 function getSearchPath(term: string, type?: LibrarySearchType) {
@@ -77,9 +86,12 @@ function getSearchPath(term: string, type?: LibrarySearchType) {
   return `/search?${params.toString()}`;
 }
 
-function getTotal(summary: LibrarySearchResult | undefined) {
-  return TYPES.reduce(
-    (total, { key }) => total + (summary?.[key].totalRecords ?? 0),
+function getTotal(
+  summary: LibrarySearchResult | undefined,
+  types: readonly TypeInfo[]
+) {
+  return types.reduce(
+    (total, { key }) => total + (summary?.[key]?.totalRecords ?? 0),
     0
   );
 }
@@ -107,9 +119,11 @@ function Results({ type, items }: Readonly<ResultsProps>) {
 
 function LibrarySearch() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const javAvailable = useJavAvailable();
+  const types = useMemo(() => getVisibleTypes(javAvailable), [javAvailable]);
   const term = searchParams.get('term') ?? '';
   const typeParam = searchParams.get('type');
-  const selectedType = isSearchType(typeParam) ? typeParam : null;
+  const selectedType = types.find((t) => t.type === typeParam)?.type ?? null;
   const page = Math.max(
     Number.parseInt(searchParams.get('page') ?? '1', 10) || 1,
     1
@@ -129,7 +143,7 @@ function LibrarySearch() {
     selectedType != null
   );
 
-  const total = useMemo(() => getTotal(summary), [summary]);
+  const total = useMemo(() => getTotal(summary, types), [summary, types]);
   const totalPages = typePage
     ? Math.max(Math.ceil(typePage.totalRecords / PAGE_SIZE), 1)
     : 1;
@@ -162,8 +176,9 @@ function LibrarySearch() {
     () => [
       ...(summary?.scenes.records ?? []),
       ...(summary?.movies.records ?? []),
+      ...(javAvailable ? (summary?.jav?.records ?? []) : []),
     ],
-    [summary]
+    [summary, javAvailable]
   );
 
   return (
@@ -195,7 +210,7 @@ function LibrarySearch() {
                   </Link>
                 </li>
 
-                {TYPES.map(({ type, key, labelKey }) => (
+                {types.map(({ type, key, labelKey }) => (
                   <li key={type}>
                     <Link
                       className={
@@ -223,7 +238,7 @@ function LibrarySearch() {
               </div>
 
               <div className={styles.addLinks}>
-                {TYPES.map(({ type, addPath }) => (
+                {types.map(({ type, addPath }) => (
                   <Link
                     key={type}
                     to={`${addPath}?term=${encodeURIComponent(term)}`}
@@ -236,8 +251,9 @@ function LibrarySearch() {
           ) : null}
 
           {term && summary && total > 0 && !selectedType
-            ? TYPES.filter(({ key }) => summary[key].totalRecords > 0).map(
-                ({ type, key, labelKey }) => (
+            ? types
+                .filter(({ key }) => summary[key].totalRecords > 0)
+                .map(({ type, key, labelKey }) => (
                   <section key={type} className={styles.section}>
                     <div className={styles.sectionHeader}>
                       {translate(labelKey)}
@@ -256,8 +272,7 @@ function LibrarySearch() {
 
                     <Results type={type} items={summary[key].records} />
                   </section>
-                )
-              )
+                ))
             : null}
 
           {term && selectedType ? (

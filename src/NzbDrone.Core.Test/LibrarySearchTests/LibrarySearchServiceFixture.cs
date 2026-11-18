@@ -130,6 +130,20 @@ namespace NzbDrone.Core.Test.LibrarySearchTests
                 .Verify(s => s.SearchPerformers(It.IsAny<string>()), Times.Never());
         }
 
+        [Test]
+        public void should_rank_exact_jav_code_above_title_hit()
+        {
+            _titles = new List<MovieTitleMatch>
+            {
+                Title(1, "Biggar204 Party", ItemType.Jav),
+                new MovieTitleMatch { Id = 2, Title = "A Long English Title", CleanTitle = "A Long English Title".CleanMovieTitle(), ItemType = ItemType.Jav, Code = "GAR-204" }
+            };
+
+            var result = Subject.Search("gar204", 10);
+
+            result.Jav.Records.Select(m => m.Id).Should().Equal(2, 1);
+        }
+
         private static MovieTitleMatch Title(int id, string title, ItemType itemType)
         {
             return new MovieTitleMatch { Id = id, Title = title, CleanTitle = title.CleanMovieTitle(), ItemType = itemType };

@@ -236,6 +236,45 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
             results.Single(r => r.Id == movie.Id).ItemType.Should().Be(ItemType.Movie);
         }
 
+        [TestCase("GAR-204")]
+        [TestCase("gar204")]
+        [TestCase("GAR 204")]
+        [TestCase("GAR")]
+        public void should_search_movie_titles_by_jav_code(string query)
+        {
+            var profile = GivenProfile();
+            var jav = GivenTitledMovie(profile.Id, "A Long English Title", ItemType.Jav);
+            var other = GivenTitledMovie(profile.Id, "Another Long Title", ItemType.Jav);
+            GivenCode(jav, "GAR-204");
+            GivenCode(other, "ABC-100");
+
+            var results = Subject.SearchMovieTitles(query.CleanMovieTitle(), query);
+
+            results.Should().ContainSingle();
+            results[0].Id.Should().Be(jav.Id);
+            results[0].Code.Should().Be("GAR-204");
+        }
+
+        [Test]
+        public void should_not_search_movie_titles_by_code_infix()
+        {
+            var profile = GivenProfile();
+            var jav = GivenTitledMovie(profile.Id, "A Long English Title", ItemType.Jav);
+            GivenCode(jav, "GAR-204");
+
+            Subject.SearchMovieTitles("204", "204").Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_not_match_every_code_when_query_has_no_letters_or_digits()
+        {
+            var profile = GivenProfile();
+            var jav = GivenTitledMovie(profile.Id, "A Long English Title", ItemType.Jav);
+            GivenCode(jav, "GAR-204");
+
+            Subject.SearchMovieTitles("zzzz", "---").Should().BeEmpty();
+        }
+
         [Test]
         public void should_get_titles_of_only_the_studios_scenes()
         {
@@ -438,6 +477,14 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
             Subject.Update(movie);
 
             return movie;
+        }
+
+        private void GivenCode(Movie movie, string code)
+        {
+            var metadata = Db.All<MovieMetadata>().Single(m => m.Id == movie.MovieMetadataId);
+
+            metadata.Code = code;
+            Db.Update(metadata);
         }
 
         private Movie GivenTitledMovie(int qualityProfileId, string title, ItemType itemType)

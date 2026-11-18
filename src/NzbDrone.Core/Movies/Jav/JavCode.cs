@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Text.RegularExpressions;
+using NzbDrone.Common.Extensions;
 
 namespace NzbDrone.Core.Movies.Jav
 {
@@ -52,6 +54,10 @@ namespace NzbDrone.Core.Movies.Jav
             code = $"{match.Groups[1].Value.ToUpperInvariant()}-{match.Groups[2].Value}";
             return true;
         }
+
+        /// <summary>Uppercase letters and digits only, so GAR-204, gar204 and "gar 204" all become GAR204.</summary>
+        public static string Normalize(string value) =>
+            value.IsNullOrWhiteSpace() ? string.Empty : new string(value.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
         public static string SearchVariant(string code)
         {

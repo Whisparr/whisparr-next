@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Dapper;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.Qualities;
 
@@ -61,6 +63,15 @@ namespace NzbDrone.Core.Movies
 
     public class MovieRepository : BasicRepository<Movie>, IMovieRepository
     {
+        private const string SearchTitlesSql =
+            "SELECT \"Movies\".\"Id\", \"MovieMetadata\".\"Title\", \"MovieMetadata\".\"CleanTitle\", \"MovieMetadata\".\"ItemType\", \"MovieMetadata\".\"ForeignId\", \"MovieMetadata\".\"Code\" " +
+            "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
+            "WHERE \"MovieMetadata\".\"CleanTitle\" LIKE @Pattern OR \"MovieMetadata\".\"ForeignId\" = @ForeignId";
+
+        // Codes are compared with case and the usual separators removed, the same as JavCode.Normalize
+        private const string SearchTitlesOrCodeSql = SearchTitlesSql +
+            " OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(\"MovieMetadata\".\"Code\"), '-', ''), ' ', ''), '_', ''), '.', '') LIKE @CodePrefix";
+
         // MovieFiles.MediaInfo holds the full ffprobe dump (~7KB a row) that no paged consumer
         // renders, so the file columns are listed explicitly instead of "MovieFiles".*. Built
         // from the mapper rather than hardcoded so a new column can't silently go missing.
@@ -617,15 +628,18 @@ namespace NzbDrone.Core.Movies
 
         // Library search ranks every match before it pages, so this reads only the columns the
         // ranking needs. The page is then loaded in full by id.
+        // foreignId is the raw query. A JAV code such as GAR-204 is also matched as a prefix, ignoring case and
+        // separators, so GAR204, gar 204 and GAR all find it while 204 alone does not.
         public List<MovieTitleMatch> SearchMovieTitles(string cleanTitle, string foreignId)
         {
+            var normalizedCode = JavCode.Normalize(foreignId);
+
             using var conn = _database.OpenConnection();
 
+            // An empty normalized query would turn the code clause into LIKE '%' and match every coded row
             return conn.Query<MovieTitleMatch>(
-                "SELECT \"Movies\".\"Id\", \"MovieMetadata\".\"Title\", \"MovieMetadata\".\"CleanTitle\", \"MovieMetadata\".\"ItemType\", \"MovieMetadata\".\"ForeignId\" " +
-                "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
-                "WHERE \"MovieMetadata\".\"CleanTitle\" LIKE @Pattern OR \"MovieMetadata\".\"ForeignId\" = @ForeignId",
-                new { Pattern = $"%{cleanTitle}%", ForeignId = foreignId }).ToList();
+                normalizedCode.IsNullOrWhiteSpace() ? SearchTitlesSql : SearchTitlesOrCodeSql,
+                new { Pattern = $"%{cleanTitle}%", ForeignId = foreignId, CodePrefix = normalizedCode + "%" }).ToList();
         }
 
         // Dateless release matching compares titles across a whole studio, which can be 20k+ scenes, so it reads

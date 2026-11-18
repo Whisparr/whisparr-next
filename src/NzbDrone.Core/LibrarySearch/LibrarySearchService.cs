@@ -138,7 +138,8 @@ namespace NzbDrone.Core.LibrarySearch
                 m => m.Title,
                 m => m.CleanTitle,
                 m => m.ForeignId,
-                t => t.CleanMovieTitle());
+                t => t.CleanMovieTitle(),
+                m => m.Code);
         }
 
         private LibrarySearchPage<Movie> LoadPage(IEnumerable<MovieTitleMatch> ranked, int page, int pageSize)

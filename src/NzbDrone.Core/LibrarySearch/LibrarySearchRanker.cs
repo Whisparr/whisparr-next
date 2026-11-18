@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Movies.Jav;
 
 namespace NzbDrone.Core.LibrarySearch
 {
@@ -24,7 +25,38 @@ namespace NzbDrone.Core.LibrarySearch
     /// </remarks>
     public static class LibrarySearchRanker
     {
-        public static LibrarySearchScore Score(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean)
+        // codeQuery is the query run through JavCode.Normalize, done once by the caller rather than per row.
+        public static LibrarySearchScore Score(string query, string cleanQuery, string codeQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean, string code = null)
+        {
+            var titleScore = ScoreTitle(query, cleanQuery, title, cleanTitle, foreignId, clean);
+            var codeScore = ScoreCode(codeQuery, code);
+
+            return codeScore.HasValue && (codeScore.Value.Tier, codeScore.Value.Distance).CompareTo((titleScore.Tier, titleScore.Distance)) < 0
+                ? codeScore.Value
+                : titleScore;
+        }
+
+        // An exact code is the whole code, a prefix is the start of it (the query GAR lists every GAR code).
+        private static LibrarySearchScore? ScoreCode(string normalizedQuery, string code)
+        {
+            var normalizedCode = JavCode.Normalize(code);
+
+            if (normalizedQuery.Length == 0 || normalizedCode.Length == 0)
+            {
+                return null;
+            }
+
+            if (normalizedCode == normalizedQuery)
+            {
+                return new LibrarySearchScore(LibrarySearchTier.Exact, 0);
+            }
+
+            return normalizedCode.StartsWith(normalizedQuery, StringComparison.Ordinal)
+                ? new LibrarySearchScore(LibrarySearchTier.Prefix, normalizedCode.Length - normalizedQuery.Length)
+                : null;
+        }
+
+        private static LibrarySearchScore ScoreTitle(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean)
         {
             cleanTitle ??= string.Empty;
 
@@ -48,12 +80,13 @@ namespace NzbDrone.Core.LibrarySearch
             return new LibrarySearchScore(LibrarySearchTier.Substring, distance);
         }
 
-        public static List<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> title, Func<T, string> cleanTitle, Func<T, string> foreignId, Func<string, string> clean)
+        public static List<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> title, Func<T, string> cleanTitle, Func<T, string> foreignId, Func<string, string> clean, Func<T, string> code = null)
         {
             var cleanQuery = clean(query);
+            var codeQuery = JavCode.Normalize(query);
 
             return items
-                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, title(item), cleanTitle(item), foreignId(item), clean)))
+                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, codeQuery, title(item), cleanTitle(item), foreignId(item), clean, code?.Invoke(item))))
                 .OrderBy(x => x.Score.Tier)
                 .ThenBy(x => x.Score.Distance)
                 .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)

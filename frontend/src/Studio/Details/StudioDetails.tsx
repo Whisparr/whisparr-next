@@ -548,6 +548,19 @@ function StudioDetails() {
                   </Label>
                 ) : null}
 
+                {studio.javCount > 0 || studio.totalJavCount > 0 ? (
+                  <Label className={styles.detailsLabel} size={sizes.LARGE}>
+                    <Icon name={icons.DISC} size={17} />
+
+                    <span
+                      title={translate('Jav')}
+                      className={styles.sceneCount}
+                    >
+                      {`${translate('Jav')}: ${studio.javCount} / ${studio.totalJavCount}`}
+                    </span>
+                  </Label>
+                ) : null}
+
                 {studio.sizeOnDisk >= 0 ? (
                   <Label
                     title={translate('SizeOnDisk')}
