@@ -13,9 +13,10 @@
     color: var(--disabledColor);
     cursor: not-allowed;
   }
+}
 
-  &.unmonitoredJav {
-    color: var(--disabledColor);
-    opacity: 0.5;
-  }
+/* Top level, since callers that pass their own className drop .toggleButton */
+.unmonitoredJav {
+  color: var(--disabledColor);
+  opacity: 0.5;
 }

@@ -4,11 +4,11 @@ using System.Linq;
 using Dapper;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
-using NzbDrone.Core.LibrarySearch;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Credits;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.Qualities;
 
@@ -68,7 +68,7 @@ namespace NzbDrone.Core.Movies
             "FROM \"Movies\" JOIN \"MovieMetadata\" ON \"Movies\".\"MovieMetadataId\" = \"MovieMetadata\".\"Id\" " +
             "WHERE \"MovieMetadata\".\"CleanTitle\" LIKE @Pattern OR \"MovieMetadata\".\"ForeignId\" = @ForeignId";
 
-        // Codes are compared with case and the usual separators removed, the same as LibrarySearchRanker.NormalizeCode
+        // Codes are compared with case and the usual separators removed, the same as JavCode.Normalize
         private const string SearchTitlesOrCodeSql = SearchTitlesSql +
             " OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(\"MovieMetadata\".\"Code\"), '-', ''), ' ', ''), '_', ''), '.', '') LIKE @CodePrefix";
 
@@ -632,7 +632,7 @@ namespace NzbDrone.Core.Movies
         // separators, so GAR204, gar 204 and GAR all find it while 204 alone does not.
         public List<MovieTitleMatch> SearchMovieTitles(string cleanTitle, string foreignId)
         {
-            var normalizedCode = LibrarySearchRanker.NormalizeCode(foreignId);
+            var normalizedCode = JavCode.Normalize(foreignId);
 
             using var conn = _database.OpenConnection();
 

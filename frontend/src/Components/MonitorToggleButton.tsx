@@ -45,6 +45,7 @@ function getTooltip(
     const monitoredLabels: Record<string, string> = {
       movieMonitor: translate('ToggleMonitoredToUnmonitoredMovies'),
       sceneMonitor: translate('ToggleMonitoredToUnmonitoredScenes'),
+      javMonitor: translate('ToggleMonitoredToUnmonitoredJav'),
     };
     return monitoredLabels[type ?? ''] ?? 'Monitored, click to unmonitor';
   }
@@ -52,6 +53,7 @@ function getTooltip(
   const unMonitoredLabels: Record<string, string> = {
     movieMonitor: translate('ToggleUnmonitoredToMonitoredMovies'),
     sceneMonitor: translate('ToggleUnmonitoredToMonitoredScenes'),
+    javMonitor: translate('ToggleUnmonitoredToMonitoredJav'),
   };
   return (
     unMonitoredLabels[type ?? ''] ?? translate('ToggleUnmonitoredToMonitored')

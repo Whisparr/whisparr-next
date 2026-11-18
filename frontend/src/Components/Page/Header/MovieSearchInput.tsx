@@ -184,14 +184,17 @@ function MovieSearchInput() {
         title: translate('Movies'),
         suggestions: moviesToSuggestions(data?.movies.records ?? []),
       },
-      {
-        title: translate('Jav'),
-        suggestions: moviesToSuggestions(data?.jav?.records ?? []),
-      },
     ];
 
+    if (javAvailable) {
+      sections.push({
+        title: translate('Jav'),
+        suggestions: moviesToSuggestions(data?.jav?.records ?? []),
+      });
+    }
+
     return sections.filter((section) => section.suggestions.length);
-  }, [data]);
+  }, [data, javAvailable]);
 
   const suggestionGroups = useMemo(() => {
     const result: Section[] = [...resultSections];

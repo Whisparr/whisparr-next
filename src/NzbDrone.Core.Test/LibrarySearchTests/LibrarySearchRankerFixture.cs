@@ -3,6 +3,7 @@ using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.LibrarySearch;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Test.Framework;
 
@@ -123,7 +124,7 @@ namespace NzbDrone.Core.Test.LibrarySearchTests
 
         private static LibrarySearchScore ScoreMovie(string query, string title, string foreignId = null, string code = null)
         {
-            return LibrarySearchRanker.Score(query, query.CleanMovieTitle(), title, title.CleanMovieTitle(), foreignId, t => t.CleanMovieTitle(), code);
+            return LibrarySearchRanker.Score(query, query.CleanMovieTitle(), JavCode.Normalize(query), title, title.CleanMovieTitle(), foreignId, t => t.CleanMovieTitle(), code);
         }
 
         private static List<string> Rank(string query, params string[] titles)

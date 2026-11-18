@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Movies.Jav;
 
 namespace NzbDrone.Core.LibrarySearch
 {
@@ -24,28 +25,11 @@ namespace NzbDrone.Core.LibrarySearch
     /// </remarks>
     public static class LibrarySearchRanker
     {
-        /// <summary>Uppercase letters and digits only, so GAR-204, gar204 and "gar 204" all become GAR204.</summary>
-        public static string NormalizeCode(string value)
-        {
-            if (value.IsNullOrWhiteSpace())
-            {
-                return string.Empty;
-            }
-
-            var normalized = new StringBuilder(value.Length);
-
-            foreach (var c in value.Where(char.IsLetterOrDigit))
-            {
-                normalized.Append(char.ToUpperInvariant(c));
-            }
-
-            return normalized.ToString();
-        }
-
-        public static LibrarySearchScore Score(string query, string cleanQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean, string code = null)
+        // codeQuery is the query run through JavCode.Normalize, done once by the caller rather than per row.
+        public static LibrarySearchScore Score(string query, string cleanQuery, string codeQuery, string title, string cleanTitle, string foreignId, Func<string, string> clean, string code = null)
         {
             var titleScore = ScoreTitle(query, cleanQuery, title, cleanTitle, foreignId, clean);
-            var codeScore = ScoreCode(query, code);
+            var codeScore = ScoreCode(codeQuery, code);
 
             return codeScore.HasValue && (codeScore.Value.Tier, codeScore.Value.Distance).CompareTo((titleScore.Tier, titleScore.Distance)) < 0
                 ? codeScore.Value
@@ -53,10 +37,9 @@ namespace NzbDrone.Core.LibrarySearch
         }
 
         // An exact code is the whole code, a prefix is the start of it (the query GAR lists every GAR code).
-        private static LibrarySearchScore? ScoreCode(string query, string code)
+        private static LibrarySearchScore? ScoreCode(string normalizedQuery, string code)
         {
-            var normalizedQuery = NormalizeCode(query);
-            var normalizedCode = NormalizeCode(code);
+            var normalizedCode = JavCode.Normalize(code);
 
             if (normalizedQuery.Length == 0 || normalizedCode.Length == 0)
             {
@@ -100,9 +83,10 @@ namespace NzbDrone.Core.LibrarySearch
         public static List<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> title, Func<T, string> cleanTitle, Func<T, string> foreignId, Func<string, string> clean, Func<T, string> code = null)
         {
             var cleanQuery = clean(query);
+            var codeQuery = JavCode.Normalize(query);
 
             return items
-                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, title(item), cleanTitle(item), foreignId(item), clean, code?.Invoke(item))))
+                .Select(item => (Item: item, Title: title(item) ?? string.Empty, Score: Score(query, cleanQuery, codeQuery, title(item), cleanTitle(item), foreignId(item), clean, code?.Invoke(item))))
                 .OrderBy(x => x.Score.Tier)
                 .ThenBy(x => x.Score.Distance)
                 .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase)

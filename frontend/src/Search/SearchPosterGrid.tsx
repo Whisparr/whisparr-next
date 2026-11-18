@@ -2,7 +2,9 @@ import React from 'react';
 import { useAppDimension } from 'App/appStore';
 import useMeasure from 'Helpers/Hooks/useMeasure';
 import {
+  getMovieIndexStore,
   javIndexOptionsStore,
+  MovieIndexStoreContext,
   useMovieIndexOption,
 } from 'Movie/Index/movieIndexOptionsStore';
 import MovieIndexPoster from 'Movie/Index/Posters/MovieIndexPoster';
@@ -122,12 +124,17 @@ function SearchPosterGrid(props: Readonly<SearchPosterGridProps>) {
           </div>
         ))}
 
-      {(props.type === 'movie' || props.type === 'jav') &&
-        props.items.map((movie) => (
-          <div key={movie.id} style={cellStyle}>
-            <MovieIndexPoster movie={movie} {...common} />
-          </div>
-        ))}
+      {(props.type === 'movie' || props.type === 'jav') && (
+        // The posters read their other options (title, progress bar) from
+        // context, so JAV cards follow the JAV index's settings, as on MovieIndex.
+        <MovieIndexStoreContext.Provider value={getMovieIndexStore(props.type)}>
+          {props.items.map((movie) => (
+            <div key={movie.id} style={cellStyle}>
+              <MovieIndexPoster movie={movie} {...common} />
+            </div>
+          ))}
+        </MovieIndexStoreContext.Provider>
+      )}
 
       {props.type === 'performer' &&
         props.items.map((performer) => (
