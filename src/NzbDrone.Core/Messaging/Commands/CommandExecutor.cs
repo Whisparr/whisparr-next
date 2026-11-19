@@ -20,7 +20,8 @@ namespace NzbDrone.Core.Messaging.Commands
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IEventAggregator _eventAggregator;
 
-        private static CancellationTokenSource _cancellationTokenSource;
+        // Per instance, not static: an in-process restart builds a new container with its own executor.
+        private CancellationTokenSource _cancellationTokenSource;
 
         public CommandExecutor(IServiceFactory serviceFactory,
                                IManageCommandQueue commandQueueManager,
@@ -146,7 +147,9 @@ namespace NzbDrone.Core.Messaging.Commands
         public void Handle(ApplicationShutdownRequested message)
         {
             _logger.Info("Shutting down task execution");
-            _cancellationTokenSource.Cancel(true);
+
+            // Null when setup mode stopped the app before it ever started.
+            _cancellationTokenSource?.Cancel(true);
         }
     }
 }

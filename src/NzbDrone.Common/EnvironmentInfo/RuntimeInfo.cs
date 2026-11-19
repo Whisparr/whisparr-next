@@ -12,13 +12,15 @@ namespace NzbDrone.Common.EnvironmentInfo
     public class RuntimeInfo : IRuntimeInfo
     {
         private readonly Logger _logger;
+        private readonly IOsInfo _osInfo;
         private readonly DateTime _startTime = DateTime.UtcNow;
 
-        public RuntimeInfo(Logger logger, IHostLifetime hostLifetime = null)
+        public RuntimeInfo(Logger logger, IOsInfo osInfo, IHostLifetime hostLifetime = null)
         {
             _logger = logger;
+            _osInfo = osInfo;
 
-            IsWindowsService = hostLifetime is WindowsServiceLifetime;
+            IsWindowsService = hostLifetime is WindowsServiceLifetime || (hostLifetime != null && DetectWindowsService());
             IsStarting = true;
 
             // net6.0 will return Whisparr.dll for entry assembly, we need the actual
@@ -30,6 +32,27 @@ namespace NzbDrone.Common.EnvironmentInfo
             {
                 ExecutingApplication = entry.FileName;
                 IsWindowsTray = OsInfo.IsWindows && entry.ModuleName == $"{ProcessProvider.WHISPARR_PROCESS_NAME}.exe";
+            }
+        }
+
+        // The host's lifetime is RestartableServiceLifetime, never WindowsServiceLifetime, so the type
+        // check above alone would report every Windows service install as a console app.
+        private bool DetectWindowsService()
+        {
+            if (!OsInfo.IsWindows)
+            {
+                return false;
+            }
+
+            try
+            {
+                return WindowsServiceHelpers.IsWindowsService();
+            }
+            catch (Exception ex)
+            {
+                // Same guard as Bootstrap.GetApplicationMode: the parent-process lookup can throw.
+                _logger.Warn(ex, "Failed to check whether Whisparr is running as a Windows service");
+                return false;
             }
         }
 
@@ -82,6 +105,30 @@ namespace NzbDrone.Common.EnvironmentInfo
         }
 
         public bool IsWindowsService { get; private set; }
+
+        public bool IsContainerized => _osInfo.IsContainerized;
+
+        public bool IsSystemdService
+        {
+            get
+            {
+                if (!OsInfo.IsLinux)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    var invocationId = Environment.GetEnvironmentVariable("INVOCATION_ID");
+                    return !string.IsNullOrEmpty(invocationId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Error checking if system is running under systemd");
+                    return false;
+                }
+            }
+        }
 
         public bool IsStarting { get; set; }
         public bool IsExiting { get; set; }
@@ -151,6 +198,7 @@ namespace NzbDrone.Common.EnvironmentInfo
             }
             catch
             {
+                // Best-effort heuristic; an unreadable process name just means "not a test host".
             }
 
             try
@@ -168,6 +216,7 @@ namespace NzbDrone.Common.EnvironmentInfo
             }
             catch
             {
+                // Best-effort heuristic; fall through to the working-directory check below.
             }
 
             var lowerCurrentDir = Directory.GetCurrentDirectory().ToLower();

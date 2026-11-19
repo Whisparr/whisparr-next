@@ -25,6 +25,7 @@ namespace Whisparr.Api.V5.System
         public bool IsOsx { get; set; }
         public bool IsWindows { get; set; }
         public bool IsDocker { get; set; }
+        public bool IsContainerized { get; set; }
         public RuntimeMode Mode { get; set; }
         public string Branch { get; set; }
         public DatabaseType DatabaseType { get; set; }

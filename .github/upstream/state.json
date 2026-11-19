@@ -645,9 +645,8 @@
       "e80abdd603ffbdcfc48615f824488f7c7402424f": {
         "subject": "Improve external restart handling",
         "month": "2026-08",
-        "disposition": "defer",
-        "blockedBy": "Upstream's own wiring. The commit adds src/NzbDrone.Host/RestartableServiceLifetime.cs (249 lines) and simultaneously deletes the .UseWindowsService() call from Bootstrap.Start, but never registers the new lifetime: on Radarr develop today RestartableServiceLifetime appears in exactly one file - its own definition - and UseWindowsService appears in none. IsSystemdService is likewise declared on IRuntimeInfo and consumed nowhere. Take it once upstream lands the follow-up that actually installs the lifetime on the host builder.",
-        "reason": "We want this: the in-process restart loop (Bootstrap.RunHostUntilShutdown + NzbDroneLogger.ResetAllTargets) replaces spawning a detached child process, which is the right shape under Docker/Podman/systemd restart policies, and the IsContainerized/IsPodman detection plus the LifecycleEventAttribute shutdown guard in EventAggregator are all portable to our tree as-is. Not skipped on the merits - it is half-landed upstream. Concretely, with UseWindowsService() gone the IHostLifetime is never a WindowsServiceLifetime, so RuntimeInfo.IsWindowsService is permanently false; that flag gates five real behaviours here (FileSystemLookupService network-drive lookup, DownloadedMovieImportService, MappedNetworkDriveValidator, LifecycleService service stop/restart, AppLifetime restart spawn), so picking it now would silently flip all of them on Windows service installs while the replacement lifetime sits dead in the tree. The commit is also three days old on develop and has not been through a release. Revisit at the follow-up."
+        "disposition": "have",
+        "reason": "Landed through the Sonarr twin 6cd1ab376, ported for #93. Both earlier blockers turned out resolvable in our tree: RestartableServiceLifetime is registered as IHostLifetime by the AutoAddServices assembly scan (pinned by HostLifetimeRegistrationFixture), and RuntimeInfo.IsWindowsService now falls back to WindowsServiceHelpers so the type check against WindowsServiceLifetime no longer reads false on service installs."
       },
       "39c172d827a3738af4a2d9e951c7c52ce7153d77": {
         "subject": "Bump NUnit to 4.5.1",
@@ -2455,8 +2454,8 @@
       "6cd1ab3764587f1a6784f0d46efc2fc749149056": {
         "subject": "Improve external restart handling",
         "month": "2026-01",
-        "disposition": "skip",
-        "reason": "External restart handling: new RestartableServiceLifetime, LifecycleEventAttribute and the SystemResource/About plumbing. Radarr has the same change outstanding as e80abdd60 in 2026-08, and the backend half is Radarr's to own - taking the Sonarr copy now would guarantee a conflicting second port. Deferred to the Radarr chunk so both halves land together."
+        "disposition": "adapt",
+        "reason": "Ported for #93: in Docker the old child-process restart left an orphan holding the port while s6 looped a second copy that failed to bind. The earlier skip deferred this to the Radarr chunk, which whisparr-next no longer syncs. Kept our EventAggregator (disposed-container drop, lock-free subscriber resolution) and added only the LifecycleEvent guard; Bootstrap also clears the DB pools between restarts because the setup wizard swaps the database. RestartableServiceLifetime IS wired: AutoAddServices registers it as IHostLifetime (pinned by HostLifetimeRegistrationFixture). Upstream's RuntimeInfo.IsWindowsService stayed a WindowsServiceLifetime type check and so went permanently false; ours falls back to WindowsServiceHelpers. Scheduler's static Timer and the static token sources in Scheduler and CommandExecutor are now per instance, or the old container's scheduler would keep firing after a restart. IsContainerized added to the V5 system resource too."
       },
       "f3b39ba4f7abd8e454c16d0469086c09f66aff6f": {
         "subject": "New: Display multiple audio and subtitles streams in media info",
@@ -4311,9 +4310,8 @@
       "dbb5c33f148a6cc8d24e89d4b97b800fec4e9dd4": {
         "subject": "Internal restart fixes",
         "month": "2026-09",
-        "disposition": "defer",
-        "reason": "Follow-up fixes to Sonarr's in-process restart (6cd1ab376): an IsDisposed guard in EventAggregator so events published while the container is torn down are dropped, and a DatabaseTarget that unsubscribes before resubscribing and finds itself by name on shutdown. They only matter once the host can restart in-process, which we do not do yet. Wanted when that lands, and they should land together with it.",
-        "blockedBy": "Radarr e80abdd60 (Improve external restart handling), itself deferred until Radarr wires up RestartableServiceLifetime. Sonarr's 6cd1ab376 was skipped so that both halves land through the Radarr chunk; take these fixes in the same PR."
+        "disposition": "have",
+        "reason": "Already in the tree when 6cd1ab376 was ported for #93:ServiceFactory.IsDisposed, the EventAggregator guard that drops events once the container is disposed, and DatabaseTarget's TARGET_NAME unsubscribe-before-subscribe and find-by-name shutdown. Cherry-picking it again only duplicated those members."
       },
       "8033170da0cd53c5030930f46e5fd23d6a72bc1b": {
         "subject": "Bump FFMpegCore to 5.5.0 and FFprobe to 9.0.2",

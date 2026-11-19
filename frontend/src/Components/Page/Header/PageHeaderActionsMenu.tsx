@@ -21,7 +21,7 @@ function PageHeaderActionsMenu(props: Readonly<PageHeaderActionsMenuProps>) {
   const { mutate: restart } = useRestart();
   const { mutate: shutdown } = useShutdown();
 
-  const { authentication, isDocker } = useSystemStatusData();
+  const { authentication, isContainerized } = useSystemStatusData();
 
   const showSignOut = authentication === 'forms' || authentication === 'oidc';
 
@@ -46,24 +46,22 @@ function PageHeaderActionsMenu(props: Readonly<PageHeaderActionsMenuProps>) {
             {translate('KeyboardShortcuts')}
           </MenuItem>
 
-          {isDocker ? null : (
-            <>
-              <MenuItemSeparator />
+          <MenuItemSeparator />
 
-              <MenuItem onPress={handleRestartPress}>
-                <Icon className={styles.itemIcon} name={icons.RESTART} />
-                {translate('Restart')}
-              </MenuItem>
+          <MenuItem onPress={handleRestartPress}>
+            <Icon className={styles.itemIcon} name={icons.RESTART} />
+            {translate('Restart')}
+          </MenuItem>
 
-              <MenuItem onPress={handleShutdownPress}>
-                <Icon
-                  className={styles.itemIcon}
-                  name={icons.SHUTDOWN}
-                  kind={kinds.DANGER}
-                />
-                {translate('Shutdown')}
-              </MenuItem>
-            </>
+          {isContainerized ? null : (
+            <MenuItem onPress={handleShutdownPress}>
+              <Icon
+                className={styles.itemIcon}
+                name={icons.SHUTDOWN}
+                kind={kinds.DANGER}
+              />
+              {translate('Shutdown')}
+            </MenuItem>
           )}
 
           {showSignOut ? (

@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common;
 using NzbDrone.Common.EnsureThat;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Messaging;
+using NzbDrone.Common.Reflection;
 using NzbDrone.Common.TPL;
 
 namespace NzbDrone.Core.Messaging.Events
@@ -14,13 +16,15 @@ namespace NzbDrone.Core.Messaging.Events
     {
         private readonly Logger _logger;
         private readonly IServiceFactory _serviceFactory;
+        private readonly IRuntimeInfo _runtimeInfo;
         private readonly TaskFactory _taskFactory;
         private readonly Dictionary<string, object> _eventSubscribers;
 
-        public EventAggregator(Logger logger, IServiceFactory serviceFactory)
+        public EventAggregator(Logger logger, IServiceFactory serviceFactory, IRuntimeInfo runtimeInfo)
         {
             _logger = logger;
             _serviceFactory = serviceFactory;
+            _runtimeInfo = runtimeInfo;
             _taskFactory = new TaskFactory();
             _eventSubscribers = new Dictionary<string, object>();
         }
@@ -35,6 +39,12 @@ namespace NzbDrone.Core.Messaging.Events
             if (_serviceFactory.IsDisposed)
             {
                 _logger.Debug("Event {0} dropped, container is disposed", eventName);
+                return;
+            }
+
+            if (_runtimeInfo.IsExiting && @event.GetType().HasAttribute<LifecycleEventAttribute>())
+            {
+                _logger.Warn("Event {0} blocked due to application shutdown", eventName);
                 return;
             }
 
@@ -54,7 +64,17 @@ namespace NzbDrone.Core.Messaging.Events
 
             if (subscribers == null)
             {
-                var newSubscribers = new EventSubscribers<TEvent>(_serviceFactory);
+                EventSubscribers<TEvent> newSubscribers;
+
+                try
+                {
+                    newSubscribers = new EventSubscribers<TEvent>(_serviceFactory);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "Unable to resolve event subscribers for {0}, container may be disposed", eventName);
+                    return;
+                }
 
                 lock (_eventSubscribers)
                 {
