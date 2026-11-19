@@ -7,9 +7,11 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Exceptions;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
+using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
@@ -407,7 +409,64 @@ namespace NzbDrone.Core.Test.RootFolderTests
                 It.Is<List<Movie>>(l => l[0].Path == System.IO.Path.GetDirectoryName(FilePath) && l[0].QualityProfileId == 4 && !l[0].Monitored && l[0].MovieMetadata.Value.ItemType == ItemType.Scene),
                 false,
                 true));
-            Mocker.GetMock<IRefreshNewScenes>().Verify(s => s.RefreshNewScenes(It.Is<List<Movie>>(l => l[0] == movie)));
+            Mocker.GetMock<IRefreshNewScenes>().Verify(s => s.RefreshNewScenes(It.Is<List<Movie>>(l => l[0] == movie), false));
+        }
+
+        [Test]
+        public void should_not_rescan_the_folder_of_a_new_scene()
+        {
+            var movie = Scene("a", "The Right Title");
+
+            Mocker.GetMock<IAddMovieService>()
+                .Setup(s => s.AddMovies(It.IsAny<List<Movie>>(), false, true))
+                .Returns(new List<Movie> { movie });
+            GivenLinkOutcome(LinkOutcome.Linked);
+
+            Subject.Link(7, "a", ItemType.Scene, 4, false);
+
+            Mocker.GetMock<IRefreshNewScenes>().Verify(s => s.RefreshNewScenes(It.IsAny<List<Movie>>()), Times.Never);
+            Mocker.GetMock<IRefreshNewScenes>().Verify(s => s.RefreshNewScenes(It.IsAny<List<Movie>>(), true), Times.Never);
+        }
+
+        private MovieFile GivenLinkedFile(MediaInfoModel mediaInfo)
+        {
+            var full = new MovieFile { Id = 3, MovieId = 9, Path = FilePath, Languages = new List<Language>(), MediaInfo = mediaInfo };
+
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.FindByFullPath(FilePath)).Returns(new MovieFile { Id = 3, MovieId = 9 });
+            Mocker.GetMock<IMediaFileService>().Setup(s => s.GetFilesByMovie(9)).Returns(new List<MovieFile> { new MovieFile { Id = 2, MovieId = 9 }, full });
+
+            return full;
+        }
+
+        [TestCase(LinkOutcome.Linked)]
+        [TestCase(LinkOutcome.AlreadyLinked)]
+        public void should_read_media_info_of_the_linked_file_only(LinkOutcome outcome)
+        {
+            var movie = Scene("a", "The Right Title");
+            var movieFile = GivenLinkedFile(null);
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByForeignId("a")).Returns(movie);
+            GivenLinkOutcome(outcome);
+
+            Subject.Link(7, "a", ItemType.Scene, 1, true);
+
+            // The full row, not FindByFullPath's key-only one, which would save its unset fields as nulls
+            Mocker.GetMock<IUpdateMediaInfo>().Verify(s => s.Update(movieFile, movie), Times.Once);
+            Mocker.GetMock<IUpdateMediaInfo>().VerifyNoOtherCalls();
+        }
+
+        [Test]
+        public void should_not_reread_media_info_the_file_already_has()
+        {
+            var movie = Scene("a", "The Right Title");
+            GivenLinkedFile(new MediaInfoModel());
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByForeignId("a")).Returns(movie);
+            GivenLinkOutcome(LinkOutcome.AlreadyLinked);
+
+            Subject.Link(7, "a", ItemType.Scene, 1, true);
+
+            Mocker.GetMock<IUpdateMediaInfo>().VerifyNoOtherCalls();
         }
 
         [TestCase(LinkOutcome.SceneHasOtherFile)]

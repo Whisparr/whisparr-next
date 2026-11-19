@@ -36,6 +36,12 @@ namespace NzbDrone.Core.Movies
         /// While a library migration runs the scan is skipped.
         /// </summary>
         void RefreshNewScenes(List<Movie> movies);
+
+        /// <summary>
+        /// As above; with rescan false the scan is skipped, for a caller that linked the scene's file itself.
+        /// Its folder may hold other videos, which a scan would import into the scene.
+        /// </summary>
+        void RefreshNewScenes(List<Movie> movies, bool rescan);
     }
 
     public class RefreshMovieService : IExecute<RefreshMovieCommand>, IRefreshNewScenes
@@ -405,6 +411,11 @@ namespace NzbDrone.Core.Movies
 
         public void RefreshNewScenes(List<Movie> movies)
         {
+            RefreshNewScenes(movies, true);
+        }
+
+        public void RefreshNewScenes(List<Movie> movies, bool rescan)
+        {
             var scanIds = new List<int>();
             var coverIds = new List<int>();
 
@@ -415,12 +426,12 @@ namespace NzbDrone.Core.Movies
                     try
                     {
                         var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
-                        ScanNewScene(movie, scanIds);
+                        ScanNewScene(movie, scanIds, rescan);
                         coverIds.Add(scene.Id);
                     }
-                    catch (MovieNotFoundException)
+                    catch (MovieNotFoundException e)
                     {
-                        _logger.Error("Movie '{0}' was not found upstream, it may have been removed.", scene);
+                        _logger.Error(e, "Movie '{0}' was not found upstream, it may have been removed.", scene);
                     }
                     catch (Exception e)
                     {
@@ -428,7 +439,7 @@ namespace NzbDrone.Core.Movies
 
                         // Same as Execute: a failed refresh still gets its rescan, so search on add
                         // and clearing AddOptions happen.
-                        ScanNewScene(_movieService.GetMovie(scene.Id), scanIds);
+                        ScanNewScene(_movieService.GetMovie(scene.Id), scanIds, rescan);
                         coverIds.Add(scene.Id);
                     }
                 }
@@ -446,8 +457,16 @@ namespace NzbDrone.Core.Movies
             }
         }
 
-        private void ScanNewScene(Movie movie, List<int> scanIds)
+        private void ScanNewScene(Movie movie, List<int> scanIds, bool rescan)
         {
+            // The caller linked the file itself; the skip event still clears AddOptions
+            if (!rescan)
+            {
+                _eventAggregator.PublishEvent(new MovieScanSkippedEvent(movie, MovieScanSkippedReason.FileLinkedInPlace));
+
+                return;
+            }
+
             // A studio's scenes share one folder, so scanning each new scene re-reads that whole folder every time.
             // The migration links its files itself; the skip event still clears AddOptions.
             if (_migrationGate.AutomationPaused)
@@ -501,9 +520,9 @@ namespace NzbDrone.Core.Movies
                             QueueScan(scanIds, movie.Id);
                         }
                     }
-                    catch (MovieNotFoundException)
+                    catch (MovieNotFoundException e)
                     {
-                        _logger.Error("Movie '{0}' (TMDb {1}) was not found, it may have been removed from The Movie Database.", movie.Title, movie.ForeignId);
+                        _logger.Error(e, "Movie '{0}' (TMDb {1}) was not found, it may have been removed from The Movie Database.", movie.Title, movie.ForeignId);
 
                         // Mark the result as indeterminate so it's not marked as a full success,
                         // but we can still process the remaining movies.
@@ -574,9 +593,9 @@ namespace NzbDrone.Core.Movies
                             {
                                 movieLocal = RefreshMovieInfo(movieLocal.Id);
                             }
-                            catch (MovieNotFoundException)
+                            catch (MovieNotFoundException e)
                             {
-                                _logger.Error("Item '{0}' (ForeignId {1}) was not found, it may have been removed from the metadata source.", movieLocal.Title, movieLocal.ForeignId);
+                                _logger.Error(e, "Item '{0}' (ForeignId {1}) was not found, it may have been removed from the metadata source.", movieLocal.Title, movieLocal.ForeignId);
                                 continue;
                             }
                             catch (Exception e)

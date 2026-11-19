@@ -13,6 +13,7 @@ using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Languages;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
@@ -77,6 +78,8 @@ namespace NzbDrone.Core.RootFolders
         private readonly ILegacyFileLinker _fileLinker;
         private readonly IDiskProvider _diskProvider;
         private readonly IJavAvailability _javAvailability;
+        private readonly IMediaFileService _mediaFileService;
+        private readonly IUpdateMediaInfo _updateMediaInfo;
         private readonly Logger _logger;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
@@ -89,8 +92,12 @@ namespace NzbDrone.Core.RootFolders
                                    ILegacyFileLinker fileLinker,
                                    IDiskProvider diskProvider,
                                    IJavAvailability javAvailability,
+                                   IMediaFileService mediaFileService,
+                                   IUpdateMediaInfo updateMediaInfo,
                                    Logger logger)
         {
+            _mediaFileService = mediaFileService;
+            _updateMediaInfo = updateMediaInfo;
             _javAvailability = javAvailability;
             _logger = logger;
             _importFileRepository = importFileRepository;
@@ -207,16 +214,18 @@ namespace NzbDrone.Core.RootFolders
 
             var outcome = _fileLinker.Link(movie, file.Path, f => Fill(f, file), MatchTier.Manual);
 
-            // An inline add leaves the refresh to its caller, and only the refresh writes the credits
+            // An inline add leaves the refresh to its caller, and only the refresh writes the credits.
+            // No rescan: the file is linked, and the folder can hold other videos a scan would import into this scene.
             if (isNew)
             {
-                _refreshNewScenes.RefreshNewScenes(new List<Movie> { movie });
+                _refreshNewScenes.RefreshNewScenes(new List<Movie> { movie }, false);
             }
 
             switch (outcome)
             {
                 case LinkOutcome.Linked:
                 case LinkOutcome.AlreadyLinked:
+                    UpdateMediaInfo(movie, file.Path);
                     _importFileRepository.Delete(id);
                     return movie;
                 case LinkOutcome.SceneHasOtherFile:
@@ -354,6 +363,19 @@ namespace NzbDrone.Core.RootFolders
         private static ParsedMovieInfo Parse(ImportFile file)
         {
             return Parser.Parser.ParseMovieTitle(Path.GetFileName(file.Path));
+        }
+
+        // In place of the scan, which read it before: just this file. FindByFullPath returns only the row's key fields,
+        // and saving that would null the rest, so the full row is loaded.
+        private void UpdateMediaInfo(Movie movie, string path)
+        {
+            var found = _mediaFileService.FindByFullPath(path);
+            var movieFile = found == null ? null : _mediaFileService.GetFilesByMovie(found.MovieId).FirstOrDefault(f => f.Id == found.Id);
+
+            if (movieFile != null && movieFile.MediaInfo == null)
+            {
+                _updateMediaInfo.Update(movieFile, movie);
+            }
         }
 
         private void Fill(MovieFile movieFile, ImportFile file)
