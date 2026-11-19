@@ -1116,5 +1116,63 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             System.Threading.Tasks.Task.WaitAll(new[] { first, second }, TimeSpan.FromSeconds(10)).Should().BeTrue();
             secondRan.Should().BeTrue();
         }
+
+        private string[] GivenJavFolder(string code, params string[] files)
+        {
+            _movie.MovieMetadata = new MovieMetadata { ItemType = ItemType.Jav, Code = code };
+
+            var paths = files.Select(f => Path.Combine(_movie.Path, f)).ToArray();
+            GivenRowsAndDisk(new List<MovieFile>(), paths);
+
+            return paths;
+        }
+
+        [Test]
+        public void jav_scan_does_not_import_videos_named_for_another_code()
+        {
+            var paths = GivenJavFolder("ANND-065",
+                "ANND-065.lesbian.pillage.webdl-480p.avi",
+                "GAR204.HQ.wmv",
+                "avs-100360.azumi.mizushima.1080p.wmv");
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(paths[0]);
+        }
+
+        [TestCase("annd065-cd2.mp4")]
+        [TestCase("ANND-065-2.mp4")]
+        [TestCase("[Studio] ANND_065 part2.mkv")]
+        [TestCase("CD2.mp4")]
+        [TestCase("disc two.mp4")]
+        public void jav_scan_imports_videos_with_its_own_code_or_none(string file)
+        {
+            var paths = GivenJavFolder("ANND-065", file);
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(paths);
+        }
+
+        [Test]
+        public void jav_scan_without_a_code_imports_every_video()
+        {
+            var paths = GivenJavFolder(null, "ANND-065.avi", "GAR204.HQ.wmv");
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(paths);
+        }
+
+        [Test]
+        public void scene_scan_is_not_filtered_by_code()
+        {
+            var paths = GivenJavFolder("ANND-065", "GAR204.HQ.wmv");
+            _movie.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(paths);
+        }
     }
 }

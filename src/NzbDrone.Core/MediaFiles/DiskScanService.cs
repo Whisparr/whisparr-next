@@ -21,6 +21,7 @@ using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
 
@@ -177,7 +178,7 @@ namespace NzbDrone.Core.MediaFiles
                 CleanMediaFiles(movie, mediaFileList);
 
                 var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
-                var unmappedFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
+                var unmappedFiles = WithoutOtherJavCodes(movie, MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie));
 
                 var decisionsStopwatch = Stopwatch.StartNew();
                 var decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
@@ -690,6 +691,33 @@ namespace NzbDrone.Core.MediaFiles
                         .Where(c => c.Hash.OsHash != null)
                         .GroupBy(c => c.Hash.OsHash)
                         .ToDictionary(g => g.Key, g => g.Select(c => (c.Path, HashedAt: c.Hash.ModifiedAt)).ToList());
+        }
+
+        // A JAV item owns its folder like a movie, so every untracked video would be imported as its upgrade. A file
+        // named for a different code is another title sharing the folder, not this one's; a file with no code
+        // (CD2.mp4, a renamed part) still is.
+        private List<string> WithoutOtherJavCodes(Movie movie, List<string> files)
+        {
+            var metadata = movie.MovieMetadata?.Value;
+
+            if (metadata?.ItemType != ItemType.Jav || metadata.Code.IsNullOrWhiteSpace())
+            {
+                return files;
+            }
+
+            var own = JavCode.Normalize(metadata.Code);
+
+            return files.Where(file =>
+            {
+                if (!JavCode.TryExtract(Path.GetFileName(file), out var code) || JavCode.Normalize(code) == own)
+                {
+                    return true;
+                }
+
+                _logger.Debug("{0} is named for {1}, not {2}; not importing it into this item", file, code, metadata.Code);
+
+                return false;
+            }).ToList();
         }
 
         private static bool IsScene(Movie movie)
