@@ -16,6 +16,7 @@ using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.AlternativeTitles;
 using NzbDrone.Core.Movies.Jav;
+using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 
@@ -35,6 +36,7 @@ namespace NzbDrone.Core.Test.RootFolderTests
 
             Mocker.GetMock<IImportFileRepository>().Setup(r => r.Get(7)).Returns(_file);
             Mocker.GetMock<IDiskProvider>().Setup(d => d.FileExists(FilePath)).Returns(true);
+            Mocker.GetMock<IQualityProfileService>().Setup(s => s.Exists(It.IsAny<int>())).Returns(true);
             Mocker.GetMock<ISearchForNewMovie>()
                 .Setup(s => s.SearchForNewEntity(It.IsAny<string>(), It.IsAny<ItemType?>()))
                 .Returns(new List<object>());
@@ -480,6 +482,31 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Assert.Throws<NzbDroneClientException>(() => Subject.Link(7, "a", ItemType.Scene, 1, true));
 
             Mocker.GetMock<IImportFileRepository>().Verify(r => r.Delete(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void should_not_add_a_scene_with_a_quality_profile_that_does_not_exist()
+        {
+            Mocker.GetMock<IQualityProfileService>().Setup(s => s.Exists(0)).Returns(false);
+
+            var ex = Assert.Throws<NzbDroneClientException>(() => Subject.Link(7, "a", ItemType.Scene, 0, true));
+
+            ex.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+            Mocker.GetMock<IAddMovieService>().VerifyNoOtherCalls();
+            Mocker.GetMock<ILegacyFileLinker>().VerifyNoOtherCalls();
+            Mocker.GetMock<IImportFileRepository>().Verify(r => r.Delete(It.IsAny<int>()), Times.Never);
+        }
+
+        [Test]
+        public void should_link_to_an_existing_scene_whatever_quality_profile_is_sent()
+        {
+            var movie = Scene("a", "The Right Title");
+
+            Mocker.GetMock<IMovieService>().Setup(s => s.FindByForeignId("a")).Returns(movie);
+            Mocker.GetMock<IQualityProfileService>().Setup(s => s.Exists(0)).Returns(false);
+            GivenLinkOutcome(LinkOutcome.Linked);
+
+            Subject.Link(7, "a", ItemType.Scene, 0, true).Should().Be(movie);
         }
 
         [Test]
