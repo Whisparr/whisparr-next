@@ -1287,6 +1287,12 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             var paths = GivenJavFolder("ANND-065", "GAR204.HQ.wmv");
             _movie.MovieMetadata.Value.ItemType = ItemType.Scene;
 
+            // A scene runs the shared-folder check first: the lone untracked video, with no file of its own on disk,
+            // keeps the scene on its own-folder pass
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files);
+
             Subject.Scan(_movie);
 
             VerifyImportedOnly(paths);
