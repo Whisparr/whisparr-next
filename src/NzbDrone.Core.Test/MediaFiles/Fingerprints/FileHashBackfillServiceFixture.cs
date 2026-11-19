@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.LegacyMigration;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Fingerprints;
@@ -38,9 +39,14 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             _pHashMovieFileSaves = new List<List<MovieFile>>();
             _pHashImportFileSaves = new List<List<ImportFile>>();
 
+            // As the repository does: GetMovies throws for an id it can't load, FindByIds leaves it out
             Mocker.GetMock<IMovieService>()
                 .Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>()))
-                .Returns(new List<Movie> { _movie });
+                .Returns((IEnumerable<int> ids) => ids.All(id => id == _movie.Id) ? new List<Movie> { _movie } : throw new ModelNotFoundException(typeof(Movie), ids.First(id => id != _movie.Id)));
+
+            Mocker.GetMock<IMovieService>()
+                .Setup(s => s.FindByIds(It.IsAny<List<int>>()))
+                .Returns((List<int> ids) => ids.Contains(_movie.Id) ? new List<Movie> { _movie } : new List<Movie>());
 
             Mocker.GetMock<IMediaFileService>()
                 .Setup(s => s.GetFilesWithoutOsHash(It.IsAny<int>(), It.IsAny<int>()))
@@ -123,6 +129,20 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
             files[0].HashedFileModifiedAt.Should().Be(LastWrite);
             Mocker.GetMock<IVideoHashService>().Verify(s => s.ComputeOsHash(Path.Combine(_movie.Path, "file1.mp4")), Times.Once());
             _movieFileSaves.Should().ContainSingle().Which.Should().Equal(files);
+        }
+
+        [Test]
+        public void should_hash_the_rest_when_a_file_row_points_at_a_movie_that_is_gone()
+        {
+            var files = MovieFiles(2);
+            files[0].MovieId = 99;
+            GivenMovieFiles(0, 2000, files);
+
+            Subject.Execute(new GenerateOsHashesCommand());
+
+            files[0].OsHash.Should().BeNull();
+            files[1].OsHash.Should().Be("hash-file2.mp4");
+            _movieFileSaves.Should().ContainSingle().Which.Should().Equal(files[1]);
         }
 
         [Test]
@@ -254,7 +274,7 @@ namespace NzbDrone.Core.Test.MediaFiles.Fingerprints
 
             Subject.Execute(new GenerateOsHashesCommand());
 
-            Mocker.GetMock<IMovieService>().Verify(s => s.GetMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindByIds(It.IsAny<List<int>>()), Times.Once());
         }
 
         [Test]

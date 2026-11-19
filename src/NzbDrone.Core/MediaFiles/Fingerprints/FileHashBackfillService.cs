@@ -204,18 +204,7 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 f => f.Id,
                 _ => f => f.Path,
                 (f, hash) => f.PHash = hash,
-                (f, at) =>
-                {
-                    f.PHashAttemptedAt = at;
-                    _importFileService.SavePHashes(new List<ImportFile> { f });
-
-                    // A new phash gives a file with no candidates another chance: clear the check stamp so the next lookup sends it
-                    if (f.PHash != null && f.CandidatesCheckedAt != null && (f.Candidates == null || f.Candidates.Count == 0))
-                    {
-                        f.CandidatesCheckedAt = null;
-                        _importFileService.SaveCandidates(new List<ImportFile> { f });
-                    }
-                },
+                SaveImportFilePHashAttempt,
                 run);
 
             // Also when the run stopped early; a breaker stop hashed nothing, so there is nothing to verify
@@ -232,6 +221,19 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
             else if (run.Processed > 0)
             {
                 _logger.ProgressInfo("Computed perceptual hashes for {0} of {1} files{2}", run.Hashed, run.Processed, finished ? string.Empty : " (time budget reached)");
+            }
+        }
+
+        private void SaveImportFilePHashAttempt(ImportFile importFile, DateTime attemptedAt)
+        {
+            importFile.PHashAttemptedAt = attemptedAt;
+            _importFileService.SavePHashes(new List<ImportFile> { importFile });
+
+            // A new phash gives a file with no candidates another chance: clear the check stamp so the next lookup sends it
+            if (importFile.PHash != null && importFile.CandidatesCheckedAt != null && (importFile.Candidates == null || importFile.Candidates.Count == 0))
+            {
+                importFile.CandidatesCheckedAt = null;
+                _importFileService.SaveCandidates(new List<ImportFile> { importFile });
             }
         }
 
@@ -436,7 +438,9 @@ namespace NzbDrone.Core.MediaFiles.Fingerprints
                 return new Dictionary<int, Movie>();
             }
 
-            return _movieService.GetMovies(movieIds).ToDictionary(m => m.Id);
+            // FindByIds leaves out a movie that is gone, where GetMovies throws: one orphaned file row would stop every run.
+            // ResolvePath then skips that row's file.
+            return _movieService.FindByIds(movieIds).ToDictionary(m => m.Id);
         }
 
         // Mapped files live under their movie's folder, unmapped ones are tracked by where they were imported from
