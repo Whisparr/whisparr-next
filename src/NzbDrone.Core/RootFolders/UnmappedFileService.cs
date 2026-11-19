@@ -21,6 +21,7 @@ using NzbDrone.Core.Movies.Jav;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Parser.RomanNumerals;
+using NzbDrone.Core.Profiles.Qualities;
 
 namespace NzbDrone.Core.RootFolders
 {
@@ -80,6 +81,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IJavAvailability _javAvailability;
         private readonly IMediaFileService _mediaFileService;
         private readonly IUpdateMediaInfo _updateMediaInfo;
+        private readonly IQualityProfileService _qualityProfileService;
         private readonly Logger _logger;
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "Constructor injection")]
@@ -94,11 +96,13 @@ namespace NzbDrone.Core.RootFolders
                                    IJavAvailability javAvailability,
                                    IMediaFileService mediaFileService,
                                    IUpdateMediaInfo updateMediaInfo,
+                                   IQualityProfileService qualityProfileService,
                                    Logger logger)
         {
             _mediaFileService = mediaFileService;
             _updateMediaInfo = updateMediaInfo;
             _javAvailability = javAvailability;
+            _qualityProfileService = qualityProfileService;
             _logger = logger;
             _importFileRepository = importFileRepository;
             _searchProxy = searchProxy;
@@ -191,6 +195,13 @@ namespace NzbDrone.Core.RootFolders
 
             var movie = _movieService.FindByForeignId(foreignId);
             var isNew = movie == null;
+
+            // Before the add: a scene saved with a missing profile drops out of every query joining it until housekeeping
+            // reassigns it, so a retry can't find it and file-hash runs fail
+            if (isNew && !_qualityProfileService.Exists(qualityProfileId))
+            {
+                throw new NzbDroneClientException(HttpStatusCode.BadRequest, "Quality profile {0} does not exist", qualityProfileId);
+            }
 
             if (isNew)
             {
