@@ -901,6 +901,123 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                   .Returns(new List<ImportDecision>());
         }
 
+        // A scene linked in place, alone in a flat folder of other videos: nothing marks the folder shared
+        private List<string> GivenSceneInFolderOfOtherVideos(bool hasFile, params string[] otherVideos)
+        {
+            _movie.MovieMetadata = new MovieMetadata { ItemType = ItemType.Scene };
+
+            var own = Path.Combine(_movie.Path, "own.mp4");
+            var others = otherVideos.Select(v => Path.Combine(_movie.Path, v)).ToList();
+            var rows = hasFile ? new List<MovieFile> { new MovieFile { Id = 1, MovieId = _movie.Id, RelativePath = "own.mp4" } } : new List<MovieFile>();
+
+            GivenRowsAndDisk(rows, (hasFile ? others.Prepend(own) : others).ToArray());
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns((string _, List<string> files) => files.Where(others.Contains).ToList());
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovies(It.IsAny<IEnumerable<int>>()))
+                  .Returns(rows);
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Setup(s => s.IdentifyOwned(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns(new List<ImportDecision>());
+            Mocker.GetMock<ISceneFolderLayout>().Setup(s => s.GetItemsInFolder(_movie.Path)).Returns(new List<MoviePathEntry>());
+            Mocker.GetMock<ISharedFolderSideFiles>()
+                  .Setup(s => s.Assign(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<List<string>>(), It.IsAny<List<MovieFile>>()))
+                  .Returns(new SideFileAssignment(new Dictionary<int, List<string>>(), new Dictionary<string, int>()));
+
+            return others;
+        }
+
+        private void VerifySharedPass(List<string> unowned)
+        {
+            Mocker.GetMock<ISharedFolderScanner>()
+                  .Verify(s => s.IdentifyOwned(_movie.Path, It.Is<List<string>>(l => l.SequenceEqual(unowned))), Times.Once());
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Verify(v => v.GetImportDecisions(It.IsAny<List<string>>(), _movie, It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_with_a_file_identifies_other_videos_in_its_folder_instead_of_importing_them()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(true, "studio.2014-04-11.other.scene.mp4", "another.mp4");
+
+            Subject.Scan(_movie);
+
+            VerifySharedPass(others);
+        }
+
+        [Test]
+        public void scene_with_a_file_identifies_a_single_new_video_in_its_folder()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(true, "studio.2014-04-11.other.scene.mp4");
+
+            Subject.Scan(_movie);
+
+            VerifySharedPass(others);
+        }
+
+        [Test]
+        public void scene_without_a_file_identifies_several_videos_in_its_folder()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(false, "a.mp4", "b.mp4");
+
+            Subject.Scan(_movie);
+
+            VerifySharedPass(others);
+        }
+
+        [Test]
+        public void scene_without_a_file_imports_the_lone_video_in_its_folder()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(false, "dropped.mp4");
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(others.ToArray());
+            Mocker.GetMock<ISharedFolderScanner>().Verify(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_whose_file_is_gone_imports_the_lone_video_in_its_folder()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(true, "renamed.mp4");
+
+            // Its tracked file isn't on disk: the lone video may be that file, renamed
+            GivenFiles(others);
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ISharedFolderScanner>().Verify(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
+        }
+
+        [Test]
+        public void movie_imports_other_videos_in_its_folder()
+        {
+            var others = GivenSceneInFolderOfOtherVideos(true, "a.mp4", "b.mp4");
+            _movie.MovieMetadata.Value.ItemType = ItemType.Movie;
+
+            Subject.Scan(_movie);
+
+            VerifyImportedOnly(others.ToArray());
+            Mocker.GetMock<ISharedFolderScanner>().Verify(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
+        }
+
+        [Test]
+        public void scene_keeps_its_folder_pass_when_other_items_track_the_untracked_videos()
+        {
+            GivenSceneInFolderOfOtherVideos(true, "a.mp4");
+
+            // Every untracked video is another item's: nothing is unowned, so the scene keeps its own folder pass
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.FilterFilesTrackedByAnyItem(_movie.Path, It.IsAny<List<string>>()))
+                  .Returns(new List<string>());
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<ISharedFolderScanner>().Verify(s => s.IdentifyOwned(It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never());
+        }
+
         [Test]
         public void disk_scan_treats_jav_as_movie_folder()
         {
