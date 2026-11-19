@@ -10,6 +10,7 @@ using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.LegacyMigration;
+using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Commands;
 using NzbDrone.Core.MediaFiles.Events;
@@ -63,6 +64,7 @@ namespace NzbDrone.Core.Movies
         private readonly ICommandResultReporter _commandResultReporter;
         private readonly ILegacyMigrationGate _migrationGate;
         private readonly IRescanAfterRefreshFilter _rescanAfterRefreshFilter;
+        private readonly IQueueNewMovieCovers _queueNewMovieCovers;
         private readonly Logger _logger;
 
         public RefreshMovieService(IProvideMovieInfo movieInfo,
@@ -87,6 +89,7 @@ namespace NzbDrone.Core.Movies
                                     ICommandResultReporter commandResultReporter,
                                     ILegacyMigrationGate migrationGate,
                                     IRescanAfterRefreshFilter rescanAfterRefreshFilter,
+                                    IQueueNewMovieCovers queueNewMovieCovers,
                                     Logger logger)
         {
             _movieInfo = movieInfo;
@@ -111,6 +114,7 @@ namespace NzbDrone.Core.Movies
             _commandResultReporter = commandResultReporter;
             _migrationGate = migrationGate;
             _rescanAfterRefreshFilter = rescanAfterRefreshFilter;
+            _queueNewMovieCovers = queueNewMovieCovers;
             _logger = logger;
         }
 
@@ -402,6 +406,7 @@ namespace NzbDrone.Core.Movies
         public void RefreshNewScenes(List<Movie> movies)
         {
             var scanIds = new List<int>();
+            var coverIds = new List<int>();
 
             try
             {
@@ -411,6 +416,7 @@ namespace NzbDrone.Core.Movies
                     {
                         var movie = RefreshMovieInfo(scene.Id, publishUpdated: false);
                         ScanNewScene(movie, scanIds);
+                        coverIds.Add(scene.Id);
                     }
                     catch (MovieNotFoundException)
                     {
@@ -423,11 +429,18 @@ namespace NzbDrone.Core.Movies
                         // Same as Execute: a failed refresh still gets its rescan, so search on add
                         // and clearing AddOptions happen.
                         ScanNewScene(_movieService.GetMovie(scene.Id), scanIds);
+                        coverIds.Add(scene.Id);
                     }
                 }
             }
             finally
             {
+                // Queued first so a failing scan can't skip it; the queue call never throws for a migration gate failure.
+                if (coverIds.Count > 0)
+                {
+                    _queueNewMovieCovers.QueueNewMovieCovers(coverIds);
+                }
+
                 // Items already refreshed still get their scan (search on add, AddOptions) if the loop throws
                 ScanMovies(scanIds);
             }

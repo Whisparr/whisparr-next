@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FizzWare.NBuilder;
@@ -56,6 +57,22 @@ namespace NzbDrone.Core.Test.MovieTests.MovieRepositoryTests
             Subject.Insert(movie);
 
             Subject.All().Single().QualityProfile.Should().NotBeNull();
+        }
+
+        [Test]
+        public void should_find_ids_of_movies_added_since()
+        {
+            var since = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+            var movies = Builder<Movie>.CreateListOfSize(3)
+                                       .All().With(m => m.Id = 0)
+                                       .TheFirst(1).With(m => m.Added = since.AddMinutes(-1))
+                                       .TheNext(1).With(m => m.Added = since)
+                                       .TheNext(1).With(m => m.Added = since.AddDays(1))
+                                       .BuildListOfNew();
+
+            Subject.InsertMany(movies);
+
+            Subject.AllMovieIdsAddedSince(since).Should().BeEquivalentTo(new[] { movies[1].Id, movies[2].Id });
         }
 
         [Test]

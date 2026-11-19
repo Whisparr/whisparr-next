@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using FluentAssertions;
 using Moq;
@@ -46,6 +47,20 @@ namespace NzbDrone.Core.Test.LegacyMigration
         {
             Subject.GetCurrent().Should().BeNull();
             Subject.IsIncomplete().Should().BeFalse();
+        }
+
+        [Test]
+        public void mark_completed_should_publish_when_the_migration_started()
+        {
+            var startedAt = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+            var state = GivenState();
+            state.StartedAt = startedAt;
+            _stateRepository.Update(state);
+
+            Subject.MarkCompleted();
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.Is<LegacyMigrationCompletedEvent>(e => e.StartedAt == startedAt)), Times.Once());
         }
 
         [Test]

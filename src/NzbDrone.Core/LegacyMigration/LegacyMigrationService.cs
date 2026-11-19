@@ -88,7 +88,7 @@ namespace NzbDrone.Core.LegacyMigration
             _stateRepository.Update(state);
 
             _incompleteCache.Clear();
-            _eventAggregator.PublishEvent(new LegacyMigrationCompletedEvent());
+            _eventAggregator.PublishEvent(new LegacyMigrationCompletedEvent { StartedAt = state.StartedAt });
         }
 
         public void DismissReport()
