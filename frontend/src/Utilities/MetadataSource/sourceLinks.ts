@@ -47,3 +47,49 @@ export function sceneSourceLink(
 export function translateSourceLabel(label: SceneSourceLink['label']) {
   return translate(label === 'TPDB' ? 'TPDb' : 'StashDB');
 }
+
+const TPDB_ID_PREFIX = 'tpdbid:';
+
+// The page for a search result's own foreign id, or undefined when it can't
+// be built. A scene's id is from the locked scene source, a JAV id is always
+// TPDB's, and a movie's is a TMDb id or a `tpdbid:` TPDB movie id.
+export function itemSourceLink(
+  itemType: string,
+  foreignId: string,
+  sceneSource: MetadataSources['sceneMetadataSource'] | undefined
+): { url: string; name: string } | undefined {
+  if (!foreignId) {
+    return undefined;
+  }
+
+  if (itemType === 'scene') {
+    if (!sceneSource) {
+      return undefined;
+    }
+
+    const { url, label } = sceneSourceLink('scene', foreignId, sceneSource);
+
+    return { url, name: translateSourceLabel(label) };
+  }
+
+  if (itemType === 'jav') {
+    return {
+      url: `https://theporndb.net/jav/${foreignId}`,
+      name: translate('TPDb'),
+    };
+  }
+
+  if (foreignId.startsWith(TPDB_ID_PREFIX)) {
+    return {
+      url: `https://theporndb.net/movies/${foreignId.slice(TPDB_ID_PREFIX.length)}`,
+      name: translate('TPDb'),
+    };
+  }
+
+  return /^\d+$/.test(foreignId)
+    ? {
+        url: `https://www.themoviedb.org/movie/${foreignId}`,
+        name: translate('TMDb'),
+      }
+    : undefined;
+}
