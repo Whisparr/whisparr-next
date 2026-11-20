@@ -5,8 +5,10 @@ import EnhancedSelectInput, {
   EnhancedSelectInputValue,
 } from 'Components/Form/Select/EnhancedSelectInput';
 import TextInput from 'Components/Form/TextInput';
+import Icon from 'Components/Icon';
 import Label from 'Components/Label';
 import Button from 'Components/Link/Button';
+import Link from 'Components/Link/Link';
 import SpinnerButton from 'Components/Link/SpinnerButton';
 import LoadingIndicator from 'Components/Loading/LoadingIndicator';
 import Modal from 'Components/Modal/Modal';
@@ -15,10 +17,14 @@ import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import useDebounce from 'Helpers/Hooks/useDebounce';
-import { kinds } from 'Helpers/Props';
-import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
+import { icons, kinds } from 'Helpers/Props';
+import {
+  useJavAvailable,
+  useSceneMetadataSource,
+} from 'Settings/MetadataSource/useMetadataSources';
 import { useQualityProfiles } from 'Settings/Profiles/Quality/useQualityProfiles';
 import { InputChanged } from 'typings/inputs';
+import { itemSourceLink } from 'Utilities/MetadataSource/sourceLinks';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
 import UnmappedFileMatchLabels from './UnmappedFileMatchLabels';
@@ -63,6 +69,13 @@ interface ResultProps {
 }
 
 function Result({ result, isLinking, onLinkPress }: ResultProps) {
+  const sceneSource = useSceneMetadataSource();
+  const sourceLink = itemSourceLink(
+    result.itemType,
+    result.foreignId,
+    sceneSource
+  );
+
   const handlePress = useCallback(() => {
     onLinkPress(result);
   }, [result, onLinkPress]);
@@ -70,7 +83,19 @@ function Result({ result, isLinking, onLinkPress }: ResultProps) {
   return (
     <div className={styles.result}>
       <div className={styles.details}>
-        <div>{result.title}</div>
+        <div className={styles.title}>
+          {result.title}
+
+          {sourceLink ? (
+            <Link
+              className={styles.sourceLink}
+              to={sourceLink.url}
+              title={sourceLink.name}
+            >
+              <Icon name={icons.EXTERNAL_LINK} size={12} />
+            </Link>
+          ) : null}
+        </div>
 
         <div className={styles.subtitle}>
           {[result.code, result.studioTitle, result.releaseDate?.slice(0, 10)]

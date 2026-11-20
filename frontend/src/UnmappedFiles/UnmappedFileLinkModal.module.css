@@ -30,6 +30,17 @@
   min-width: 0;
 }
 
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sourceLink {
+  flex: none;
+  color: var(--helpTextColor);
+}
+
 .subtitle {
   color: var(--helpTextColor);
   font-size: 12px;
