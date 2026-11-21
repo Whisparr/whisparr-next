@@ -5,7 +5,11 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Grid, GridCellProps, WindowScroller } from 'react-virtualized';
+import {
+  type CellRendererParams,
+  Grid,
+  type GridImperativeAPI,
+} from 'react-virtualized';
 import { useAppDimension } from 'App/appStore';
 import Measure from 'Components/Measure';
 import { SelectedState } from 'Helpers/Hooks/useSelectState';
@@ -75,12 +79,12 @@ function CollectionOverviews({
   scroller,
   selectedState,
   onSelectedChange,
-}: CollectionOverviewsProps) {
+}: Readonly<CollectionOverviewsProps>) {
   const isSmallScreen = useAppDimension('isSmallScreen');
   const overviewOptions = useCollectionOption('overviewOptions');
   const existingMovies = useCollectionExistingMovies(items);
 
-  const gridRef = useRef<Grid>(null);
+  const gridRef = useRef<GridImperativeAPI>(null);
   const [width, setWidth] = useState(0);
   const [scrollRestored, setScrollRestored] = useState(false);
 
@@ -132,11 +136,13 @@ function CollectionOverviews({
     const index = getIndexOfFirstCharacter(items, jumpToCharacter);
 
     if (index != null) {
-      scrollToPosition(
-        gridRef.current.getOffsetForCell({ rowIndex: index, columnIndex: 0 })
-      );
+      gridRef.current.scrollToCell({
+        rowIndex: index,
+        columnIndex: 0,
+        align: 'start',
+      });
     }
-  }, [jumpToCharacter, items, scrollToPosition]);
+  }, [jumpToCharacter, items]);
 
   const handleMeasure = useCallback(
     ({ width: newWidth }: { width: number }) => {
@@ -146,7 +152,7 @@ function CollectionOverviews({
   );
 
   const cellRenderer = useCallback(
-    ({ key, rowIndex, style }: GridCellProps) => {
+    ({ key, rowIndex, style }: CellRendererParams) => {
       const collection = items[rowIndex];
 
       if (!collection) {
@@ -185,39 +191,18 @@ function CollectionOverviews({
   return (
     <Measure onMeasure={handleMeasure}>
       <div>
-        <WindowScroller scrollElement={isSmallScreen ? undefined : scroller}>
-          {({
-            height,
-            registerChild,
-            onChildScroll,
-            scrollTop: gridScrollTop,
-          }) => {
-            if (!height) {
-              return <div />;
-            }
-
-            return (
-              <div ref={registerChild}>
-                <Grid
-                  ref={gridRef}
-                  className={styles.grid}
-                  autoHeight={true}
-                  height={height}
-                  columnCount={1}
-                  columnWidth={width}
-                  rowCount={items.length}
-                  rowHeight={rowHeight}
-                  width={width}
-                  scrollTop={gridScrollTop}
-                  overscanRowCount={2}
-                  cellRenderer={cellRenderer}
-                  scrollToAlignment="start"
-                  onScroll={onChildScroll}
-                />
-              </div>
-            );
-          }}
-        </WindowScroller>
+        <Grid
+          ref={gridRef}
+          className={styles.grid}
+          scrollElement={isSmallScreen ? 'window' : scroller}
+          columnCount={1}
+          columnWidth={width}
+          rowCount={items.length}
+          rowHeight={rowHeight}
+          width={width}
+          overscanRowCount={2}
+          cellRenderer={cellRenderer}
+        />
       </div>
     </Measure>
   );
