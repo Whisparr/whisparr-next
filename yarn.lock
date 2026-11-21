@@ -931,7 +931,7 @@
   dependencies:
     postcss "^8.0.0"
 
-"@types/prop-types@*":
+"@types/prop-types@15.7.13":
   version "15.7.13"
   resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.7.13.tgz#2af91918ee12d9d32914feb13f5326658461b451"
   integrity sha512-hCZTSvwbzWGvhqxp/RqVqwU999pBf2vp7hzIjiYOsl8wqOmUxkQ6ddw1cV3l8811+kdUFus/q4d1Y3E3SyEifA==
@@ -972,14 +972,6 @@
   resolved "https://registry.yarnpkg.com/@types/react-text-truncate/-/react-text-truncate-0.19.0.tgz#322dd718dcbe1267a9d1279f8ac4dc844c322a13"
   integrity sha512-8H7BjVf7Rp3ERTTiFZpQf6a5hllwdJrWuQ92nwQGp7DWQ2Ju89GRuzXHuZHXU9T+hLTGLCUPbimjQnW1mAogqQ==
   dependencies:
-    "@types/react" "*"
-
-"@types/react-virtualized@9.22.4":
-  version "9.22.4"
-  resolved "https://registry.yarnpkg.com/@types/react-virtualized/-/react-virtualized-9.22.4.tgz#5f5af17c35ec7963e2804aab42e0716fb12f9527"
-  integrity sha512-7xBz1a/zXt4Qpogi9khBeaZhphcHPnEF3uchRXsqsKhpHwgxgrpo6OgghLqgc5NWQ6aj5/ws7HaNzIShKNCnXg==
-  dependencies:
-    "@types/prop-types" "*"
     "@types/react" "*"
 
 "@types/react-window@1.8.8":
@@ -4862,6 +4854,11 @@ react-use-measure@2.1.7:
   version "2.1.7"
   resolved "https://registry.yarnpkg.com/react-use-measure/-/react-use-measure-2.1.7.tgz#36b8a2e7fd2fa58109ab851b3addcb0aad66ad1d"
   integrity sha512-KrvcAo13I/60HpwGO5jpW7E9DfusKyLPLvuHlUyP5zqnmAPhNc6qTRjUQrdTADl0lpPpDVU2/Gg51UlOGHXbdg==
+
+react-virtualized-auto-sizer@2.0.4:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/react-virtualized-auto-sizer/-/react-virtualized-auto-sizer-2.0.4.tgz#cd7e4f98121a4e367ba978fa1f919d442157b805"
+  integrity sha512-OgkJ2qCvm7ahHpkiHwHyRz9n1nSLr+U1Tz1xewtXF++KKwLt5X7tcuQA8dmsL2RPpEhB3Uz8jtSNSZ86Mx/lEQ==
 
 react-virtualized@10.0.1:
   version "10.0.1"

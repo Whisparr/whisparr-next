@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  AutoSizer,
   CellMeasurer,
   CellMeasurerCache,
   List,
-  type ListRowProps,
-  WindowScroller,
+  type ListImperativeAPI,
+  type RowRendererParams,
 } from 'react-virtualized';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 import { useAppDimension } from 'App/appStore';
 import { SelectProvider } from 'App/SelectContext';
 import { CommonPosterOptions } from 'Components/PosterOptionsForm';
@@ -46,10 +46,6 @@ interface PosterCell {
 
 interface DetailsPosterListProps extends DetailsPostersProps {
   width: number;
-  height: number;
-  isScrolling: boolean;
-  scrollTop: number;
-  onChildScroll: (params: { scrollTop: number }) => void;
 }
 
 function getColumnWidth(
@@ -96,15 +92,12 @@ function getPosterCell(
 function DetailsPosterList({
   items,
   posterOptions,
+  scrollContainer,
   sortKey,
   width,
-  height,
-  isScrolling,
-  scrollTop,
-  onChildScroll,
 }: Readonly<DetailsPosterListProps>) {
   const isSmallScreen = useAppDimension('isSmallScreen');
-  const listRef = useRef<List>(null);
+  const listRef = useRef<ListImperativeAPI>(null);
   const cacheRef = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -150,7 +143,7 @@ function DetailsPosterList({
   }, [rows, posterOptions]);
 
   const rowRenderer = useCallback(
-    ({ index, key, parent, style }: ListRowProps) => {
+    ({ index, key, parent, style }: RowRendererParams) => {
       const row = rows[index];
 
       if (!row) {
@@ -213,8 +206,7 @@ function DetailsPosterList({
   return (
     <List
       ref={listRef}
-      autoHeight={true}
-      height={height}
+      scrollElement={scrollContainer}
       width={width}
       rowCount={rows.length}
       rowHeight={cacheRef.current.rowHeight}
@@ -223,10 +215,7 @@ function DetailsPosterList({
       }
       deferredMeasurementCache={cacheRef.current}
       overscanRowCount={4}
-      scrollTop={scrollTop}
-      isScrolling={isScrolling}
       rowRenderer={rowRenderer}
-      onScroll={onChildScroll}
     />
   );
 }
@@ -237,41 +226,23 @@ function DetailsPosters({
   scrollContainer,
   sortKey,
 }: Readonly<DetailsPostersProps>) {
+  const renderList = useCallback(
+    ({ width }: { width: number | undefined }) =>
+      width ? (
+        <DetailsPosterList
+          items={items}
+          posterOptions={posterOptions}
+          scrollContainer={scrollContainer}
+          sortKey={sortKey}
+          width={width}
+        />
+      ) : null,
+    [items, posterOptions, scrollContainer, sortKey]
+  );
+
   return (
     <SelectProvider items={items as Movie[]}>
-      <WindowScroller scrollElement={scrollContainer ?? undefined}>
-        {({ height, isScrolling, onChildScroll, scrollTop, registerChild }) => {
-          if (!height) {
-            return null;
-          }
-
-          return (
-            <div
-              ref={(element) => {
-                (registerChild as unknown as (el: Element | null) => void)(
-                  element
-                );
-              }}
-            >
-              <AutoSizer disableHeight={true}>
-                {({ width }) => (
-                  <DetailsPosterList
-                    items={items}
-                    posterOptions={posterOptions}
-                    scrollContainer={scrollContainer}
-                    sortKey={sortKey}
-                    width={width}
-                    height={height}
-                    isScrolling={isScrolling}
-                    scrollTop={scrollTop}
-                    onChildScroll={onChildScroll}
-                  />
-                )}
-              </AutoSizer>
-            </div>
-          );
-        }}
-      </WindowScroller>
+      <AutoSizer renderProp={renderList} />
     </SelectProvider>
   );
 }

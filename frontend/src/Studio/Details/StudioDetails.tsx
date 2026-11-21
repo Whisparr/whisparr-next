@@ -8,13 +8,13 @@ import React, {
 } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  AutoSizer,
   CellMeasurer,
   CellMeasurerCache,
   List,
-  type ListRowProps,
-  WindowScroller,
+  type ListImperativeAPI,
+  type RowRendererParams,
 } from 'react-virtualized';
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 import Alert from 'Components/Alert';
 import DetailsPosterOptionsModal from 'Components/DetailsPosterOptionsModal';
 import DetailsPosters from 'Components/DetailsPosters';
@@ -108,7 +108,7 @@ function StudioDetails() {
     setScrollContainer(el);
   }, []);
 
-  const listRef = useRef<List>(null);
+  const listRef = useRef<ListImperativeAPI>(null);
   const cacheRef = useRef(
     new CellMeasurerCache({
       fixedWidth: true,
@@ -229,7 +229,7 @@ function StudioDetails() {
   }, [expandedState, worksByYear.length]);
 
   const rowRenderer = useCallback(
-    ({ index, key, parent, style }: ListRowProps) => {
+    ({ index, key, parent, style }: RowRendererParams) => {
       if (!studioId) {
         return null;
       }
@@ -273,6 +273,24 @@ function StudioDetails() {
       handleVirtualizedExpandPress,
       onYearRefreshPress,
     ]
+  );
+
+  const renderWorksList = useCallback(
+    ({ width }: { width: number | undefined }) =>
+      width ? (
+        <List
+          ref={listRef}
+          scrollElement={scrollContainer}
+          width={width}
+          rowCount={worksByYear.length}
+          rowHeight={cacheRef.current.rowHeight}
+          estimatedRowSize={80}
+          deferredMeasurementCache={cacheRef.current}
+          overscanRowCount={6}
+          rowRenderer={rowRenderer}
+        />
+      ) : null,
+    [rowRenderer, scrollContainer, worksByYear.length]
   );
 
   if (!studio) {
@@ -648,51 +666,7 @@ function StudioDetails() {
           {isPopulated && (
             <FieldSet legend={translate('Works')}>
               {worksView === 'table' ? (
-                <WindowScroller scrollElement={scrollContainer ?? undefined}>
-                  {({
-                    height,
-                    isScrolling,
-                    onChildScroll,
-                    scrollTop,
-                    registerChild,
-                  }) => {
-                    if (!height) {
-                      return null;
-                    }
-
-                    return (
-                      <div
-                        ref={(element) => {
-                          (
-                            registerChild as unknown as (
-                              el: Element | null
-                            ) => void
-                          )(element);
-                        }}
-                      >
-                        <AutoSizer disableHeight={true}>
-                          {({ width }) => (
-                            <List
-                              ref={listRef}
-                              autoHeight={true}
-                              height={height}
-                              width={width}
-                              rowCount={worksByYear.length}
-                              rowHeight={cacheRef.current.rowHeight}
-                              estimatedRowSize={80}
-                              deferredMeasurementCache={cacheRef.current}
-                              overscanRowCount={6}
-                              scrollTop={scrollTop}
-                              isScrolling={isScrolling}
-                              rowRenderer={rowRenderer}
-                              onScroll={onChildScroll}
-                            />
-                          )}
-                        </AutoSizer>
-                      </div>
-                    );
-                  }}
-                </WindowScroller>
+                <AutoSizer renderProp={renderWorksList} />
               ) : (
                 <DetailsPosters
                   items={posterWorks}
