@@ -191,19 +191,6 @@
   padding: 20px;
 }
 
-.yearRow {
-  box-sizing: border-box;
-}
-
-.yearRowExpanded {
-  padding-bottom: 20px;
-}
-
-.yearRowCollapsed {
-  padding-bottom: 20px;
-  height: 50px;
-}
-
 .tabList {
   margin: 0;
   padding: 0;

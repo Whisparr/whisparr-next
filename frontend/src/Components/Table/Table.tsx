@@ -22,6 +22,9 @@ interface TableProps {
   allSelected?: boolean;
   allUnselected?: boolean;
   columns: Column[];
+  // Rendered before the header, so `table-layout: fixed` tables can size
+  // their columns
+  colGroup?: React.ReactNode;
   optionsComponent?: React.ElementType;
   pageSize?: number;
   canModifyColumns?: boolean;
@@ -40,6 +43,7 @@ function Table({
   allSelected = false,
   allUnselected = false,
   columns,
+  colGroup,
   optionsComponent,
   pageSize,
   canModifyColumns,
@@ -60,6 +64,7 @@ function Table({
       autoFocus={false}
     >
       <table className={className}>
+        {colGroup}
         <TableHeader>
           {selectAll && onSelectAllChange ? (
             <TableSelectAllHeaderCell

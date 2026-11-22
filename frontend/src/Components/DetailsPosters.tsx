@@ -10,6 +10,7 @@ import { AutoSizer } from 'react-virtualized-auto-sizer';
 import { useAppDimension } from 'App/appStore';
 import { SelectProvider } from 'App/SelectContext';
 import { CommonPosterOptions } from 'Components/PosterOptionsForm';
+import useDebounce from 'Helpers/Hooks/useDebounce';
 import MovieIndexPoster from 'Movie/Index/Posters/MovieIndexPoster';
 import Movie from 'Movie/Movie';
 import SceneIndexPoster from 'Scene/Index/Posters/SceneIndexPoster';
@@ -23,6 +24,10 @@ const COLUMN_PADDING_SMALL_SCREEN = Number.parseInt(
   dimensions.movieIndexColumnPaddingSmallScreen,
   10
 );
+
+// A window resize sends a width per frame; lay the posters out (and re-measure
+// every row) once it settles.
+const LAYOUT_WIDTH_DEBOUNCE_MS = 150;
 
 const ADDITIONAL_COLUMN_COUNT: Record<string, number> = {
   small: 3,
@@ -94,9 +99,10 @@ function DetailsPosterList({
   posterOptions,
   scrollContainer,
   sortKey,
-  width,
+  width: containerWidth,
 }: Readonly<DetailsPosterListProps>) {
   const isSmallScreen = useAppDimension('isSmallScreen');
+  const width = useDebounce(containerWidth, LAYOUT_WIDTH_DEBOUNCE_MS);
   const listRef = useRef<ListImperativeAPI>(null);
   const cacheRef = useRef(
     new CellMeasurerCache({
