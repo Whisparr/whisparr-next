@@ -1,9 +1,7 @@
 import { orderBy } from 'lodash';
 import { useCallback } from 'react';
-import { useAppDimensions } from 'App/appStore';
 import * as commandNames from 'Commands/commandNames';
 import { useExecuteCommand } from 'Commands/useCommands';
-import Column from 'Components/Table/Column';
 import { sortDirections } from 'Helpers/Props';
 import { SortDirection } from 'Helpers/Props/sortDirections';
 import Movie from 'Movie/Movie';
@@ -14,27 +12,10 @@ import {
   SECONDARY_SORT_KEY,
   setStudioScenesColumns,
   setStudioScenesSort,
-  useStudioScenesOption,
 } from './studioScenesOptionsStore';
-
-interface StudioDetailsYearState {
-  items: Movie[];
-  isSmallScreen: boolean;
-  isSearching: boolean;
-  columns: Column[];
-  sortKey: string;
-  sortDirection: SortDirection;
-}
 
 interface StudioDetailsYearActions {
   onMonitorYearPress: () => void;
-  onTableOptionChange: (payload: TableOptionsChangePayload) => void;
-  onSortPress: (
-    sortKey: string,
-    sortDirection: SortDirection | undefined,
-    currentSortKey: string,
-    currentSortDirection: SortDirection
-  ) => void;
   onSearchPress: () => void;
 }
 
@@ -44,7 +25,7 @@ function getSortClause(sortKey: string) {
   };
 }
 
-function sort(
+export function sortStudioWorks(
   items: Movie[],
   sortKey: string,
   sortDirection: SortDirection
@@ -67,22 +48,35 @@ function sort(
   return orderBy(items, clauses, orders);
 }
 
-export function useStudioDetailsYearData(
-  items: Movie[]
-): StudioDetailsYearState {
-  const columns = useStudioScenesOption('columns');
-  const sortKey = useStudioScenesOption('sortKey');
-  const sortDirection = useStudioScenesOption('sortDirection');
-  const { isSmallScreen } = useAppDimensions();
+export function changeStudioScenesTableOptions({
+  columns,
+}: TableOptionsChangePayload) {
+  // This table has no page size, so the modal only ever sends columns.
+  if (columns) {
+    setStudioScenesColumns(columns);
+  }
+}
 
-  return {
-    items: sort(items, sortKey, sortDirection),
-    isSmallScreen,
-    isSearching: false,
-    columns,
-    sortKey,
-    sortDirection,
-  };
+export function sortStudioScenes(
+  sortKey: string,
+  sortDirection: SortDirection | undefined,
+  currentSortKey: string,
+  currentSortDirection: SortDirection
+) {
+  let nextDirection = sortDirection;
+
+  if (!nextDirection) {
+    if (sortKey === currentSortKey) {
+      nextDirection =
+        currentSortDirection === sortDirections.ASCENDING
+          ? sortDirections.DESCENDING
+          : sortDirections.ASCENDING;
+    } else {
+      nextDirection = sortDirections.ASCENDING;
+    }
+  }
+
+  setStudioScenesSort(sortKey, nextDirection);
 }
 
 export function useStudioDetailsYearActions(
@@ -102,41 +96,6 @@ export function useStudioDetailsYearActions(
     mutation.mutate(items.map((item) => item.id));
   }, [items, monitorMovies, unmonitorMovies]);
 
-  const onTableOptionChange = useCallback(
-    ({ columns }: TableOptionsChangePayload) => {
-      // This table has no page size, so the modal only ever sends columns.
-      if (columns) {
-        setStudioScenesColumns(columns);
-      }
-    },
-    []
-  );
-
-  const onSortPress = useCallback(
-    (
-      sortKey: string,
-      sortDirection: SortDirection | undefined,
-      currentSortKey: string,
-      currentSortDirection: SortDirection
-    ) => {
-      let nextDirection = sortDirection;
-
-      if (!nextDirection) {
-        if (sortKey === currentSortKey) {
-          nextDirection =
-            currentSortDirection === sortDirections.ASCENDING
-              ? sortDirections.DESCENDING
-              : sortDirections.ASCENDING;
-        } else {
-          nextDirection = sortDirections.ASCENDING;
-        }
-      }
-
-      setStudioScenesSort(sortKey, nextDirection);
-    },
-    []
-  );
-
   const onSearchPress = useCallback(() => {
     executeCommand({
       name: commandNames.STUDIO_SEARCH,
@@ -147,8 +106,6 @@ export function useStudioDetailsYearActions(
 
   return {
     onMonitorYearPress,
-    onTableOptionChange,
-    onSortPress,
     onSearchPress,
   };
 }

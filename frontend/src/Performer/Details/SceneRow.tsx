@@ -202,6 +202,11 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
           return <RelativeDateCell key={name} date={releaseDate} />;
         }
 
+        if (name === 'credits' && !performerNames) {
+          // Keep the cell so the columns after it stay in place
+          return <TableRowCell key={name} className={styles.performers} />;
+        }
+
         if (name === 'credits' && performerNames) {
           // TODO: Workaround for duplicates before slicing
           const uniquePerformers = Array.from(new Set(performerNames))
@@ -242,14 +247,14 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
         }
 
         if (name === 'path') {
-          return path ? (
+          return (
             <TableRowCell
               key={name}
               className={safeForWorkMode ? styles.blurred : styles.path}
             >
               {path}
             </TableRowCell>
-          ) : null;
+          );
         }
 
         if (name === 'sizeOnDisk') {

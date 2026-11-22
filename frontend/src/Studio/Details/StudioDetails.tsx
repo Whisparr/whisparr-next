@@ -1,20 +1,6 @@
 import find from 'lodash/find';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  CellMeasurer,
-  CellMeasurerCache,
-  List,
-  type ListImperativeAPI,
-  type RowRendererParams,
-} from 'react-virtualized';
-import { AutoSizer } from 'react-virtualized-auto-sizer';
 import Alert from 'Components/Alert';
 import DetailsPosterOptionsModal from 'Components/DetailsPosterOptionsModal';
 import DetailsPosters from 'Components/DetailsPosters';
@@ -54,9 +40,9 @@ import {
   setStudioDetailsView,
   useStudioDetailsOption,
 } from './studioDetailsOptionsStore';
-import StudioDetailsYear from './StudioDetailsYear';
 import { setStudioScenesExpanded } from './studioScenesOptionsStore';
 import StudioTags from './StudioTags';
+import StudioWorksList from './StudioWorksList';
 import {
   buildStudioWorksData,
   ensureImageType,
@@ -108,15 +94,6 @@ function StudioDetails() {
     setScrollContainer(el);
   }, []);
 
-  const listRef = useRef<ListImperativeAPI>(null);
-  const cacheRef = useRef(
-    new CellMeasurerCache({
-      fixedWidth: true,
-      defaultHeight: 70,
-      minHeight: 60,
-    })
-  );
-
   const {
     studio,
     safeForWorkMode,
@@ -155,7 +132,6 @@ function StudioDetails() {
   const javAvailable = useJavAvailable();
 
   const studioTags = useStudioTags(studio?.tags || []);
-  const studioId = studio?.id;
 
   const isSaving = false;
   const isRefreshing = isStudioRefreshing || isManualRefresh;
@@ -191,10 +167,6 @@ function StudioDetails() {
     }
   }, [allWorks.length, expandedState, initialExpandedState]);
 
-  const yearIndexMap = useMemo(() => {
-    return new Map(worksByYear.map((entry, index) => [entry.year, index]));
-  }, [worksByYear]);
-
   const handleExpandAllPress = useCallback(() => {
     const newExpandedState: Record<number, boolean> = {};
     years.forEach((year) => {
@@ -203,94 +175,13 @@ function StudioDetails() {
     setStudioScenesExpanded(newExpandedState);
   }, [allExpanded, years]);
 
-  const handleVirtualizedExpandPress = useCallback(
+  const handleYearExpandPress = useCallback(
     (year: number, expand: boolean) => {
-      const isExpanded = !!expandedState[year];
-
-      if (expand !== isExpanded) {
+      if (expand !== !!expandedState[year]) {
         handleExpandPress(year);
       }
-
-      const index = yearIndexMap.get(year);
-
-      if (index == null) {
-        return;
-      }
-
-      cacheRef.current.clear(index, 0);
-      listRef.current?.recomputeRowHeights(index);
     },
-    [expandedState, handleExpandPress, yearIndexMap]
-  );
-
-  useEffect(() => {
-    cacheRef.current.clearAll();
-    listRef.current?.recomputeRowHeights();
-  }, [expandedState, worksByYear.length]);
-
-  const rowRenderer = useCallback(
-    ({ index, key, parent, style }: RowRendererParams) => {
-      if (!studioId) {
-        return null;
-      }
-
-      const entry = worksByYear[index];
-
-      if (!entry) {
-        return null;
-      }
-
-      const isExpanded = !!expandedState[entry.year];
-      const rowClassName = isExpanded
-        ? `${styles.yearRow} ${styles.yearRowExpanded}`
-        : `${styles.yearRow} ${styles.yearRowCollapsed}`;
-
-      return (
-        <CellMeasurer
-          key={key}
-          cache={cacheRef.current}
-          columnIndex={0}
-          rowIndex={index}
-          parent={parent}
-        >
-          <div className={rowClassName} style={style}>
-            <StudioDetailsYear
-              studioId={studioId}
-              year={entry.year}
-              works={entry.works}
-              isExpanded={isExpanded}
-              onExpandPress={handleVirtualizedExpandPress}
-              onYearRefreshPress={onYearRefreshPress}
-            />
-          </div>
-        </CellMeasurer>
-      );
-    },
-    [
-      expandedState,
-      studioId,
-      worksByYear,
-      handleVirtualizedExpandPress,
-      onYearRefreshPress,
-    ]
-  );
-
-  const renderWorksList = useCallback(
-    ({ width }: { width: number | undefined }) =>
-      width ? (
-        <List
-          ref={listRef}
-          scrollElement={scrollContainer}
-          width={width}
-          rowCount={worksByYear.length}
-          rowHeight={cacheRef.current.rowHeight}
-          estimatedRowSize={80}
-          deferredMeasurementCache={cacheRef.current}
-          overscanRowCount={6}
-          rowRenderer={rowRenderer}
-        />
-      ) : null,
-    [rowRenderer, scrollContainer, worksByYear.length]
+    [expandedState, handleExpandPress]
   );
 
   if (!studio) {
@@ -666,7 +557,14 @@ function StudioDetails() {
           {isPopulated && (
             <FieldSet legend={translate('Works')}>
               {worksView === 'table' ? (
-                <AutoSizer renderProp={renderWorksList} />
+                <StudioWorksList
+                  studioId={studio.id}
+                  worksByYear={worksByYear}
+                  expandedState={expandedState}
+                  scrollContainer={scrollContainer}
+                  onExpandPress={handleYearExpandPress}
+                  onYearRefreshPress={onYearRefreshPress}
+                />
               ) : (
                 <DetailsPosters
                   items={posterWorks}
