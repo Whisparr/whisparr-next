@@ -179,7 +179,7 @@ export interface InteractiveImportModalContentProps {
 }
 
 function InteractiveImportModalContent(
-  props: InteractiveImportModalContentProps
+  props: Readonly<InteractiveImportModalContentProps>
 ) {
   const {
     downloadIds,

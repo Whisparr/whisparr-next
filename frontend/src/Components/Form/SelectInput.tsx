@@ -42,7 +42,7 @@ function SelectInput({
   autoFocus = false,
   onBlur,
   onChange,
-}: SelectInputProps) {
+}: Readonly<SelectInputProps>) {
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
       onChange({
