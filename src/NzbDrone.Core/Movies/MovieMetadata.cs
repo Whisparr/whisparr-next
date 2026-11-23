@@ -78,14 +78,49 @@ namespace NzbDrone.Core.Movies
 
         public MediaCover.MediaCover Poster
         {
-           // Return Poster if exists, otherwise return Screenshot (Don't return any Fanart)
-            get { return Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Poster) ?? Images.FirstOrDefault(i => i.CoverType == MediaCoverTypes.Screenshot); }
+            // Poster, else Screenshot, else (scenes and JAV only, which may carry just a fanart) the Fanart.
+            // Movies never use their fanart as a poster.
+            get
+            {
+                return Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Poster)
+                    ?? Images.FirstOrDefault(i => i.CoverType == MediaCoverTypes.Screenshot)
+                    ?? (ItemType != ItemType.Movie ? Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Fanart) : null);
+            }
         }
 
         public MediaCover.MediaCover Fanart
         {
-            // Return Poster if exists, otherwise return Screenshot (Don't return any Fanart)
-            get { return Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Fanart); }
+            // Fanart, else (JAV only, which may carry just the DVD cover spread) the Poster
+            get
+            {
+                return Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Fanart)
+                    ?? (ItemType == ItemType.Jav ? Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Poster) : null);
+            }
+        }
+
+        // Every image keyed by its own cover type, plus the poster/fanart slot the item lacks filled from the other
+        // (non-movies without a Poster use the Fanart; JAV without a Fanart uses the Poster).
+        public IEnumerable<(MediaCoverTypes CoverType, MediaCover.MediaCover Source)> GetEffectiveCovers()
+        {
+            foreach (var image in Images)
+            {
+                yield return (image.CoverType, image);
+            }
+
+            var hasPoster = Images.Any(c => c.CoverType == MediaCoverTypes.Poster);
+            var fanart = Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Fanart);
+
+            if (!hasPoster && fanart != null && ItemType != ItemType.Movie)
+            {
+                yield return (MediaCoverTypes.Poster, fanart);
+            }
+
+            var poster = Images.FirstOrDefault(c => c.CoverType == MediaCoverTypes.Poster);
+
+            if (fanart == null && poster != null && ItemType == ItemType.Jav)
+            {
+                yield return (MediaCoverTypes.Fanart, poster);
+            }
         }
     }
 

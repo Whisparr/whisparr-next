@@ -81,8 +81,11 @@ interface Props {
 const defaultFontSize = Number(fonts.defaultFontSize);
 const lineHeight = Number.parseFloat(fonts.lineHeight);
 
-function getFanartUrl(images: MovieImageType[]) {
-  const image = images.find((img) => img.coverType === 'fanart');
+// A JAV item may carry only the DVD cover spread (poster), which then doubles as the backdrop
+function getFanartUrl(images: MovieImageType[], isJav: boolean) {
+  const image =
+    images.find((img) => img.coverType === 'fanart') ??
+    (isJav ? images.find((img) => img.coverType === 'poster') : undefined);
   return image?.url ?? image?.remoteUrl;
 }
 
@@ -185,7 +188,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
   const movieId = movie.id;
   const { sizeOnDisk } = statistics as MovieStatistics;
   const hasFile = !!movie.movieFileId || sizeOnDisk > 0;
-  const fanartUrl = getFanartUrl(images);
+  const fanartUrl = getFanartUrl(images, isJav);
   const marqueeWidth = isSmallScreen ? titleWidth : titleWidth - 150;
   const titleWithYear = year > 0 ? `${title} (${year})` : title;
 

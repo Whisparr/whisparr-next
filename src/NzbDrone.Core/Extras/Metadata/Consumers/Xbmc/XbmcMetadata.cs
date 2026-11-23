@@ -143,8 +143,9 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
                 var watched = GetExistingWatchedStatus(movie, movieFile.RelativePath);
 
                 var thumbnail = movie.MovieMetadata.Value.Images.SingleOrDefault(i => i.CoverType == MediaCoverTypes.Screenshot);
-                var posters = movie.MovieMetadata.Value.Images.Where(i => i.CoverType == MediaCoverTypes.Poster).ToList();
-                var fanarts = movie.MovieMetadata.Value.Images.Where(i => i.CoverType == MediaCoverTypes.Fanart).ToList();
+                var effectiveCovers = movie.MovieMetadata.Value.GetEffectiveCovers().ToList();
+                var posters = effectiveCovers.Where(c => c.CoverType == MediaCoverTypes.Poster).Select(c => c.Source).ToList();
+                var fanarts = effectiveCovers.Where(c => c.CoverType == MediaCoverTypes.Fanart).Select(c => c.Source).ToList();
 
                 var details = new XElement("movie");
 
@@ -442,10 +443,10 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
 
         private IEnumerable<ImageFileResult> ProcessMovieImages(Movie movie, MovieFile perFileMovieFile)
         {
-            foreach (var image in movie.MovieMetadata.Value.Images)
+            foreach (var (coverType, cover) in movie.MovieMetadata.Value.GetEffectiveCovers())
             {
-                var source = _mediaCoverService.GetMovieCoverPath(movie.Id, image.CoverType);
-                var type = image.CoverType.ToString().ToLowerInvariant();
+                var source = _mediaCoverService.GetMovieCoverPath(movie.Id, cover.CoverType);
+                var type = coverType.ToString().ToLowerInvariant();
                 var extension = Path.GetExtension(source);
 
                 var destination = perFileMovieFile == null

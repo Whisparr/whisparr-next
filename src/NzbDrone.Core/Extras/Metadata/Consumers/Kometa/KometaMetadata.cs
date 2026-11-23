@@ -72,15 +72,15 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Kometa
 
         private IEnumerable<ImageFileResult> ProcessMovieImages(Movie movie)
         {
-            foreach (var image in movie.MovieMetadata.Value.Images.Where(i => i.CoverType is MediaCoverTypes.Poster or MediaCoverTypes.Fanart))
+            foreach (var (coverType, cover) in movie.MovieMetadata.Value.GetEffectiveCovers().Where(c => c.CoverType is MediaCoverTypes.Poster or MediaCoverTypes.Fanart))
             {
-                var source = _mediaCoverService.GetMovieCoverPath(movie.Id, image.CoverType);
+                var source = _mediaCoverService.GetMovieCoverPath(movie.Id, cover.CoverType);
 
-                var filename = image.CoverType switch
+                var filename = coverType switch
                 {
                     MediaCoverTypes.Poster => "poster",
                     MediaCoverTypes.Fanart => "background",
-                    _ => throw new ArgumentOutOfRangeException($"{image.CoverType} is not supported")
+                    _ => throw new ArgumentOutOfRangeException($"{coverType} is not supported")
                 };
 
                 var destination = filename + Path.GetExtension(source);

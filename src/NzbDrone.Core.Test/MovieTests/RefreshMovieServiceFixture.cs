@@ -93,6 +93,54 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_delete_covers_for_cover_types_that_disappeared()
+        {
+            _movie.Images = new List<MediaCover.MediaCover> { new(MediaCoverTypes.Poster, "p"), new(MediaCoverTypes.Fanart, "f") };
+
+            var newMovieInfo = _movie.JsonClone();
+            newMovieInfo.Images = new List<MediaCover.MediaCover> { new(MediaCoverTypes.Fanart, "f") };
+
+            GivenNewMovieInfo(newMovieInfo);
+
+            Subject.Execute(new RefreshMovieCommand(new List<int> { _movie.Id }));
+
+            Mocker.GetMock<IMapCoversToLocal>()
+                .Verify(v => v.DeleteMovieCovers(_existingMovie.Id, It.Is<IEnumerable<MediaCoverTypes>>(t => t.SequenceEqual(new[] { MediaCoverTypes.Poster }))), Times.Once());
+        }
+
+        [Test]
+        public void should_not_delete_covers_when_cover_types_are_unchanged()
+        {
+            _movie.Images = new List<MediaCover.MediaCover> { new(MediaCoverTypes.Poster, "p"), new(MediaCoverTypes.Fanart, "f") };
+
+            var newMovieInfo = _movie.JsonClone();
+            newMovieInfo.Images = new List<MediaCover.MediaCover> { new(MediaCoverTypes.Fanart, "f2"), new(MediaCoverTypes.Poster, "p2") };
+
+            GivenNewMovieInfo(newMovieInfo);
+
+            Subject.Execute(new RefreshMovieCommand(new List<int> { _movie.Id }));
+
+            Mocker.GetMock<IMapCoversToLocal>()
+                .Verify(v => v.DeleteMovieCovers(It.IsAny<int>(), It.IsAny<IEnumerable<MediaCoverTypes>>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_delete_covers_when_new_image_list_is_empty()
+        {
+            _movie.Images = new List<MediaCover.MediaCover> { new(MediaCoverTypes.Poster, "p"), new(MediaCoverTypes.Fanart, "f") };
+
+            var newMovieInfo = _movie.JsonClone();
+            newMovieInfo.Images = new List<MediaCover.MediaCover>();
+
+            GivenNewMovieInfo(newMovieInfo);
+
+            Subject.Execute(new RefreshMovieCommand(new List<int> { _movie.Id }));
+
+            Mocker.GetMock<IMapCoversToLocal>()
+                .Verify(v => v.DeleteMovieCovers(It.IsAny<int>(), It.IsAny<IEnumerable<MediaCoverTypes>>()), Times.Never());
+        }
+
+        [Test]
         public void should_update_imdb_id_if_changed()
         {
             var newMovieInfo = _movie.JsonClone();

@@ -172,6 +172,89 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Xbmc
         }
 
         [Test]
+        public void should_write_poster_from_fanart_for_scene_without_poster()
+        {
+            GivenImages(ItemType.Scene, MediaCoverTypes.Fanart);
+
+            var images = Subject.MovieImages(_movie, _movieFile);
+
+            images.Select(i => i.RelativePath).Should().BeEquivalentTo("fanart.jpg", "poster.jpg");
+            images.Select(i => i.Url).Should().OnlyContain(u => u == "/covers/fanart.jpg");
+        }
+
+        [Test]
+        public void should_write_fanart_from_poster_for_jav_without_fanart()
+        {
+            GivenImages(ItemType.Jav, MediaCoverTypes.Poster);
+
+            var images = Subject.MovieImages(_movie, _movieFile);
+
+            images.Select(i => i.RelativePath).Should().BeEquivalentTo("poster.jpg", "fanart.jpg");
+            images.Select(i => i.Url).Should().OnlyContain(u => u == "/covers/poster.jpg");
+        }
+
+        [Test]
+        public void should_name_fallback_images_per_file_in_shared_folder()
+        {
+            GivenSharedFolder();
+            GivenImages(ItemType.Scene, MediaCoverTypes.Fanart);
+
+            Subject.MovieImages(_movie, _movieFile).Select(i => i.RelativePath).Should().BeEquivalentTo(
+                "Bratty Sis - Stepsis Has A New Fetish (2026)-poster.jpg",
+                "Bratty Sis - Stepsis Has A New Fetish (2026)-fanart.jpg");
+        }
+
+        [Test]
+        public void should_not_write_fanart_as_poster_for_movie()
+        {
+            GivenImages(ItemType.Movie, MediaCoverTypes.Fanart);
+
+            Subject.MovieImages(_movie, _movieFile).Select(i => i.RelativePath).Should().BeEquivalentTo("fanart.jpg");
+        }
+
+        [Test]
+        public void should_not_write_poster_as_fanart_for_scene()
+        {
+            GivenImages(ItemType.Scene, MediaCoverTypes.Poster);
+
+            Subject.MovieImages(_movie, _movieFile).Select(i => i.RelativePath).Should().BeEquivalentTo("poster.jpg");
+        }
+
+        [Test]
+        public void should_use_fanart_as_poster_thumb_in_nfo_for_scene_without_poster()
+        {
+            GivenImages(ItemType.Scene, MediaCoverTypes.Fanart);
+
+            var root = XDocument.Parse(Subject.MovieMetadata(_movie, _movieFile).Contents).Root;
+
+            root.Elements("thumb").Where(e => (string)e.Attribute("aspect") == "poster").Select(e => e.Value)
+                .Should().BeEquivalentTo("http://remote/fanart.jpg");
+            root.Element("fanart").Elements("thumb").Select(e => e.Value).Should().BeEquivalentTo("http://remote/fanart.jpg");
+        }
+
+        [Test]
+        public void should_use_poster_as_fanart_in_nfo_for_jav_without_fanart()
+        {
+            GivenImages(ItemType.Jav, MediaCoverTypes.Poster);
+
+            var root = XDocument.Parse(Subject.MovieMetadata(_movie, _movieFile).Contents).Root;
+
+            root.Elements("thumb").Where(e => (string)e.Attribute("aspect") == "poster").Select(e => e.Value)
+                .Should().BeEquivalentTo("http://remote/poster.jpg");
+            root.Element("fanart").Elements("thumb").Select(e => e.Value).Should().BeEquivalentTo("http://remote/poster.jpg");
+        }
+
+        [Test]
+        public void should_not_use_fanart_as_poster_in_nfo_for_movie()
+        {
+            GivenImages(ItemType.Movie, MediaCoverTypes.Fanart);
+
+            var root = XDocument.Parse(Subject.MovieMetadata(_movie, _movieFile).Contents).Root;
+
+            root.Elements("thumb").Where(e => (string)e.Attribute("aspect") == "poster").Should().BeEmpty();
+        }
+
+        [Test]
         public void should_rename_per_file_image_with_its_video()
         {
             GivenSharedFolder();
@@ -221,6 +304,17 @@ namespace NzbDrone.Core.Test.Extras.Metadata.Consumers.Xbmc
             Mocker.GetMock<IMapCoversToLocal>()
                   .Setup(s => s.GetMovieCoverPath(It.IsAny<int>(), It.IsAny<MediaCoverTypes>()))
                   .Returns<int, MediaCoverTypes, int?>((_, type, _) => $"/covers/{type.ToString().ToLowerInvariant()}.jpg");
+        }
+
+        private void GivenImages(ItemType itemType, params MediaCoverTypes[] coverTypes)
+        {
+            GivenImages();
+
+            _movie.MovieMetadata.Value.ItemType = itemType;
+            _movie.MovieMetadata.Value.Images = coverTypes
+                .Select(t => new MediaCover.MediaCover { CoverType = t, RemoteUrl = $"http://remote/{t.ToString().ToLowerInvariant()}.jpg" })
+                .ToList();
+            Subject.Definition.Settings = new XbmcMetadataSettings { MovieImages = true, MovieMetadata = true };
         }
 
         private XElement GetStudioElement()

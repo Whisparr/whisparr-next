@@ -32,6 +32,7 @@ namespace NzbDrone.Core.MediaCover
     {
         void ConvertToLocalUrls(int movieId, IEnumerable<MediaCover> covers, DateTime? added = null);
         void ConvertToLocalPerformerUrls(int performerId, IEnumerable<MediaCover> covers, DateTime? added = null);
+        void DeleteMovieCovers(int movieId, IEnumerable<MediaCoverTypes> coverTypes);
         void ConvertToLocalStudioUrls(int studioId, IEnumerable<MediaCover> covers, DateTime? added = null);
         string GetMovieCoverPath(int movieId, MediaCoverTypes coverType, int? height = null);
         string GetPerformerCoverPath(int performerId, MediaCoverTypes coverType, int? height = null);
@@ -185,6 +186,26 @@ namespace NzbDrone.Core.MediaCover
             var heightSuffix = height.HasValue ? "-" + height.ToString() : "";
 
             return Path.Combine(GetStudioCoverPath(studioId), coverType.ToString().ToLowerInvariant() + heightSuffix + GetExtension(coverType));
+        }
+
+        public void DeleteMovieCovers(int movieId, IEnumerable<MediaCoverTypes> coverTypes)
+        {
+            foreach (var coverType in coverTypes)
+            {
+                var mainPath = GetMovieCoverPath(movieId, coverType);
+                var paths = new List<string> { mainPath, mainPath + CoverAlreadyExistsSpecification.SourceExtension };
+                paths.AddRange(GetResizeHeights(coverType).Select(height => GetMovieCoverPath(movieId, coverType, height)));
+
+                foreach (var path in paths)
+                {
+                    _coverExistsCache.Remove(path);
+
+                    if (_diskProvider.FileExists(path))
+                    {
+                        _diskProvider.DeleteFile(path);
+                    }
+                }
+            }
         }
 
         public void ConvertToLocalUrls(int movieId, IEnumerable<MediaCover> covers, DateTime? added = null)
@@ -928,31 +949,20 @@ namespace NzbDrone.Core.MediaCover
             _coverExistsSpecification.RecordSource(cover.RemoteUrl, filePath);
         }
 
+        private static int[] GetResizeHeights(MediaCoverTypes coverType)
+        {
+            return coverType switch
+            {
+                MediaCoverTypes.Poster or MediaCoverTypes.Headshot => new[] { 500, 250 },
+                MediaCoverTypes.Banner => new[] { 70, 35 },
+                MediaCoverTypes.Fanart or MediaCoverTypes.Screenshot => new[] { 360, 180 },
+                _ => Array.Empty<int>()
+            };
+        }
+
         private void EnsureResizedCovers(Movie movie, MediaCover cover, bool forceResize)
         {
-            int[] heights;
-
-            switch (cover.CoverType)
-            {
-                default:
-                    return;
-
-                case MediaCoverTypes.Poster:
-                case MediaCoverTypes.Headshot:
-                    heights = new[] { 500, 250 };
-                    break;
-
-                case MediaCoverTypes.Banner:
-                    heights = new[] { 70, 35 };
-                    break;
-
-                case MediaCoverTypes.Fanart:
-                case MediaCoverTypes.Screenshot:
-                    heights = new[] { 360, 180 };
-                    break;
-            }
-
-            foreach (var height in heights)
+            foreach (var height in GetResizeHeights(cover.CoverType))
             {
                 var mainFileName = GetMovieCoverPath(movie.Id, cover.CoverType);
                 var resizeFileName = GetMovieCoverPath(movie.Id, cover.CoverType, height);
