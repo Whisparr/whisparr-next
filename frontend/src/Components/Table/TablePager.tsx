@@ -31,7 +31,7 @@ function TablePager({
   onNextPagePress,
   onLastPagePress,
   onPageSelect,
-}: TablePagerProps) {
+}: Readonly<TablePagerProps>) {
   const [isShowingPageSelect, setIsShowingPageSelect] = useState(false);
 
   const isFirstPage = page === 1;
@@ -53,9 +53,9 @@ function TablePager({
   }, []);
 
   const handlePageSelect = useCallback(
-    ({ value }: InputChanged<number>) => {
+    ({ value }: InputChanged<string>) => {
       setIsShowingPageSelect(false);
-      onPageSelect(value);
+      onPageSelect(Number(value));
     },
     [onPageSelect]
   );

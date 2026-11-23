@@ -16,7 +16,7 @@ export interface SelectInputOption extends Pick<
   value: string | number | (() => string | number);
 }
 
-interface SelectInputProps<T> {
+interface SelectInputProps {
   className?: string;
   disabledClassName?: string;
   name: string;
@@ -26,11 +26,11 @@ interface SelectInputProps<T> {
   hasError?: boolean;
   hasWarning?: boolean;
   autoFocus?: boolean;
-  onChange: (change: InputChanged<T>) => void;
+  onChange: (change: InputChanged<string>) => void;
   onBlur?: (event: SyntheticEvent) => void;
 }
 
-function SelectInput<T>({
+function SelectInput({
   className = styles.select,
   disabledClassName = styles.isDisabled,
   name,
@@ -42,12 +42,12 @@ function SelectInput<T>({
   autoFocus = false,
   onBlur,
   onChange,
-}: SelectInputProps<T>) {
+}: Readonly<SelectInputProps>) {
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLSelectElement>) => {
       onChange({
         name,
-        value: event.target.value as T,
+        value: event.target.value,
       });
     },
     [name, onChange]
