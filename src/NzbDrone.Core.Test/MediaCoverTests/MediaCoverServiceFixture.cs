@@ -131,9 +131,11 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             var expected = new[]
             {
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster) + ".source",
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster, 500),
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster, 250),
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart) + ".source",
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart, 360),
                 Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart, 180)
             };

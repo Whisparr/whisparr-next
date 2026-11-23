@@ -192,7 +192,8 @@ namespace NzbDrone.Core.MediaCover
         {
             foreach (var coverType in coverTypes)
             {
-                var paths = new List<string> { GetMovieCoverPath(movieId, coverType) };
+                var mainPath = GetMovieCoverPath(movieId, coverType);
+                var paths = new List<string> { mainPath, mainPath + CoverAlreadyExistsSpecification.SourceExtension };
                 paths.AddRange(GetResizeHeights(coverType).Select(height => GetMovieCoverPath(movieId, coverType, height)));
 
                 foreach (var path in paths)
