@@ -6,7 +6,6 @@ using FluentValidation.Results;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Localization;
-using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Movies;
@@ -474,7 +473,7 @@ namespace NzbDrone.Core.Notifications.Discord
             {
                 embed.Thumbnail = new DiscordImage
                 {
-                    Url = movie?.MovieMetadata?.Value?.Images?.FirstOrDefault(x => x.CoverType == MediaCoverTypes.Poster)?.RemoteUrl
+                    Url = movie?.MovieMetadata?.Value?.Poster?.RemoteUrl
                 };
             }
 
@@ -482,7 +481,7 @@ namespace NzbDrone.Core.Notifications.Discord
             {
                 embed.Image = new DiscordImage
                 {
-                    Url = movie?.MovieMetadata?.Value?.Images?.FirstOrDefault(x => x.CoverType == MediaCoverTypes.Fanart)?.RemoteUrl
+                    Url = movie?.MovieMetadata?.Value?.Fanart?.RemoteUrl
                 };
             }
 

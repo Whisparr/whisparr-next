@@ -71,6 +71,7 @@ namespace NzbDrone.Core.Movies
         private readonly ILegacyMigrationGate _migrationGate;
         private readonly IRescanAfterRefreshFilter _rescanAfterRefreshFilter;
         private readonly IQueueNewMovieCovers _queueNewMovieCovers;
+        private readonly IMapCoversToLocal _mediaCoverService;
         private readonly Logger _logger;
 
         public RefreshMovieService(IProvideMovieInfo movieInfo,
@@ -96,6 +97,7 @@ namespace NzbDrone.Core.Movies
                                     ILegacyMigrationGate migrationGate,
                                     IRescanAfterRefreshFilter rescanAfterRefreshFilter,
                                     IQueueNewMovieCovers queueNewMovieCovers,
+                                    IMapCoversToLocal mediaCoverService,
                                     Logger logger)
         {
             _movieInfo = movieInfo;
@@ -121,7 +123,27 @@ namespace NzbDrone.Core.Movies
             _migrationGate = migrationGate;
             _rescanAfterRefreshFilter = rescanAfterRefreshFilter;
             _queueNewMovieCovers = queueNewMovieCovers;
+            _mediaCoverService = mediaCoverService;
             _logger = logger;
+        }
+
+        // Cover types the source no longer sends leave stale files behind. An empty new list is more likely a
+        // metadata failure than a real change, so it never deletes.
+        private void DeleteStaleCovers(int movieId, List<MediaCover.MediaCover> oldImages, List<MediaCover.MediaCover> newImages)
+        {
+            if (oldImages == null || newImages == null || newImages.Count == 0)
+            {
+                return;
+            }
+
+            var newTypes = newImages.Select(i => i.CoverType).ToHashSet();
+            var removedTypes = oldImages.Select(i => i.CoverType).Where(t => t != MediaCoverTypes.Unknown && !newTypes.Contains(t)).Distinct().ToList();
+
+            if (removedTypes.Count > 0)
+            {
+                _logger.Debug("Removing stale covers ({0}) for movie {1}", string.Join(", ", removedTypes), movieId);
+                _mediaCoverService.DeleteMovieCovers(movieId, removedTypes);
+            }
         }
 
         private Movie RefreshMovieInfo(int movieId, bool publishUpdated = true)
@@ -184,6 +206,7 @@ namespace NzbDrone.Core.Movies
             movieMetadata.TpdbId = movieInfo.TpdbId;
             movieMetadata.Overview = movieInfo.Overview;
             movieMetadata.Status = movieInfo.Status;
+            DeleteStaleCovers(movie.Id, movieMetadata.Images, movieInfo.Images);
             movieMetadata.Images = movieInfo.Images;
             movieMetadata.CleanTitle = movieInfo.CleanTitle;
             movieMetadata.SortTitle = movieInfo.SortTitle;

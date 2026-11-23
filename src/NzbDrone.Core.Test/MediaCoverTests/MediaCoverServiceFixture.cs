@@ -126,6 +126,51 @@ namespace NzbDrone.Core.Test.MediaCoverTests
         }
 
         [Test]
+        public void should_delete_main_and_resized_movie_covers_for_the_given_types()
+        {
+            var expected = new[]
+            {
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster, 500),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Poster, 250),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart, 360),
+                Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart, 180)
+            };
+
+            Mocker.GetMock<IDiskProvider>().Setup(v => v.FileExists(It.IsAny<string>())).Returns(true);
+
+            Subject.DeleteMovieCovers(12, new[] { MediaCoverTypes.Poster, MediaCoverTypes.Fanart });
+
+            foreach (var path in expected)
+            {
+                Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFile(path), Times.Once());
+            }
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFile(It.IsAny<string>()), Times.Exactly(expected.Length));
+        }
+
+        [Test]
+        public void should_skip_missing_files_and_other_cover_types_when_deleting_movie_covers()
+        {
+            Mocker.GetMock<IDiskProvider>().Setup(v => v.FileExists(It.IsAny<string>())).Returns(false);
+
+            Subject.DeleteMovieCovers(12, new[] { MediaCoverTypes.Poster });
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFile(It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_only_delete_the_requested_cover_type()
+        {
+            Mocker.GetMock<IDiskProvider>().Setup(v => v.FileExists(It.IsAny<string>())).Returns(true);
+
+            Subject.DeleteMovieCovers(12, new[] { MediaCoverTypes.Poster });
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.DeleteFile(Subject.GetMovieCoverPath(12, MediaCoverTypes.Fanart)), Times.Never());
+        }
+
+        [Test]
         public void should_not_create_the_studio_folder_while_building_urls()
         {
             Mocker.GetMock<IDiskProvider>()
