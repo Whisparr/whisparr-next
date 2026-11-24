@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using Dapper;
 using NzbDrone.Core.ImportLists.ImportExclusions;
+using NzbDrone.Core.ImportLists.StashDB;
 using NzbDrone.Core.LegacyMigration;
 
 namespace NzbDrone.Core.Datastore.Migration.Setup
@@ -41,6 +42,12 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
         // Tables whose rows for a seeded scene stay where they are, and are only counted for the report
         private static readonly string[] LeftBehindTables = { "ExtraFiles", "SubtitleFiles", "MetadataFiles", "History", "Blocklist" };
 
+        // The Implementation names of the import lists that only work against StashDB
+        private static readonly HashSet<string> StashDbImportLists = typeof(IStashDbImportList).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(IStashDbImportList).IsAssignableFrom(t))
+            .Select(t => t.Name)
+            .ToHashSet(StringComparer.InvariantCultureIgnoreCase);
+
         public SceneSeedResult Seed(IDbConnection v5Connection, IDbTransaction transaction)
         {
             var result = new SceneSeedResult();
@@ -51,6 +58,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
 
             RewriteExclusions(v5Connection, transaction);
             DropImportListMovies(v5Connection, transaction);
+            DisableStashDbImportLists(v5Connection, transaction);
             CountLeftBehind(v5Connection, transaction);
             DeleteSourceRows(v5Connection, transaction);
 
@@ -202,6 +210,23 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             var count = connection.Execute("DELETE FROM \"ImportListMovies\"", transaction: transaction);
 
             AddReport(connection, transaction, LegacyReportCategory.LeftBehind, "ImportListMovies", "ImportListMovies", "Not carried over to the new scene source", count);
+        }
+
+        // Only an Eros library is seeded, and Eros scenes always came from StashDB, so the new source is TPDB. StashDB
+        // lists can't work against it: left enabled, saving one would sync StashDB scenes into the TPDB library.
+        private static void DisableStashDbImportLists(IDbConnection connection, IDbTransaction transaction)
+        {
+            var lists = connection.Query<(int Id, string Name, string Implementation)>(
+                "SELECT \"Id\", \"Name\", \"Implementation\" FROM \"ImportLists\" WHERE \"Enabled\" = @enabled",
+                new { enabled = true },
+                transaction);
+
+            foreach (var list in lists.Where(l => StashDbImportLists.Contains(l.Implementation)))
+            {
+                connection.Execute("UPDATE \"ImportLists\" SET \"Enabled\" = @enabled WHERE \"Id\" = @id", new { enabled = false, id = list.Id }, transaction);
+
+                AddReport(connection, transaction, LegacyReportCategory.NeedsAttention, "ImportLists", list.Name, "Disabled; StashDB lists don't work with the TPDB scene source", 1);
+            }
         }
 
         private static void CountLeftBehind(IDbConnection connection, IDbTransaction transaction)
