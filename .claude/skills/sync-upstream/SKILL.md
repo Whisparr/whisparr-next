@@ -1,14 +1,14 @@
 ---
 name: sync-upstream
-description: Work one month-sized chunk of the Radarr or Sonarr upstream backlog for Whisparr Eros. Reads each upstream diff, applies the parser/localization/frontend skip rules, records a disposition with a reason, applies the picks, regenerates UPSTREAM_SYNC.md, and opens the PR. Use when catching up on upstream commits or when the upstream-watch tracking issue lists new work.
+description: Work one month-sized chunk of the Radarr or Sonarr upstream backlog for whisparr-next. Reads each upstream diff, applies the parser/localization/frontend skip rules, records a disposition with a reason, applies the picks, regenerates UPSTREAM_SYNC.md, and opens the PR. Use when catching up on upstream commits or when the upstream-watch tracking issue lists new work.
 argument-hint: "<radarr|sonarr> <YYYY-MM>"
 user-invocable: true
-allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, TodoWrite
+allowed-tools: shell, read, grep, glob, edit, write, question, subagent
 ---
 
 # Sync one upstream chunk
 
-Whisparr Eros tracks **two** upstreams on two clocks:
+whisparr-next tracks **two** upstreams on two clocks:
 
 | Tree | Upstream | Why |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ report directly; `--check` will catch you.
 Argument is an upstream and a month: `sync-upstream radarr 2026-04`. If omitted,
 read `UPSTREAM_SYNC.md` and propose the smallest outstanding month.
 
-Run the phases in order. Track them with TodoWrite when the chunk has more than
+Run the phases in order. Track them with the `question` tool or task list when the chunk has more than
 a handful of commits.
 
 ## 1. Resolve the chunk
@@ -43,10 +43,10 @@ it has been read against the rules below, and taking it as-is is exactly the
 mistake the gates exist to prevent. Read every diff in it as if you had picked
 it yourself, drop what should not be there, and write the dispositions.
 
-Branch off `eros-develop` — never work on it directly:
+Branch off `develop` — never work on it directly:
 
 ```sh
-git switch -c sync-<upstream>-<YYYY-MM> eros-develop
+git switch -c sync-<upstream>-<YYYY-MM> develop
 ```
 
 ## 2. Read every diff
@@ -223,14 +223,13 @@ blindness that hid the Sonarr backlog to begin with.
 Check before handing over, and mention the count if it hits:
 
 ```sh
-git log eros-develop..HEAD --format=%b | grep -c 'cherry picked from'
+git log develop..HEAD --format=%b | grep -c 'cherry picked from'
 ```
 
-Open the PR against `eros-develop` (never `eros`) filling in
+Open the PR against `develop` filling in
 `.github/PULL_REQUEST_TEMPLATE.md` — `gh pr create --body` silently bypasses it,
 so pass `--body-file` with the template filled in. Keep the body short: what was
-picked, what was skipped and why, and the verification result. Link Eros issues as
-`Fixes #123` — they live on this repo since 2026-09-17. Only a **v2** issue
-needs the qualified `Fixes Whisparr/Whisparr#123`.
+picked, what was skipped and why, and the verification result. Link issues as
+`Fixes #123` — they live on this repo.
 
 Never add AI attribution to the commit or PR body.

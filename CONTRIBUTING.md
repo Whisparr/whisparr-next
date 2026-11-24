@@ -5,7 +5,7 @@ We're always looking for people to help make Whisparr even better, there are a n
 
 # Documentation
 
-Setup guides, [FAQ](Whisparr/Whisparr-Eros/wiki/FAQ), the more information we have on the [wiki](https://wiki.servarr.com/whisparr) the better.
+Setup guides, [FAQ](Whisparr/whisparr-next/wiki/FAQ), the more information we have on the [wiki](https://wiki.servarr.com/whisparr) the better.
 
 # Development
 
@@ -17,20 +17,20 @@ For a map of the repository layout and where new code belongs (backend project s
 
 - Visual Studio 2022 or higher is recommended (<https://www.visualstudio.com/vs/>). The community version is free and works (<https://www.visualstudio.com/downloads/>).
 
-> VS 2022 V17.0 or higher is recommended as it includes the .NET10 SDK
+> VS 2022 17.12 or higher is recommended; install the .NET 10 SDK separately (pinned in `global.json`)
 {.is-info}
 
 - HTML/Javascript editor of choice (VS Code/Sublime Text/Webstorm/Atom/etc)
 - [Git](https://git-scm.com/downloads)
 - The [Node.js](https://nodejs.org/) runtime is required. The following versions are supported:
-  - **22** (any minor or patch version within this)
+  - **24** (any minor or patch version within this)
 {.grid-list}
 
-> The Application will **NOT** run on older versions such as `20.x`, `18.x`, `16.x` or any version below 22.0! Odd-numbered (non-LTS) releases are untested.
+> The Application will **NOT** run on older versions such as `22.x`, `20.x`, `18.x` or any version below 24.0! Odd-numbered (non-LTS) releases are untested.
 {.is-warning}
 
 - [Yarn](https://yarnpkg.com/getting-started/install) is required to build the frontend
-  - Yarn is included with **Node 22**+ by default. Enable it with `corepack enable`
+  - Yarn is included with **Node 24**+ by default. Enable it with `corepack enable`
   - For other Node versions, install it with `npm i -g corepack`
 
 ## Getting started
@@ -70,7 +70,7 @@ The backend solution is most easily built and ran in Visual Studio [Code] or Rid
 
 #### Visual Studio
 
-> Ensure startup project is set to `Whisparr.Console` and framework to `net6.0`
+> Ensure startup project is set to `Whisparr.Console` and framework to `net10.0`
 {.is-info}
 
 1. First `Build` the solution in Visual Studio, this will ensure all projects are correctly built and dependencies restored
@@ -95,8 +95,8 @@ dotnet msbuild -restore src/Whisparr.sln -p:Configuration=Debug -p:Platform=Posi
 
 ## Contributing Code
 
-- If you're adding a new, already requested feature, please comment on [GitHub Issues](https://github.com/Whisparr/Whisparr-Eros/issues) so work is not duplicated (If you want to add something not already on there, please talk to us first)
-- Rebase from Whisparr's `eros-develop` branch, do not merge
+- If you're adding a new, already requested feature, please comment on [GitHub Issues](https://github.com/Whisparr/whisparr-next/issues) so work is not duplicated (If you want to add something not already on there, please talk to us first)
+- Rebase from Whisparr's `develop` branch, do not merge
 - Make meaningful commits, or squash them
 - Feel free to make a pull request before work is complete, this will let us see where its at and make comments/suggest improvements
 - Reach out to us on the discord if you have any questions
@@ -110,7 +110,7 @@ dotnet msbuild -restore src/Whisparr.sln -p:Configuration=Debug -p:Platform=Posi
 
 ## Pull Requesting
 
-- Only make pull requests to `eros-develop`, never `eros`, if you make a PR to `eros` we will comment on it and close it
+- Only make pull requests to `develop`
 - You're probably going to get some comments or questions from us, they will be to ensure consistency and maintainability
 - We'll try to respond to pull requests as soon as possible, if its been a day or two, please reach out to us, we may have missed it
 - Each PR should come from its own [feature branch](http://martinfowler.com/bliki/FeatureBranch.html) not develop in your fork, it should have a meaningful branch name (what is being added/fixed)
