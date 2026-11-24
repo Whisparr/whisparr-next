@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Extensions.Options;
@@ -84,6 +85,9 @@ namespace NzbDrone.Core.Configuration
     {
         public const string CONFIG_ELEMENT_NAME = "Config";
 
+        private const string API_KEY = "ApiKey";
+        private const string AUTHENTICATION_METHOD = "AuthenticationMethod";
+
         private readonly IEventAggregator _eventAggregator;
         private readonly IDiskProvider _diskProvider;
         private readonly ICached<string> _cache;
@@ -95,10 +99,12 @@ namespace NzbDrone.Core.Configuration
         private readonly LogOptions _logOptions;
 
         private readonly string _configFile;
-        private static readonly Regex HiddenCharacterRegex = new Regex("[^a-z0-9]", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+
         private static readonly Regex LegacyMetadataUrlRegex = new(@"^https?://api\.whisparr\.com/v[1-4](/(\{route\})?)?/?$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
 
-        private static readonly object Mutex = new object();
+        private static readonly HashSet<string> LegacyGithubOwnerRepos = new(StringComparer.OrdinalIgnoreCase) { "whisparr/whisparr", "whisparr/whisparr-eros" };
+
+        private static readonly Lock Mutex = new();
 
         public ConfigFileProvider(IAppFolderInfo appFolderInfo,
                                   ICacheManager cacheManager,
@@ -149,7 +155,7 @@ namespace NzbDrone.Core.Configuration
 
             foreach (var configValue in configValues)
             {
-                if (configValue.Key.Equals("ApiKey", StringComparison.InvariantCultureIgnoreCase))
+                if (configValue.Key.Equals(API_KEY, StringComparison.InvariantCultureIgnoreCase))
                 {
                     continue;
                 }
@@ -217,7 +223,9 @@ namespace NzbDrone.Core.Configuration
             {
                 const string defaultValue = "whisparr/whisparr-next";
                 var githubOwnerRepo = GetValue("GithubOwnerRepo", defaultValue);
-                if (string.IsNullOrWhiteSpace(githubOwnerRepo))
+
+                // A config seeded from v2 or Eros carries that line's repo, whose releases are not v5's; any other value is a custom override
+                if (string.IsNullOrWhiteSpace(githubOwnerRepo) || LegacyGithubOwnerRepos.Contains(githubOwnerRepo.Trim()))
                 {
                     return defaultValue;
                 }
@@ -238,12 +246,12 @@ namespace NzbDrone.Core.Configuration
         {
             get
             {
-                var apiKey = _authOptions.ApiKey ?? GetValue("ApiKey", GenerateApiKey());
+                var apiKey = _authOptions.ApiKey ?? GetValue(API_KEY, GenerateApiKey());
 
                 if (apiKey.IsNullOrWhiteSpace())
                 {
                     apiKey = GenerateApiKey();
-                    SetValue("ApiKey", apiKey);
+                    SetValue(API_KEY, apiKey);
                 }
 
                 return apiKey;
@@ -258,7 +266,7 @@ namespace NzbDrone.Core.Configuration
 
                 if (enabled)
                 {
-                    SetValue("AuthenticationMethod", AuthenticationType.Forms);
+                    SetValue(AUTHENTICATION_METHOD, AuthenticationType.Forms);
 
                     return AuthenticationType.Forms;
                 }
@@ -270,13 +278,13 @@ namespace NzbDrone.Core.Configuration
 #pragma warning restore CS0618 // Type or member is obsolete
                 }
 
-                var value = GetValueEnum("AuthenticationMethod", AuthenticationType.Forms);
+                var value = GetValueEnum(AUTHENTICATION_METHOD, AuthenticationType.Forms);
 
 #pragma warning disable CS0618 // Type or member is obsolete
                 if (value is AuthenticationType.Basic or AuthenticationType.None)
 #pragma warning restore CS0618 // Type or member is obsolete
                 {
-                    SetValue("AuthenticationMethod", AuthenticationType.Forms);
+                    SetValue(AUTHENTICATION_METHOD, AuthenticationType.Forms);
 
                     return AuthenticationType.Forms;
                 }
@@ -396,7 +404,7 @@ namespace NzbDrone.Core.Configuration
 
                 if (valueHolder.Count == 1)
                 {
-                    return valueHolder.First().Value.Trim();
+                    return valueHolder[0].Value.Trim();
                 }
 
                 // Save the value
@@ -463,7 +471,7 @@ namespace NzbDrone.Core.Configuration
             if (AuthenticationMethod == AuthenticationType.Basic)
 #pragma warning restore CS0618 // Type or member is obsolete
             {
-                SetValue("AuthenticationMethod", AuthenticationType.Forms);
+                SetValue(AUTHENTICATION_METHOD, AuthenticationType.Forms);
             }
         }
 
@@ -539,7 +547,7 @@ namespace NzbDrone.Core.Configuration
             }
         }
 
-        private string GenerateApiKey()
+        private static string GenerateApiKey()
         {
             return Guid.NewGuid().ToString().Replace("-", "");
         }
@@ -553,7 +561,7 @@ namespace NzbDrone.Core.Configuration
 
         public void Execute(ResetApiKeyCommand message)
         {
-            SetValue("ApiKey", GenerateApiKey());
+            SetValue(API_KEY, GenerateApiKey());
         }
 
         public bool TrustCgnatIpAddresses => _authOptions.TrustCgnatIpAddresses ?? GetValueBoolean("TrustCgnatIpAddresses", false, persist: false);

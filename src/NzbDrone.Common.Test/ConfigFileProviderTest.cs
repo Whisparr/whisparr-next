@@ -77,6 +77,26 @@ namespace NzbDrone.Common.Test
             Subject.GithubOwnerRepo.Should().Be("whisparr/whisparr-next");
         }
 
+        [TestCase("")]
+        [TestCase("whisparr/whisparr-eros")]
+        [TestCase("Whisparr/Whisparr-Eros")]
+        [TestCase("whisparr/whisparr")]
+        [TestCase(" whisparr/whisparr-eros ")]
+        public void should_use_whisparr_next_for_legacy_github_owner_repo(string saved)
+        {
+            Subject.SetValue("GithubOwnerRepo", saved);
+
+            Subject.GithubOwnerRepo.Should().Be("whisparr/whisparr-next");
+        }
+
+        [Test]
+        public void should_keep_a_custom_github_owner_repo_override()
+        {
+            Subject.SetValue("GithubOwnerRepo", "someone/whisparr-fork");
+
+            Subject.GithubOwnerRepo.Should().Be("someone/whisparr-fork");
+        }
+
         [Test]
         public void should_default_branch_to_develop()
         {
