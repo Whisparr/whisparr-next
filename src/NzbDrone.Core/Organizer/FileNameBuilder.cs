@@ -417,6 +417,9 @@ namespace NzbDrone.Core.Organizer
             tokenHandlers["{TmdbId}"] = m => movie.MovieMetadata.Value.TmdbId.ToString();
             tokenHandlers["{StashId}"] = m => movie.MovieMetadata.Value.StashId ?? string.Empty;
 
+            // TPDB's numeric scene id, for the "theporndbid" tag; empty until a refresh has stored it.
+            tokenHandlers["{TpdbSceneId}"] = m => movie.MovieMetadata.Value.TpdbNumericId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
             // The locked scene source's native id (StashDB or TPDB UUID); {StashId} stays for existing formats.
             tokenHandlers["{Scene ForeignId}"] = m => movie.MovieMetadata.Value.ForeignId ?? string.Empty;
         }

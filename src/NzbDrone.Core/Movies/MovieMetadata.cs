@@ -44,6 +44,7 @@ namespace NzbDrone.Core.Movies
         public int Runtime { get; set; }
         public string Website { get; set; }
         public string TpdbId { get; set; }
+        public int? TpdbNumericId { get; set; }
         public string ImdbId { get; set; }
         public int TmdbId { get; set; }
         public string StashId { get; set; }

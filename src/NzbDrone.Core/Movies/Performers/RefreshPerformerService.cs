@@ -93,6 +93,7 @@ namespace NzbDrone.Core.Movies.Performers
 
             performer.TmdbId = performerInfo.TmdbId;
             performer.TpdbId = performerInfo.TpdbId;
+            performer.TpdbNumericId = performerInfo.TpdbNumericId;
             performer.Gender = performerInfo.Gender;
             performer.Age = performerInfo.Age;
             performer.BirthDate = performerInfo.BirthDate;

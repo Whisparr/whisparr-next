@@ -216,6 +216,7 @@ const sceneIdTokens = [
     example: '155f2559-d1f1-42b1-8cbe-9008542df5ce',
   },
   { token: '{StashId}', example: '155f2559-d1f1-42b1-8cbe-9008542df5ce' },
+  { token: '{TpdbSceneId}', example: '11782053' },
 ];
 
 const qualityTokens = [

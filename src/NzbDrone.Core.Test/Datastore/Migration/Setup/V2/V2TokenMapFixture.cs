@@ -19,6 +19,8 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
         [TestCase("{Site TitleTheWithoutYear}", "{Studio TitleThe}")]
         [TestCase("{MediaInfo VideoCodec} {Release Group} {Original Filename} {Custom Formats}", "{MediaInfo VideoCodec} {Release Group} {Original Filename} {Custom Formats}")]
         [TestCase("{{Site Title}}", "{{Site Title}}")]
+        [TestCase("{TpdbSceneId}", "{TpdbSceneId}")]
+        [TestCase("{Site Title} - {Episode Title} [theporndbid={TpdbSceneId}]", "{Studio Title} - {Scene Title} [theporndbid={TpdbSceneId}]")]
         public void should_map_tokens(string v2, string v5)
         {
             var result = V2TokenMap.Map(v2);
@@ -43,15 +45,6 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup.V2
 
             result.Format.Should().Be("{Studio Title} {Scene Title}");
             result.DroppedTokens.Should().Equal("Episode Year");
-        }
-
-        [Test]
-        public void should_map_and_note_tpdb_scene_id()
-        {
-            var result = V2TokenMap.Map("{TpdbSceneId}");
-
-            result.Format.Should().Be("{Scene ForeignId}");
-            result.DroppedTokens.Should().HaveCount(1);
         }
 
         [Test]

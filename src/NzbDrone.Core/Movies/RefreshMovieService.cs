@@ -204,6 +204,7 @@ namespace NzbDrone.Core.Movies
             movieMetadata.ImdbId = movieInfo.ImdbId;
             movieMetadata.TmdbId = movieInfo.TmdbId;
             movieMetadata.TpdbId = movieInfo.TpdbId;
+            movieMetadata.TpdbNumericId = movieInfo.TpdbNumericId;
             movieMetadata.Overview = movieInfo.Overview;
             movieMetadata.Status = movieInfo.Status;
             DeleteStaleCovers(movie.Id, movieMetadata.Images, movieInfo.Images);

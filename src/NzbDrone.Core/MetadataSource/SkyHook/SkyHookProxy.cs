@@ -143,6 +143,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
             movie.ForeignId = foriegnId;
             movie.TmdbId = resource.ForeignIds.TmdbId;
             movie.TpdbId = resource.ForeignIds.TpdbId;
+            movie.TpdbNumericId = resource.ForeignIds.TpdbNumericId;
             movie.StashId = resource.ForeignIds.StashId;
             var (code, title) = resource.ItemType == ItemType.Jav ? NormalizeJavCodeAndTitle(resource.Code, resource.Title) : (resource.Code, resource.Title);
 
@@ -2338,6 +2339,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 Website = studioResource.Homepage,
                 ForeignId = studioKey,
                 TpdbId = studioResource.ForeignIds.TpdbId,
+                TpdbNumericId = studioResource.ForeignIds.TpdbNumericId,
                 TmdbId = studioResource.ForeignIds.TmdbId,
                 Network = studioResource.Network,
                 Images = studioResource.Images?.Select(MapImage).ToList() ?? new List<MediaCover.MediaCover>(),
@@ -2430,6 +2432,7 @@ namespace NzbDrone.Core.MetadataSource.SkyHook
                 ForeignId = performerKey,
                 TmdbId = performer.ForeignIds.TmdbId,
                 TpdbId = performer.ForeignIds.TpdbId,
+                TpdbNumericId = performer.ForeignIds.TpdbNumericId,
                 Images = performer.Images.Select(MapImage).ToList()
             };
 

@@ -155,6 +155,20 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_copy_tpdb_numeric_id_on_refresh()
+        {
+            var newMovieInfo = _movie.JsonClone();
+            newMovieInfo.TpdbNumericId = 11782053;
+
+            GivenNewMovieInfo(newMovieInfo);
+
+            Subject.Execute(new RefreshMovieCommand(new List<int> { _movie.Id }));
+
+            Mocker.GetMock<IMovieMetadataService>()
+                .Verify(v => v.Upsert(It.Is<MovieMetadata>(s => s.TpdbNumericId == 11782053)));
+        }
+
+        [Test]
         public void should_log_error_if_tmdb_id_not_found()
         {
             Subject.Execute(new RefreshMovieCommand(new List<int> { _movie.Id }));
