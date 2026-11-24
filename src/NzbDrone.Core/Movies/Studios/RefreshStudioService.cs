@@ -83,6 +83,7 @@ namespace NzbDrone.Core.Movies.Studios
             studio.TmdbId = studioInfo.TmdbId;
 
             studio.TpdbId = studioInfo.TpdbId;
+            studio.TpdbNumericId = studioInfo.TpdbNumericId;
             studio.Title = studioInfo.Title;
             studio.Network = studioInfo.Network;
             studio.Website = studioInfo.Website;

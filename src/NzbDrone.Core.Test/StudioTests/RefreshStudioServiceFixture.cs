@@ -476,6 +476,22 @@ namespace NzbDrone.Core.Test.StudioTests
             studio.HasJav.Should().Be(expected);
         }
 
+        [TestCase(11782053)]
+        [TestCase(null)]
+        public void should_copy_tpdb_numeric_id_on_refresh(int? numericId)
+        {
+            var studio = GivenJavStudio(false, false, true);
+            studio.TpdbNumericId = 99;
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetStudioInfo(studio.ForeignId))
+                .Returns(new Studio { ForeignId = studio.ForeignId, Title = studio.Title, HasJavReported = false, TpdbNumericId = numericId });
+
+            Subject.Execute(new RefreshStudiosCommand(new List<int> { studio.Id }));
+
+            studio.TpdbNumericId.Should().Be(numericId);
+        }
+
         [Test]
         public void has_jav_null_falls_back_to_count_once()
         {

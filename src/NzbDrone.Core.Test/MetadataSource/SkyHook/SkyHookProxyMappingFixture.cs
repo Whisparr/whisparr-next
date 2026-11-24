@@ -50,6 +50,28 @@ namespace NzbDrone.Core.Test.MetadataSource.SkyHook
             movie.StudioTitle.Should().Be("Studio");
         }
 
+        [TestCase(11782053)]
+        [TestCase(null)]
+        public void should_copy_tpdb_numeric_ids(int? numericId)
+        {
+            var resource = Scene(stashId: null, tpdbId: SceneTpdbId);
+            resource.ForeignIds.TpdbNumericId = numericId;
+            resource.Studio.ForeignIds.TpdbNumericId = numericId;
+            var cast = Cast("p1", "tp1");
+            cast.Performer.ForeignIds.TpdbNumericId = numericId;
+
+            SkyHookProxy.MapMovie(resource, SceneMetadataType.Tpdb).TpdbNumericId.Should().Be(numericId);
+
+            GivenSceneSource(SceneMetadataType.Tpdb);
+            resource.Credits.Add(cast);
+            GivenSceneGet(resource);
+
+            var (_, studio, performers, _) = Subject.GetSceneInfo(SceneTpdbId);
+
+            studio.TpdbNumericId.Should().Be(numericId);
+            performers.Single().TpdbNumericId.Should().Be(numericId);
+        }
+
         [Test]
         public void should_keep_stash_id_from_skyhook_on_a_tpdb_scene()
         {

@@ -590,6 +590,22 @@ namespace NzbDrone.Core.Test.PerformerTests
             performer.HasJav.Should().Be(expected);
         }
 
+        [TestCase(11782053)]
+        [TestCase(null)]
+        public void should_copy_tpdb_numeric_id_on_refresh(int? numericId)
+        {
+            var performer = GivenJavPerformer(false, false, true);
+            performer.TpdbNumericId = 99;
+
+            Mocker.GetMock<IProvideMovieInfo>()
+                .Setup(s => s.GetPerformerInfo(performer.ForeignId))
+                .Returns(new Performer { ForeignId = performer.ForeignId, Name = performer.Name, HasJavReported = false, TpdbNumericId = numericId });
+
+            Subject.Execute(new RefreshPerformersCommand(new List<int> { performer.Id }));
+
+            performer.TpdbNumericId.Should().Be(numericId);
+        }
+
         [Test]
         public void has_jav_null_falls_back_to_count_once()
         {

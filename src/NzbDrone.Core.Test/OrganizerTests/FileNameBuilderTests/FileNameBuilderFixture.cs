@@ -404,6 +404,26 @@ namespace NzbDrone.Core.Test.OrganizerTests.FileNameBuilderTests
         }
 
         [Test]
+        public void should_render_tpdb_scene_id_token()
+        {
+            _scene.MovieMetadata.Value.TpdbNumericId = 11782053;
+            _namingConfig.StandardSceneFormat = "{Scene Title} [theporndbid={TpdbSceneId}]";
+
+            Subject.BuildFileName(_scene, _movieFile)
+                   .Should().Be("The Last Train Home [theporndbid=11782053]");
+        }
+
+        [Test]
+        public void should_render_empty_tpdb_scene_id_token_without_numeric_id()
+        {
+            _scene.MovieMetadata.Value.TpdbNumericId = null;
+            _namingConfig.StandardSceneFormat = "{Scene Title} {[TpdbSceneId]}";
+
+            Subject.BuildFileName(_scene, _movieFile)
+                   .Should().Be("The Last Train Home");
+        }
+
+        [Test]
         public void should_replace_Movie_space_Title()
         {
             _namingConfig.StandardMovieFormat = "{Movie Title}";

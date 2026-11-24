@@ -42,8 +42,7 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             { "episode performers", new[] { "Scene", "Performers" } },
             { "episode performersfemale", new[] { "Scene", "PerformersFemale" } },
             { "episode performersmale", new[] { "Scene", "PerformersMale" } },
-            { "episode performersother", new[] { "Scene", "PerformersOther" } },
-            { "tpdbsceneid", new[] { "Scene", "ForeignId" } }
+            { "episode performersother", new[] { "Scene", "PerformersOther" } }
         };
 
         private static readonly HashSet<string> UnchangedExact = new (StringComparer.OrdinalIgnoreCase)
@@ -53,7 +52,8 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
             "release group",
             "original title",
             "original filename",
-            "custom formats"
+            "custom formats",
+            "tpdbsceneid"
         };
 
         private static readonly string[] UnchangedFirstWords = { "quality", "mediainfo" };
@@ -94,11 +94,6 @@ namespace NzbDrone.Core.Datastore.Migration.Setup.V2
                     anyDropped = true;
                     AddDropped(dropped, token);
                     return string.Empty;
-                }
-
-                if (key == "tpdbsceneid")
-                {
-                    AddDropped(dropped, "TpdbSceneId (now the TPDB UUID)");
                 }
 
                 var style = DetectStyle(token);
