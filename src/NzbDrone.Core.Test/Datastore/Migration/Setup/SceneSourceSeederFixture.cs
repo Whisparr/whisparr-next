@@ -103,6 +103,19 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
                 new { foreignId, type });
         }
 
+        private void AddImportList(string name, string implementation, bool enabled)
+        {
+            _connection.Execute(
+                "INSERT INTO \"ImportLists\" (\"Enabled\", \"Name\", \"Implementation\", \"ConfigContract\", \"Settings\", \"EnableAuto\", \"RootFolderPath\", \"QualityProfileId\", \"Tags\", \"SearchOnAdd\", \"Monitor\") " +
+                "VALUES (@enabled, @name, @implementation, @implementation, '{}', true, '/library', 1, '[]', false, 0)",
+                new { enabled, name, implementation });
+        }
+
+        private bool IsEnabled(string name)
+        {
+            return _connection.ExecuteScalar<bool>("SELECT \"Enabled\" FROM \"ImportLists\" WHERE \"Name\" = @name", new { name });
+        }
+
         private int Count(string table)
         {
             return _connection.ExecuteScalar<int>($"SELECT COUNT(*) FROM \"{table}\"");
@@ -350,6 +363,59 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             var report = Report().Single(x => x.Area == "ImportListMovies");
             report.Category.Should().Be(2);
             report.Count.Should().Be(2);
+        }
+
+        [TestCase("StashDBFavoriteImport")]
+        [TestCase("StashDBPerformerImport")]
+        [TestCase("StashDBStudioImport")]
+        [TestCase("StashDBTagsImport")]
+        public void enabled_stashdb_import_list_is_disabled_and_reported(string implementation)
+        {
+            AddImportList("My StashDB list", implementation, true);
+
+            Seed();
+
+            IsEnabled("My StashDB list").Should().BeFalse();
+
+            var report = Report().Single(x => x.Area == "ImportLists");
+            report.Category.Should().Be(4);
+            report.Subject.Should().Be("My StashDB list");
+            report.Count.Should().Be(1);
+        }
+
+        [Test]
+        public void each_disabled_stashdb_import_list_gets_its_own_report_row()
+        {
+            AddImportList("Favourites", "StashDBFavoriteImport", true);
+            AddImportList("Performers", "StashDBPerformerImport", true);
+
+            Seed();
+
+            Report().Where(x => x.Area == "ImportLists").Select(x => x.Subject).Should().BeEquivalentTo("Favourites", "Performers");
+        }
+
+        [Test]
+        public void already_disabled_stashdb_import_list_is_not_reported()
+        {
+            AddImportList("Old StashDB list", "StashDBStudioImport", false);
+
+            Seed();
+
+            IsEnabled("Old StashDB list").Should().BeFalse();
+            Report().Should().NotContain(x => x.Area == "ImportLists");
+        }
+
+        [TestCase("RSSImport", true)]
+        [TestCase("TMDbPopularImport", true)]
+        [TestCase("RSSImport", false)]
+        public void other_import_lists_are_untouched(string implementation, bool enabled)
+        {
+            AddImportList("Other list", implementation, enabled);
+
+            Seed();
+
+            IsEnabled("Other list").Should().Be(enabled);
+            Report().Should().NotContain(x => x.Area == "ImportLists");
         }
 
         [Test]
