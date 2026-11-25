@@ -45,6 +45,7 @@ namespace Whisparr.Api.V5.Commands
 
             set
             {
+                // Computed from the command; the setter only lets clients post the field back
             }
         }
 
@@ -62,6 +63,7 @@ namespace Whisparr.Api.V5.Commands
 
             set
             {
+                // Computed from the command; the setter only lets clients post the field back
             }
         }
 
@@ -79,6 +81,7 @@ namespace Whisparr.Api.V5.Commands
 
             set
             {
+                // Computed from the command; the setter only lets clients post the field back
             }
         }
 

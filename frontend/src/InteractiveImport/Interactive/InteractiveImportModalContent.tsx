@@ -352,7 +352,7 @@ function InteractiveImportModalContent(
     setIsConfirmDeleteModalOpen(false);
 
     const movieFileIds = items.reduce((acc: number[], item) => {
-      if (selectedIds.indexOf(item.id) > -1 && item.movieFileId) {
+      if (selectedIds.includes(item.id) && item.movieFileId) {
         acc.push(item.movieFileId);
       }
 
@@ -382,7 +382,7 @@ function InteractiveImportModalContent(
     }
 
     items.forEach((item) => {
-      const isSelected = selectedIds.indexOf(item.id) > -1;
+      const isSelected = selectedIds.includes(item.id);
 
       if (isSelected) {
         const {
