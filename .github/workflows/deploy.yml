@@ -73,11 +73,12 @@ jobs:
       version: ${{ inputs.version }}
       branch: ${{ inputs.branch }}
       source: artifact
-      push: ${{ github.ref_name == 'develop' }}
+      push: ${{ github.repository == 'Whisparr/whisparr-next' && github.ref_name == 'develop' }}
       commit_tag: true
 
   release:
-    if: ${{ github.ref_name == 'develop' }}
+    # A fork's develop has neither the signing key nor a release to cut
+    if: ${{ github.repository == 'Whisparr/whisparr-next' && github.ref_name == 'develop' }}
     needs: package
     runs-on: ubuntu-latest
     permissions:
