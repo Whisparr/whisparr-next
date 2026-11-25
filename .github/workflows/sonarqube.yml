@@ -193,7 +193,7 @@ jobs:
         shell: powershell
         run: |
           $beginArgs = @(
-            "/k:Whisparr_Whisparr-Eros",
+            "/k:Whisparr_whisparr-next",
             "/o:whisparr-eros",
             "/d:sonar.token=$env:SONAR_TOKEN",
             # Establishes the New Code boundary -- see "Resolve project version".
