@@ -208,6 +208,16 @@ namespace NzbDrone.Core.Test.ParserTests
             }
         }
 
+        [TestCase("[PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]")]
+        [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1080p")]
+        [TestCase("[Blacked] - 2025-11-24 - BBC-Queen Violet Takes On Three Cocks - Violet Myers - 1080p")]
+        [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p]")]
+        [TestCase("[BellesaFilms] The Sister - Ashley Lane, Mannie Coco (2025-09-28) [720p]")]
+        public void should_not_parse_trailing_resolution_of_bracketed_studio_scene_as_release_group(string title)
+        {
+            Parser.Parser.ParseMovieTitle(title).ReleaseGroup.Should().BeNull();
+        }
+
         [TestCase("Studio.26.01.01.Performer.Name.Scene.Title.XXX.1080p.HEVC.x265.PRT", "PRT")]
         [TestCase("Studio.26.01.01.Performer.Name.Scene.Title.XXX.1080p.HEVC.x265.PRT[XvX]", "PRT")]
         [TestCase("Studio.26.01.01.Performer.Name.Scene.Title.XXX.1080p.HEVC.x265.PRT.mkv", "PRT")]

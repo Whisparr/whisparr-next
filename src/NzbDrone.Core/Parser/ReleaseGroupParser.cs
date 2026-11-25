@@ -9,7 +9,7 @@ public static class ReleaseGroupParser
     private static readonly Regex ReleaseGroupRegex = new(@"-(?<releasegroup>[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?<part2>-[A-Za-zÀ-ÖØ-öø-ÿ0-9]+)?(?!.+?(?:HDTV|SDTV|480p|576p|720p|1080p|2160p)))(?<!(?:HDTV|SDTV|WEB-(DL|Rip)|Blu-Ray|480p|576p|720p|1080p|2160p|DTS-HD|DTS-X|DTS-MA|DTS-ES|-ES|-EN|-CAT|-ENG|-JAP|-GER|-FRA|-FRE|-ITA|-HDRip|\d{1,2}-bit|[ ._]\d{4}-\d{2}|-\d{2}|tmdb(id)?-(?<tmdbid>\d+)|(?<imdbid>tt\d{7,8}))(?:\k<part2>)?)(?:\b|[-._ ]|$)|[-._ ]\[(?<releasegroup>[A-Za-zÀ-ÖØ-öø-ÿ0-9]+)\]$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex InvalidReleaseGroupRegex = new(@"^([se]\d+|[0-9a-f]{8})$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex InvalidReleaseGroupRegex = new(@"^([se]\d+|[0-9a-f]{8}|\d{3,4}[pi])$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Handle Exception Release Groups that don't follow -RlsGrp; Manual List
     // name only...be very careful with this last; high chance of false positives

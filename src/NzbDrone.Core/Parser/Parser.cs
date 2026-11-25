@@ -74,7 +74,9 @@ namespace NzbDrone.Core.Parser
 
             // SCENE - Site title in brackets with full year in date then episode info
             // [Blacked] - 2025-11-24 - BBC-Queen Violet Takes On Three Cocks - Violet Myers - 1080p
-            new Regex(@"^\[(?<studiotitle>.+?)\][-_. ]{1,3}(?<airyear>(?:19|20)\d{2})[-_. ]+(?<airmonth>[0-1][0-9])[-_. ]+(?<airday>[0-3][0-9])(?:[-_. ]+)?(?<releasetoken>.+)",
+            // [PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]
+            // The trailing digit guard keeps a dd-mm-yyyy date ("[Site] 19-07-2023") from reading as yy-mm-dd.
+            new Regex(@"^\[(?<studiotitle>.+?)\][-_. ]{1,3}(?<airyear>(?:19|20)?\d{2})[-_. ]+(?<airmonth>[0-1][0-9])[-_. ]+(?<airday>[0-3][0-9])(?!\d)(?:[-_. ]+)?(?<releasetoken>.+)",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled,
                 RegexDefaults.Timeout),
 
