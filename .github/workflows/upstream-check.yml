@@ -4,8 +4,7 @@ description: Guard the generated backlog report, the disposition reasons and the
 on:
   pull_request:
     branches:
-      - eros-develop
-      - eros
+      - develop
 
 # Deliberately no paths-ignore. The build workflow ignores
 # src/NzbDrone.Core/Localization/Core/**, so a PR touching only en.json skips it

@@ -12,7 +12,7 @@ permissions: {}
 
 jobs:
   watch:
-    if: github.repository == 'Whisparr/Whisparr-Eros'
+    if: github.repository == 'Whisparr/whisparr-next'
     permissions:
       contents: read # the app token does the writing, not github.token
 
@@ -20,7 +20,8 @@ jobs:
 
     strategy:
       # One PR and one issue per upstream, and a failure against one upstream
-      # should not hide the state of the other.
+      # should not hide the state of another. Sonarr is the only upstream for
+      # v5; Radarr's entry in .github/upstream/state.json is retired separately.
       fail-fast: false
       matrix:
         # Titles carry a [v3] prefix. It is a leftover from when these issues
@@ -29,8 +30,6 @@ jobs:
         # the lookup key, so dropping it orphans the existing issue and opens a
         # new one. Rename the issues first if it is ever dropped.
         include:
-          - upstream: radarr
-            title: '[v3] Upstream sync: Radarr develop'
           - upstream: sonarr
             title: '[v3] Upstream sync: Sonarr v5-develop'
 
@@ -50,12 +49,12 @@ jobs:
           # enabled here on 2026-09-17 and the tracking issues moved over.)
           owner: ${{ github.repository_owner }}
           repositories: |
-            Whisparr-Eros
+            whisparr-next
 
       - name: Check out
         uses: actions/checkout@v7
         with:
-          ref: eros-develop
+          ref: develop
           fetch-depth: 0 # cherry-picking needs real history
           token: ${{ steps.app.outputs.token }}
 
@@ -101,7 +100,7 @@ jobs:
             echo "updated PR #${NUMBER}"
           else
             gh pr create \
-              --base eros-develop \
+              --base develop \
               --head "$BRANCH" \
               --draft \
               --title "Upstream ${UPSTREAM}: picks that apply cleanly" \
