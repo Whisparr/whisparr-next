@@ -43,6 +43,7 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p].mp4", true)]
         [TestCase("[Studio.com] (E09) Perfomer(aka Alias) [2015 г., All Sex, BJ, IR, 720p]", true)]
         [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1440p", true)]
+        [TestCase("[PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]", true)]
 
         public void should_parse_as_scene(string title, bool expected)
         {
@@ -72,6 +73,7 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1080p", "Deeper")]
         [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1440p", "Deeper")]
         [TestCase("(Deeper) Key Mistress - Jessi Rae - 2025-12-18 - 1080p", "Deeper")]
+        [TestCase("[PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]", "PureTaboo")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p]", "Vixen")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p].mp4", "Vixen")]
         [TestCase("[Studio.com] (E09) Perfomer(aka Alias) [2015 г., All Sex, BJ, IR, 720p]", "Studio")]
@@ -102,6 +104,8 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("Jesse Loads Monster Facials 2024-04-19 Frecklemonade.mkv", "2024-04-19")]
         [TestCase("[Blacked] - 2025-11-24 - BBC-Queen Violet Takes On Three Cocks - Violet Myers - 1080p", "2025-11-24")]
         [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1080p", "2025-12-18")]
+        [TestCase("[PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]", "2018-02-01")]
+        [TestCase("[Studio] 19-07-2023 - Loli - Beautiful Episode 2160p", "2023-07-19")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p]", "2025-12-03")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p].mp4", "2025-12-03")]
         public void should_correctly_parse_release_date(string title, string result)
@@ -150,6 +154,7 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("[BellesaFilms] The Sister - Ashley Lane, Mannie Coco (2025-09-28) [2160p]", "the sister ashley lane mannie coco")]
         [TestCase("[Blacked] - 2025-11-24 - BBC-Queen Violet Takes On Three Cocks - Violet Myers - 1080p", "bbc queen violet takes on three cocks violet myers")]
         [TestCase("[Deeper] Key Mistress - Jessi Rae - 2025-12-18 - 1080p", "key mistress jessi rae")]
+        [TestCase("[PureTaboo] 18.02.01 - Piper Perri - Fall Down Dad [1080p]", "piper perri fall down dad")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p]", "matthew meie erica mori and era queen bratty college girls have naughty threesome")]
         [TestCase("[Vixen] Matthew Meie, Erica Mori & Era Queen - Bratty College Girls Have Naughty Threesome (2025-12-03) [2160p].mp4", "matthew meie erica mori and era queen bratty college girls have naughty threesome")]
         [TestCase("[Studio.com] (E09) Perfomer(aka Alias) [2015 г., All Sex, BJ, IR, 720p]", "perfomer aka alias")]
