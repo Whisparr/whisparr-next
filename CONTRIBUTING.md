@@ -17,7 +17,7 @@ For a map of the repository layout and where new code belongs (backend project s
 
 - Visual Studio 2022 or higher is recommended (<https://www.visualstudio.com/vs/>). The community version is free and works (<https://www.visualstudio.com/downloads/>).
 
-> VS 2022 17.12 or higher is recommended; install the .NET 10 SDK separately (pinned in `global.json`)
+> VS 2022 or higher is recommended; install the .NET 10 SDK separately (pinned in `global.json`)
 {.is-info}
 
 - HTML/Javascript editor of choice (VS Code/Sublime Text/Webstorm/Atom/etc)

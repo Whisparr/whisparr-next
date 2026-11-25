@@ -15,7 +15,7 @@ Output rule: **produce the full review in the terminal first, then ask** whether
 to post it. Never auto-post. Never add an AI-attribution footer to anything
 posted (per global rules).
 
-Run the phases in order. Track them with TodoWrite if the review is non-trivial.
+Run the phases in order. Track them with a checklist in the conversation if the review is non-trivial.
 
 ## 1. Resolve the PR
 

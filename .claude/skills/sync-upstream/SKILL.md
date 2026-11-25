@@ -23,7 +23,7 @@ report directly; `--check` will catch you.
 Argument is an upstream and a month: `sync-upstream radarr 2026-04`. If omitted,
 read `UPSTREAM_SYNC.md` and propose the smallest outstanding month.
 
-Run the phases in order. Track them with the `question` tool or task list when the chunk has more than
+Run the phases in order. Track them with a checklist in the conversation when the chunk has more than
 a handful of commits.
 
 ## 1. Resolve the chunk
