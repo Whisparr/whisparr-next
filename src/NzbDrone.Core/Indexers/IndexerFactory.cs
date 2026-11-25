@@ -107,7 +107,7 @@ namespace NzbDrone.Core.Indexers
 
             if (name.IsNotNullOrWhiteSpace() && indexerByName == null)
             {
-                _logger.Warn("Indexer with name '{0}' could not be found", name);
+                _logger.Warn("Indexer with name '{0}' could not be found", name.ForLog());
 
                 return null;
             }
