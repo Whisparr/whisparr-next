@@ -6,6 +6,10 @@
   vertical-align: top;
 }
 
+.isTodayCell {
+  scroll-margin-top: var(--calendarStickyHeight, 0);
+}
+
 .isSingleDay {
   width: 100%;
 }

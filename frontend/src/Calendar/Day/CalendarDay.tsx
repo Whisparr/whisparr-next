@@ -43,7 +43,7 @@ interface CalendarDayProps {
   isTodaysDate: boolean;
 }
 
-function CalendarDay({ date, isTodaysDate }: CalendarDayProps) {
+function CalendarDay({ date, isTodaysDate }: Readonly<CalendarDayProps>) {
   const time = useCalendarTime();
   const view = useCalendarOption('view');
   const events = useCalendarEvents(date);
@@ -63,6 +63,7 @@ function CalendarDay({ date, isTodaysDate }: CalendarDayProps) {
       ref={ref}
       className={classNames(
         styles.day,
+        isTodaysDate && styles.isTodayCell,
         view === calendarViews.DAY && styles.isSingleDay
       )}
     >
