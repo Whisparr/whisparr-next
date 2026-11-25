@@ -1,5 +1,5 @@
 import { cloneDeep, without } from 'lodash';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import * as commandNames from 'Commands/commandNames';
 import { useExecuteCommand } from 'Commands/useCommands';
 import SelectInput, { SelectInputOption } from 'Components/Form/SelectInput';
@@ -22,16 +22,14 @@ import TableBody from 'Components/Table/TableBody';
 import useSelectState from 'Helpers/Hooks/useSelectState';
 import { align, icons, kinds } from 'Helpers/Props';
 import { BOTH } from 'Helpers/Props/scrollDirections';
-import { SortDirection } from 'Helpers/Props/sortDirections';
 import ImportMode from 'InteractiveImport/ImportMode';
 import SelectIndexerFlagsModal from 'InteractiveImport/IndexerFlags/SelectIndexerFlagsModal';
 import InteractiveImport, {
   InteractiveImportCommandOptions,
 } from 'InteractiveImport/InteractiveImport';
 import {
-  setInteractiveImportMode,
-  setInteractiveImportSort,
-  useInteractiveImportOptions,
+  InteractiveImportOptionsStore,
+  interactiveImportOptionsStore,
 } from 'InteractiveImport/interactiveImportOptionsStore';
 import SelectLanguageModal from 'InteractiveImport/Language/SelectLanguageModal';
 import SelectMovieModal from 'InteractiveImport/Movie/SelectMovieModal';
@@ -172,8 +170,7 @@ export interface InteractiveImportModalContentProps {
   filterExistingFiles?: boolean;
   title?: string;
   folder?: string;
-  initialSortKey?: string;
-  initialSortDirection?: SortDirection;
+  optionsStore?: InteractiveImportOptionsStore;
   modalTitle: string;
   onModalClose(): void;
 }
@@ -192,13 +189,12 @@ function InteractiveImportModalContent(
     showImportMode = true,
     title,
     folder,
-    initialSortKey,
-    initialSortDirection,
+    optionsStore = interactiveImportOptionsStore,
     modalTitle,
     onModalClose,
   } = props;
 
-  const { sortKey, sortDirection, importMode } = useInteractiveImportOptions();
+  const { sortKey, sortDirection, importMode } = optionsStore.useOptions();
 
   // Seeded from the prop rather than hardcoded to false, so the caller's choice
   // is part of the first fetch instead of being ignored until the user picks it
@@ -208,12 +204,15 @@ function InteractiveImportModalContent(
   );
 
   const { items, originalItems, isFetching, isFetched, error, updateItems } =
-    useInteractiveImport({
-      downloadIds,
-      movieId,
-      folder,
-      filterExistingFiles,
-    });
+    useInteractiveImport(
+      {
+        downloadIds,
+        movieId,
+        folder,
+        filterExistingFiles,
+      },
+      optionsStore
+    );
 
   const { mutate: deleteMovieFilesMutate, isPending: isDeleting } =
     useDeleteMovieFiles();
@@ -295,21 +294,6 @@ function InteractiveImportModalContent(
 
     return options;
   }, [allowMovieChange]);
-
-  useEffect(
-    () => {
-      if (initialSortKey) {
-        setInteractiveImportSort({
-          sortKey: initialSortKey,
-          sortDirection: initialSortDirection,
-        });
-      }
-    },
-    // Only on open: the caller is stating where the table should start, not
-    // pinning it there.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
 
   const handleItemChange = useCallback(
     (id: number, changes: Partial<InteractiveImport>) => {
@@ -498,9 +482,12 @@ function InteractiveImportModalContent(
     executeCommand,
   ]);
 
-  const onSortPress = useCallback<SortCallback>((sortKey, sortDirection) => {
-    setInteractiveImportSort({ sortKey, sortDirection });
-  }, []);
+  const onSortPress = useCallback<SortCallback>(
+    (sortKey, sortDirection) => {
+      optionsStore.setSort({ sortKey, sortDirection });
+    },
+    [optionsStore]
+  );
 
   const onFilterExistingFilesChange = useCallback(
     (value: string | undefined) => {
@@ -511,9 +498,12 @@ function InteractiveImportModalContent(
 
   const onImportModeChange = useCallback<
     ({ value }: { value: string }) => void
-  >(({ value }) => {
-    setInteractiveImportMode(value as ImportMode);
-  }, []);
+  >(
+    ({ value }) => {
+      optionsStore.setOption('importMode', value as ImportMode);
+    },
+    [optionsStore]
+  );
 
   const onSelectModalSelect = useCallback<
     ({ value }: { value: string }) => void

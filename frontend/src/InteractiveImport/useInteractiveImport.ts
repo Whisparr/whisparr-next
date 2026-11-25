@@ -6,7 +6,10 @@ import { QualityModel } from 'Quality/Quality';
 import clientSideFilterAndSort from 'Utilities/Filter/clientSideFilterAndSort';
 import naturalExpansion from 'Utilities/String/naturalExpansion';
 import InteractiveImport from './InteractiveImport';
-import { useInteractiveImportOptions } from './interactiveImportOptionsStore';
+import {
+  InteractiveImportOptionsStore,
+  interactiveImportOptionsStore,
+} from './interactiveImportOptionsStore';
 
 export const MANUAL_IMPORT_PATH = '/manualimport';
 
@@ -50,8 +53,11 @@ type ItemChanges = Record<number, Partial<InteractiveImport>>;
  * be updated in place instead of re-imported. The slice kept a second copy of
  * the response in `originalItems` for the same reason.
  */
-export default function useInteractiveImport(params: InteractiveImportParams) {
-  const { sortKey, sortDirection } = useInteractiveImportOptions();
+export default function useInteractiveImport(
+  params: InteractiveImportParams,
+  optionsStore: InteractiveImportOptionsStore = interactiveImportOptionsStore
+) {
+  const { sortKey, sortDirection } = optionsStore.useOptions();
   const [changes, setChanges] = useState<ItemChanges>({});
 
   const { downloadIds, movieId, folder, filterExistingFiles } = params;
