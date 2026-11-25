@@ -3,7 +3,7 @@ name: review-eros
 description: Review a GitHub PR against Whisparr/whisparr-next:develop with this repo's conventions (branch target, commit prefixes, 80% new-code coverage, en.json translation keys, DB-migration note, NUnit *Fixture tests, ParserTests scrutiny). Produces a structured terminal review, then offers to post it. Use when reviewing a PR.
 argument-hint: "[PR number or URL]"
 user-invocable: true
-allowed-tools: shell, read, grep, glob, edit, subagent, question
+allowed-tools: Bash, Read, Grep, Glob, Agent, AskUserQuestion, TodoWrite
 ---
 
 # Review a PR
@@ -15,7 +15,7 @@ Output rule: **produce the full review in the terminal first, then ask** whether
 to post it. Never auto-post. Never add an AI-attribution footer to anything
 posted (per global rules).
 
-Run the phases in order. Track them with a checklist in the conversation if the review is non-trivial.
+Run the phases in order. Track them with TodoWrite if the review is non-trivial.
 
 ## 1. Resolve the PR
 
@@ -23,8 +23,9 @@ Run the phases in order. Track them with a checklist in the conversation if the 
   (`gh pr view --json number` on the checked-out branch) or ask which PR.
 - Gather everything up front:
   ```
-  gh pr view <n> --json number,title,body,baseRefName,headRefName,author,files,commits,url,isDraft
-  gh pr diff <n>
+  gh pr view <n> --repo Whisparr/whisparr-next \
+    --json number,title,body,baseRefName,headRefName,author,files,commits,url,isDraft
+  gh pr diff <n> --repo Whisparr/whisparr-next
   ```
 - Note: title, body, **base branch**, head branch, changed files, full diff,
   commit list, linked issues, draft status.
@@ -83,7 +84,7 @@ Decide from the diff whether to run anything locally:
 
 - **Risky diff** — touches `src/NzbDrone.Core/Parser/`, a DB migration, core
   release/parsing/decision logic, or security-sensitive code:
-  1. `gh pr checkout <n>`
+  1. `gh pr checkout <n> --repo Whisparr/whisparr-next`
   2. Build + run the **targeted** fixtures for the touched area, excluding heavy
      categories, e.g.:
      ```
@@ -103,8 +104,8 @@ Never claim tests passed unless you actually ran them.
 The PR's CI has usually already run — read it, don't just predict it:
 
 ```
-gh pr checks <n>
-gh pr view <n> --json statusCheckRollup,mergeStateStatus,mergeable
+gh pr checks <n> --repo Whisparr/whisparr-next
+gh pr view <n> --repo Whisparr/whisparr-next --json statusCheckRollup,mergeStateStatus,mergeable
 ```
 
 Report the real state of the key gates from `build_v5.yml` and `sonarqube.yml`:
@@ -140,11 +141,11 @@ Always use this fixed structure:
 
 ## 8. Offer to post (never auto-post)
 
-After printing the review, use the `question` tool to ask whether to post it. Only on
+After printing the review, use AskUserQuestion to ask whether to post it. Only on
 explicit approval:
 
-- Summary review: `gh pr review <n> --comment --body "..."`
+- Summary review: `gh pr review <n> --repo Whisparr/whisparr-next --comment --body "..."`
   (or `--request-changes` / `--approve` to match the verdict).
-- Inline notes: `gh pr comment <n> --body "..."`.
+- Inline notes: `gh pr comment <n> --repo Whisparr/whisparr-next --body "..."`.
 
 Confirm before this outward-facing step every time. No AI-attribution footer.

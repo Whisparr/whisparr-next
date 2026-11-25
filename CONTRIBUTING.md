@@ -5,7 +5,7 @@ We're always looking for people to help make Whisparr even better, there are a n
 
 # Documentation
 
-Setup guides, [FAQ](Whisparr/whisparr-next/wiki/FAQ), the more information we have on the [wiki](https://wiki.servarr.com/whisparr) the better.
+Setup guides and FAQ on the [wiki](https://wiki.servarr.com/whisparr) — the more information we have there the better.
 
 # Development
 
@@ -15,9 +15,9 @@ For a map of the repository layout and where new code belongs (backend project s
 
 ## Tools required
 
-- Visual Studio 2022 or higher is recommended (<https://www.visualstudio.com/vs/>). The community version is free and works (<https://www.visualstudio.com/downloads/>).
+- Visual Studio 2026 or higher is recommended for .NET 10 (<https://www.visualstudio.com/vs/>). The community version is free and works (<https://www.visualstudio.com/downloads/>).
 
-> VS 2022 or higher is recommended; install the .NET 10 SDK separately (pinned in `global.json`)
+> Targeting `net10.0` requires Visual Studio 2026 (18.x); VS 2022 supports up to .NET 9. Rider, VS Code, or the `dotnet` CLI with the .NET 10 SDK work too — the SDK version is pinned in `global.json`
 {.is-info}
 
 - HTML/Javascript editor of choice (VS Code/Sublime Text/Webstorm/Atom/etc)

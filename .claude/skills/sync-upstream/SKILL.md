@@ -3,7 +3,7 @@ name: sync-upstream
 description: Work one month-sized chunk of the Radarr or Sonarr upstream backlog for whisparr-next. Reads each upstream diff, applies the parser/localization/frontend skip rules, records a disposition with a reason, applies the picks, regenerates UPSTREAM_SYNC.md, and opens the PR. Use when catching up on upstream commits or when the upstream-watch tracking issue lists new work.
 argument-hint: "<radarr|sonarr> <YYYY-MM>"
 user-invocable: true
-allowed-tools: shell, read, grep, glob, edit, write, question, subagent
+allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, TodoWrite
 ---
 
 # Sync one upstream chunk
@@ -23,7 +23,7 @@ report directly; `--check` will catch you.
 Argument is an upstream and a month: `sync-upstream radarr 2026-04`. If omitted,
 read `UPSTREAM_SYNC.md` and propose the smallest outstanding month.
 
-Run the phases in order. Track them with a checklist in the conversation when the chunk has more than
+Run the phases in order. Track them with TodoWrite when the chunk has more than
 a handful of commits.
 
 ## 1. Resolve the chunk
