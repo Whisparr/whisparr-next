@@ -5092,6 +5092,188 @@
         "month": "2026-10",
         "disposition": "skip",
         "reason": "Tunes cardinalby/git-get-release-action in Sonarr's deploy.yml to stay inside a major version. Our deploy no longer uses that action: it finds the previous release through gh api (releases/latest for eros, newest prerelease otherwise), and we ship a single major."
+      },
+      "e52c9310a87a4308585858295a89068eacc644b1": {
+        "subject": "Label, alert link and quality profile contrast",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Redesign colour tuning: Label, Alert links and the quality profile cutoff chip move to color-mix over the redesign's --ink/--accent tokens. None of those tokens exist here (our themes are the TypeScript light/dark objects), and the patch does not apply to our stylesheets."
+      },
+      "5325f18b9a71e80c9462024e62e316eda587fc1d": {
+        "subject": "Series table column widths, tags and table options button",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Reworks the redesigned Series Index table and poster tags (a new SeriesIndexTags overflow component, a TableOptionsButton, column widths). 14 of its 16 files do not exist here; our index pages are Movie/Scene-shaped and still pre-redesign."
+      },
+      "2e1e3f61f3ee093b16bc03791475185611067132": {
+        "subject": "Add and delete buttons for settings tables",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Replaces the icon-only add buttons on remote path mappings, import list exclusions and delay profiles with labelled text links, on the redesign's Settings styles. Purely a restyle: the actions are the same. It does not apply to our stylesheets, and labelled buttons are the horizontal-space cost paul wants weighed when the redesign is ported."
+      },
+      "ed0dc41aac2afec77a8109e5166840fccc136454": {
+        "subject": "Light theme contrast and colors",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Splits calendar status colours into calendar-specific tokens in the redesign's themes.css. We have no themes.css; our calendar colours come from the TypeScript theme objects, and the patch does not apply."
+      },
+      "76c006b946c1e72e561a248e97a47f9de7d8da86": {
+        "subject": "Accent header color with optional gradient",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds a headerColor UI setting (accent or gradient) for the redesigned page header, wired through themes.css and Sonarr.Api.V5's UiSettingsController. It is a redesign theming option: our header, theme objects and V3-only API have nothing for it to hook into."
+      },
+      "cc90aba6b306d7c67e516cb8771b4daa1680601e": {
+        "subject": "Fixed: Series index legend colors not matching progress bars",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "The mismatch is between the redesign's footer legend (--accent/--successColor) and its progress bar tokens. SeriesIndexFooter.module.css does not exist here, and our footer and progress bars share the same theme colours."
+      },
+      "6100139f788a17c7ae791654df9da54f972faf68": {
+        "subject": "Full height calendar status bar and improved status colors",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restyles the redesigned calendar event status bar (an absolutely positioned ::before strip) and its themes.css colours. Our CalendarEvent keeps the pre-redesign status styling; the patch does not apply."
+      },
+      "3e788b38caf26d16d4eaaacc603d636c864b4dbb": {
+        "subject": "Fixed: Color-impaired mode patterns",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restores colour-impaired patterns that the redesign's themes.css had dropped, as new --calendarColorImpaired*/--progressBar*Pattern tokens. The regression came with the redesign; our colour-impaired mode still uses its pre-redesign patterns, and none of these tokens or the themes.css they live in exist here."
+      },
+      "70cb3609e624db578e72d5f3ff393081def45f34": {
+        "subject": "Tooltip arrow colors matching tooltip",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Moves the tooltip arrow fill from useThemeColor to CSS classes on the redesign's --paperCard/--hairlineStrong tokens and drops the popoverArrowBorder* entries from themes.css. Our arrow colour comes from the TypeScript theme objects and matches our tooltip."
+      },
+      "f5588436bb3b35232fbbcc39561637d210e225ec": {
+        "subject": "Lighter warm and card surfaces in light theme",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Two oklch values in the redesign's themes.css (--paperWarm, --paperCard). We have neither the file nor the tokens."
+      },
+      "61ececdda101776320f4fe9824c74bc13db6dbf6": {
+        "subject": "Improve quality group appearance when editing groups",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restyles grouped qualities in the redesigned quality profile editor (indent, --inkMuted/--inkFaint colours). Our QualityProfileItem stylesheets predate the redesign and the patch does not apply. Appearance only; the drag fix for groups is a separate commit (0eaa157ce)."
+      },
+      "3f2a28767586d9e9e352132719f89d0d7edb38cd": {
+        "subject": "More subtle outline on tinted labels",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Tunes the redesign's tinted Label variant (--labelKindColor outline). Our Label has no tinted variant."
+      },
+      "c3234fba12c1e0b65d06b8e18b12250c9df8cd7e": {
+        "subject": "Outline style for buttons",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds an outline Button variant on the redesign's --inkSoft tokens and uses it for the import list exclusion actions. A new look, not a fix, and it does not apply to our Button stylesheet."
+      },
+      "f9243cee9992241ada6cb41b0b6f28f23f27610a": {
+        "subject": "Update icon sizes",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Raises IconButton's default size from 12 to 14 and evens out explicit sizes across redesigned rows and the Series Details hero. 8 of 15 files are Series/Episode redesign components we do not have; a global icon-size change belongs with the redesign port, not ahead of it."
+      },
+      "7c4ddf0fcd5151cb8fb524fd7f7c8a8898e27909": {
+        "subject": "Update series link color in episode details modal",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Swaps --accent for --accentDeep in Episode/EpisodeDetailsModalContent.module.css, which the redesign introduced and we do not have."
+      },
+      "82ade96e4691cff12b5da86bcc9258dc40aeed27": {
+        "subject": "Disable font ligatures",
+        "month": "2026-11",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Turns off ligatures globally in scaffolding.css for the redesign's Inter typeface. Our body font is still Roboto, so the change is tied to a typeface we have not taken."
+      },
+      "49a121e3c432f8b0fbd75ab77fdbbc20aa2b7116": {
+        "subject": "Increase custom format score input width and always show border",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Widens the redesigned score input from 80px to 125px and restores its border. Ours is the pre-redesign input (100px, border unset), so the patch does not apply and there is no transparent-border bug to fix."
+      },
+      "0f1846a352dd3a53bd1342075a8472b0453d7428": {
+        "subject": "Stack season stat labels on small screens",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Mobile layout for the redesigned Series Details season header (SeriesDetailsSeason.module.css). We have no seasons and no such stylesheet."
+      },
+      "30224890134b19147cb39e310bcc525b856de8f7": {
+        "subject": "Improve labels",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Moves protocol labels, tag chips and progress labels onto the redesign's tinted Label variant and retunes themes.css. Appearance only; 4 of its 12 files are redesign-only and the rest do not apply to our pre-redesign Label and TagInput."
+      },
+      "91d1fcde4010817d6571b2cf61f4b1e9dbf4728f": {
+        "subject": "Fix styling of poster select",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Gives the redesigned SeriesIndexPosterSelect its own themes.css token. Neither file exists here; our poster select uses the pre-redesign styling."
+      },
+      "9a3b85ef5cd1677c1a73156ee9ad07767f861e61": {
+        "subject": "Reduce spacing in interactive search results",
+        "month": "2026-11",
+        "disposition": "defer",
+        "blockedBy": "sonarr@5942d8f12 (interactive search as cards), itself deferred behind the v5 UI redesign decision. Take this in the same PR.",
+        "reason": "Tightens spacing in InteractiveSearchCard and friends, all six files introduced by 5942d8f12. Our interactive search is still the table."
+      },
+      "b0051ce25cb98ba35c7b3e287564418e6c15b685": {
+        "subject": "Interactive search layout",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Resizes the redesigned interactive search columns and the scene indicator chip. ReleaseSceneIndicator.module.css does not exist here and our InteractiveSearchRow widths differ, so the patch does not apply."
+      },
+      "88a36d043269cfddb1e37a78b5e9d4da68f79935": {
+        "subject": "Smaller modal padding on small screens",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Reduces modal header and body padding on small screens via the redesign's --modalBodyPadding variable, plus the redesigned episode details tabs. Our modal does not use that variable and the patch does not apply."
+      },
+      "9a04626f8db59b78099cdd61be8b658146e83f79": {
+        "subject": "Fixed: Copy to clipboard causing series links tooltip to scroll",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds overflow: hidden to the copy buttons in SeriesDetailsLinks and SeriesDetailsPath, both from the redesigned Series Details hero (sonarr@22d8961c4). Our details pages have neither."
+      },
+      "273d472e61c6a4286370d8c05359a42f38a987dc": {
+        "subject": "New: Redesigned episode details",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Rebuilds the episode details modal in the redesign (40 files, +1353/-752, 27 of them new). Episode-shaped throughout; if the redesign is ported, our scene details modal would be redesigned to match rather than this being replayed."
+      },
+      "5942d8f12e3ff7fe066135684fe820d9b50d525b": {
+        "subject": "New: Replace interactive search with cards instead of table",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Replaces the interactive search table with release cards (31 files, +1284/-869, 20 new), on redesign components. Cards take more room per release than our table, which is the non-4K concern paul and Gykes want settled before the redesign is ported."
       }
     }
   }
