@@ -109,11 +109,16 @@ namespace Whisparr.Api.V3.System.Backup
 
             var path = Path.Combine(_appFolderInfo.TempFolder, $"whisparr_backup_restore{extension}");
 
-            _diskProvider.SaveStream(file.OpenReadStream(), path);
-            _backupService.Restore(path);
-
-            // Cleanup restored file
-            _diskProvider.DeleteFile(path);
+            try
+            {
+                _diskProvider.SaveStream(file.OpenReadStream(), path);
+                _backupService.Restore(path);
+            }
+            finally
+            {
+                // Cleanup restored file
+                _diskProvider.DeleteFile(path);
+            }
 
             return new BackupRestoreResource
             {
