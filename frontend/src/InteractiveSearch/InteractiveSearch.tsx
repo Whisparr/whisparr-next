@@ -184,6 +184,8 @@ function InteractiveSearch({
 
   const listRef = useRef<VariableSizeList<RowItemData>>(null);
   const listOuterRef = useRef<HTMLDivElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
   const rowHeights = useRef<number[]>([]);
   const [measureRef, bounds] = useMeasure();
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -257,6 +259,24 @@ function InteractiveSearch({
     () => ({ items, searchPayload, setRowHeight }),
     [items, searchPayload, setRowHeight]
   );
+
+  const handleTableScroll = useCallback(() => {
+    const tableContainer = tableContainerRef.current;
+    const scrollbar = scrollbarRef.current;
+
+    if (tableContainer && scrollbar) {
+      scrollbar.scrollLeft = tableContainer.scrollLeft;
+    }
+  }, []);
+
+  const handleScrollbarScroll = useCallback(() => {
+    const tableContainer = tableContainerRef.current;
+    const scrollbar = scrollbarRef.current;
+
+    if (tableContainer && scrollbar) {
+      tableContainer.scrollLeft = scrollbar.scrollLeft;
+    }
+  }, []);
 
   const handleFilterChange = useCallback(({ value }: InputChanged<string>) => {
     setFilter(value);
@@ -332,7 +352,11 @@ function InteractiveSearch({
       ) : null}
 
       {isPopulated && !!items.length ? (
-        <div className={styles.tableContainer}>
+        <div
+          ref={tableContainerRef}
+          className={styles.tableContainer}
+          onScroll={handleTableScroll}
+        >
           <div ref={measureRef} className={styles.table}>
             <InteractiveSearchTableHeader
               columns={columns}
@@ -356,6 +380,19 @@ function InteractiveSearch({
               {Row}
             </VariableSizeList>
           </div>
+        </div>
+      ) : null}
+
+      {isPopulated && !!items.length ? (
+        <div
+          ref={scrollbarRef}
+          className={styles.scrollbar}
+          onScroll={handleScrollbarScroll}
+        >
+          <div
+            className={styles.scrollbarContent}
+            style={{ width: bounds.width }}
+          />
         </div>
       ) : null}
 

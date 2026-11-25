@@ -24,7 +24,27 @@
 }
 
 .tableContainer {
-  overflow-x: auto;
+  overflow: auto hidden;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.scrollbar {
+  @mixin scrollbar;
+  @mixin scrollbarTrack;
+  @mixin scrollbarThumb;
+
+  position: sticky;
+  bottom: 0;
+  overflow: auto hidden;
+  background-color: var(--modalBackgroundColor);
+}
+
+.scrollbarContent {
+  height: 1px;
 }
 
 .table {
