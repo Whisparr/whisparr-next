@@ -4,8 +4,8 @@
     "sonarr": {
       "repo": "Sonarr/Sonarr",
       "branch": "develop",
-      "highWater": "b287a95ca03ef1001447e8687ce4f7c8d5b01e89",
-      "highWaterNote": "2026-10-16 'Automated API Docs update', the 40th commit after 57816c149d (the 2026-10-12 tip, where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted). Everything at or before this mark is settled. The post-12th part of 2026-10 is worked in upstream order, about 40 commits per PR; this first batch (Oct 12-16) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
+      "highWater": "b3d4bb8c18f7feb6744a6cd3231279a45351bb5e",
+      "highWaterNote": "2026-10-21 'Fix deepmerge state for array values', the last commit of batch 2 (Oct 17-21, 42 commits after b287a95ca0). Everything at or before this mark is settled. The post-12th part of 2026-10 (after 57816c149d, the 2026-10-12 tip where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted) is worked in upstream order, about 40 commits per PR. Batch 1 (Oct 12-16, ending b287a95ca0) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
     }
   },
   "dispositions": {
@@ -4644,6 +4644,263 @@
         "month": "2026-10",
         "disposition": "skip",
         "reason": "Regenerates Sonarr's checked-in V5 openapi.json. We retired the checked-in spec."
+      },
+      "460022a72ee9430bf39cfe9a5f767ff3a563c650": {
+        "subject": "Validate restored database and keep previous DB until after restore",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same gap here: a zip restore moved the config before checking the database, and the restoration service deleted the live database before the restored one had been tried. Validation runs before any move, the old database is kept as .pre-restore until startup succeeds, and both upload controllers always delete the temp file. Adapted to our v5 file names and kept our legacy-backup refusal; LegacyDatabaseGuard.IsRestorableSqliteFile replaces upstream's SQLite header check."
+      },
+      "4471c0ffaf4004c12075ad0d2b5190ccbf7e2ab7": {
+        "subject": "Fixed: Quality profile size editor limited to 400 MiB/min",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Fixes QualityProfileItemSize, the per-profile size editor from Sonarr's migration 207. Our size limits stay on Quality Definitions and we have no such component (see 109a4c22b)."
+      },
+      "e3dbe600f03cea3f0510d88d731ef83b3b2b16bd": {
+        "subject": "Fixed: Changing a quality profile size changing other sizes",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Mostly QualityProfileItemSize, which we do not have. The NumberInput half stops clamping on every keystroke so linked size sliders stop pushing each other; our NumberInput is the Radarr-shaped one and has no linked inputs depending on it."
+      },
+      "5dc4c256d7727dc563d320be83a77c17da5e9afd": {
+        "subject": "Manage Episodes resetting Manual Import sort",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same bug: MovieDetails opened Manage Files with an initial sort that was written into the shared interactive import options, overwriting the sort Manual Import remembers. The options store is now a factory with a separate Manage Files instance. Ours keeps ascending for Manage Files, where upstream's Manage Episodes defaults to descending."
+      },
+      "90eab43f0b6a69bbb3a0e4727b8f3fb8dfa83081": {
+        "subject": "Fixed: Importing custom format with multiple conditions",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our import already replaces the conditions in one setSpecifications call instead of saving them one by one, and the card's condition labels are already keyed by index. The stacked FormRow layout half is redesign-only."
+      },
+      "3c9169d0f8c8e8263f1d0e2bce13976422410054": {
+        "subject": "App updated modal not showing",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Upstream's cause, the version message being dropped by the v5 filter, does not happen here: our listener only filters messages that carry a version below 5. Took the other half, so dismissing the modal reloads the page instead of leaving the old UI running."
+      },
+      "2d3dc1e5358440be659584f341a0411a093336f2": {
+        "subject": "Sign out button overflowing its panel",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our logout.html .button already has box-sizing: border-box."
+      },
+      "94a76f1f1f3b58256511d75dfe75dd8227ad3312": {
+        "subject": "Allow pushed releases when indexer by name cannot be found",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "A pushed release naming an indexer we do not have now goes ahead unassociated with a warning instead of being rejected. Both release push controllers already handle a null indexer. Our variables were already renamed, so only the throw and its test changed."
+      },
+      "b1d810215a78b3eb9851694cb6abab559f91fbfb": {
+        "subject": "Mark all series as eligible for refresh for scheduled task",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Edits Sonarr's migration 208 (series translations) to reset LastInfoSync on Series. We have neither the migration nor the table."
+      },
+      "c71f6587166f2352e828292efd30caeb0d4eb3ce": {
+        "subject": "Fix flaky test",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "sonarr@234326c2a (Update series path after files have been moved), deferred as a product decision: this hardens that commit's pendingPath SignalR integration test. Take it in the same PR.",
+        "reason": "Makes the movefiles SignalR assertion in the series integration test tolerate messages without a resource. The test and the pendingPath field it reads only exist once 234326c2a is taken."
+      },
+      "00d95f0fd99894cd0bb81f4d5fc80b46653fbf24": {
+        "subject": "Link to series in tag details",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Tagged movies and scenes in the tag details modal are now links to their pages. MovieTitleLink in place of SeriesTitleLink; it routes scenes as well."
+      },
+      "e9abf8ca5ad6b0a1f97dd2adf45a6218dd1bc405": {
+        "subject": "Fix keyboard shortcuts and add type-ahead to selects",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Hand-ported to our popper-based EnhancedSelectInput (upstream's is floating-ui): type-ahead matching, the keyboard-highlighted option shown and scrolled into view through the options Scroller. Ctrl+S preventDefault went into SettingsToolbar, where our save shortcut is bound, and the shortcut key colours apply as written."
+      },
+      "34e54cb5ea17993b65b07ff7d9912078efe22378": {
+        "subject": "Fixed: Interactive Search title column too narrow before scrolling",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Our Interactive Search stylesheets matched upstream's pre-image, so horizontal scroll and the 250px title minimum now apply at every width. Applied as-is."
+      },
+      "aeaad93eca396ac8252d22010fdd970df36232c0": {
+        "subject": "Errors not shown when adding a series fails",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "AddNewSeriesModalContent has no counterpart. Our AddNewMovieModalContent already renders addError in an Alert and passes its validation failures to the form."
+      },
+      "7f6028bf904cc1e121e0f127a9591d11351f6600": {
+        "subject": "Custom format score changes lost when saving quickly",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Upstream debounced the score update itself, so saving within a second lost the edit, and moves the debounce to the sort order. Ours already updates scores immediately and debounces only the reordering in QualityProfileFormatItems."
+      },
+      "2cc618889aee209118fe25117371434ae2cd8cff": {
+        "subject": "Improve copied indicator for copy buttons with a label",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Lays out the copied indicator for ClipboardButtons that carry a label. Ours has no label prop (see 3d0029e4c), so there is no labelled variant to fix."
+      },
+      "2b39049ee6e16e1b326792009ea4b985e29adf48": {
+        "subject": "Size restrictions have moved to Quality Profiles",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Adds a notice to Quality Definitions saying size limits moved to quality profiles. Ours did not move; they are still set on Quality Definitions."
+      },
+      "ef4994fdff837abb7cb4ce1f846441dfea88dc79": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Weblate translation sync (ca, es, hu, nl, pl, pt_BR, sv). Our translations come from our own Weblate, not from cherry-picks."
+      },
+      "44c93b9a80780eb87465ecfabe210902d535c32a": {
+        "subject": "Improve form labels and modal headings for screen readers",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after a7c95ce33 (FormGroup to FormRow).",
+        "reason": "Labels each input through the redesign's FormRow and FormRowContext, which do not exist here (FormGroup is still our form row). The two standalone bits, ModalHeader role=heading and the input id props, are small enough to take with it."
+      },
+      "69fd6f1344b560664cccea961842e0dbeb31cdeb": {
+        "subject": "Fixed: On Import Complete notification could use wrong series",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Carries the series and episodes on DownloadCompletedEvent so the On Import Complete notification stops reading them from the tracked download. We have no On Import Complete notification: our event carries only a MovieId and NotificationService does not handle it."
+      },
+      "b949ab09716649d25cb187553c4e91cff31d0cb7": {
+        "subject": "Ignore command body when deserializing command resource",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Body gets an internal setter on our V3 and V5 CommandResource so a posted body is never bound into the abstract Command. StartCommand already deserializes the request into the concrete command type. Same one-line change, applied by hand to our renamed files."
+      },
+      "c9bc5785c90902b3e62e7ccf8eb54c259a15391f": {
+        "subject": "Fix option key for Disabled For Localhost",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our SecuritySettings option key is already disabledForLocalhost, matching AuthenticationRequiredType."
+      },
+      "0eaa157ce55482247a8a567d1b132438406510d9": {
+        "subject": "Fixed: Dragging quality groups dropping in the wrong position",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our moveGroup already moves by the sortable's initialIndex and index rather than the drop target, which is upstream's fix. The pointerIntersection collision detector for groups was not taken; it tunes when a group swaps rather than where it lands."
+      },
+      "0bffefe7c8b7804068ab0844af218376e58b1acb": {
+        "subject": "Version header missing from API error responses",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "VersionMiddleware now sets the header in Response.OnStarting, so error responses carry it after the exception handler clears headers. The middleware matched upstream; the integration test requests a missing movie instead of an episode file."
+      },
+      "f1513a82ec96a5e3447c32f36629d0e80122458a": {
+        "subject": "Fix error trying to return episode file that didn't exist",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Null-guards EpisodeFile.Value in Sonarr's V5 episode controller. Our V3 and V5 controllers never map a lazy-loaded MovieFile.Value; movie resources carry file statistics instead."
+      },
+      "ff9c170d48c4199b6f75dd980b87afabdbaada25": {
+        "subject": "Status indicator caused extra scrolling on Chromium browsers",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Our StatusIndicator stylesheet is the one we took with 8112b536a, so position: relative applies as-is and keeps its hidden label from extending the scroll area."
+      },
+      "4e8db864392d1a361c64085ed6e7e3c1011f39d0": {
+        "subject": "Remove swiping to open/close from mobile sidebar",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Already cherry-picked as c41648c8f9 with its sonarr@ trailer, before state.json recorded it."
+      },
+      "886cfb4cdcb6ec71e2a40c5e5fbc101cd45cc92d": {
+        "subject": "Sticky, shorter page header on small screens",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Built on the redesign's stacking: a sticky header on --pageHeaderZIndex above a sidebar on --sidebarZIndex that starts below it. Our small-screen sidebar is a fixed overlay from top: 0 at z-index 2, so the sticky header would cover it, and neither z-index variable exists here."
+      },
+      "916793ce4de5ff50d7c914baf5908d590d9dd6b8": {
+        "subject": "Fixed: Series files were always moved after changing path",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "sonarr@234326c2a (Update series path after files have been moved), deferred as a product decision: its blockedBy already names this commit as the fix for a bug it introduces. Take them in the same PR.",
+        "reason": "Lets useApiMutation take per-call query params so one save mutation can pass moveFiles or not. The bug it fixes came with 234326c2a; our useSaveMovie already uses one mutation per moveFiles value, so it does not occur here today."
+      },
+      "7ccafd3a13b737aca0619d4eb0d985c89c00df73": {
+        "subject": "Fix deleting of release profiles",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our ReleaseProfileItem already confirms the delete through its own handleDeletePress callback rather than passing the mutation straight to onConfirm."
+      },
+      "10e9ec8ee19ace4928303a440ff183abe97095a0": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Weblate translation sync (es, fr, ko, nl, pl, pt, pt_BR, zh_Hans). Our translations come from our own Weblate, not from cherry-picks."
+      },
+      "781c0c4f677a261f9ce975acccd42ba3849c7471": {
+        "subject": "New: Trakt Smart Import List",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "A new Trakt import list. Trakt was removed from whisparr-next (#72, migration 248), so there is no Trakt list base to add it to."
+      },
+      "3b1ce6dedf88fe158f1340ecbf03b3c9d89d0fa1": {
+        "subject": "New: Optional inactive seeding time limit for qBittorrent",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "A Seed Time Type setting on the existing qBittorrent client sends the indexer's seed time as inactiveSeedingTimeLimit, falling back with a test warning below API v2.9.2. Defaults to Total, so existing clients behave as before. Applied to our movie-named client code with our own en.json keys; Inactive already existed."
+      },
+      "8f8226786bad9804486368768a108ae3aec17101": {
+        "subject": "Remove legacy SeasonNumber from parsed episode info",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Parser gate: rewrites ParsedEpisodeInfo, Parser.cs and ParsingService around season numbers, with a Sonarr migration 237 for pending releases. We parse movies and scenes and have no season numbers."
+      },
+      "08a5b5a8851a53bccb4cf48a976d1d75efadd9a0": {
+        "subject": "Better icon for seasons and series without aired episodes",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Changes Sonarr's season and series progress labels. We have no seasons or aired-episode counts."
+      },
+      "374b514c7dfbf34f7fe68a559315f049b64fff5b": {
+        "subject": "Run deploy after build only for upstream repository",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same need: a fork's develop push would try to cut a release and push an image. Upstream gates its whole deploy job; ours packages on PRs too, so the repository check goes on deploy.yml's release job and the image push instead."
+      },
+      "bc24de10b4303f7c695e8d4fe4794f93c86018fe": {
+        "subject": "Improve screen reader form validation feedback",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "sonarr@44c93b9a8 (form labels for screen readers), itself deferred behind the v5 UI redesign decision: this builds on its FormRowContext and adds FormInputGroupContext beside it. Take it in the same PR.",
+        "reason": "Wires aria-describedby and aria-invalid from the redesign's FormRow and FormInputGroup contexts into each input. Neither context exists here. Form's role=alert on the failures list is the one standalone line."
+      },
+      "f416c322b8251e2a157b61e24fb10a2dfea63d25": {
+        "subject": "Refresh queue on changed download clients",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Updating or deleting a download client now queues a debounced refresh, and removing with Change Category on a client without a post-import category returns a 400. V5 not-found errors name the missing item. Applied by hand to our movie-shaped DownloadMonitoringService and both queue controllers."
+      },
+      "7e24a7d9da656cf18c5f3b622618ced3189ca0a1": {
+        "subject": "Fixed: Refreshing pending releases on removal",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same bug: removing a pending queue item rebuilt the cache without publishing PendingReleasesUpdatedEvent, so the queue kept showing it. The event now goes out from the cache rebuild. We have no obsolete-removal path. Our fixtures refresh the cache per GivenHeldRelease, so they clear the event mock there and assert one publish instead of upstream's fixed two."
+      },
+      "274039128cf47a9b9665c7e20aead4db7b9dfc44": {
+        "subject": "Fixed: Average file size calculation",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Divides series and library size by file count instead of episode count. Our Statistics page has no average size, and a movie or scene is one file."
+      },
+      "92eeb0e4f2f843962f9abd80e5712be531e06b83": {
+        "subject": "Fixed: Interactive Search horizontal scrollbar only reachable at the bottom of results",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same layout here after 34e54cb5e: the table's own scrollbar sits below the last row. A synced scrollbar now sticks to the bottom of the modal. Adapted to our populated-results conditions and Alert messages, and to our @mixin syntax."
+      },
+      "b3d4bb8c18f7feb6744a6cd3231279a45351bb5e": {
+        "subject": "Fix deepmerge state for array values",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Makes upstream's deepmerge-based options store replace arrays instead of merging them. Our useOptionsStore merges persisted state with a shallow spread and its own column merge, so arrays are already replaced."
       }
     }
   }
