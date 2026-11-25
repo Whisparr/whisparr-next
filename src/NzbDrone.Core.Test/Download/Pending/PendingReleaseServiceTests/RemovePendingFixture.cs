@@ -6,6 +6,7 @@ using NUnit.Framework;
 using NzbDrone.Common.Crypto;
 using NzbDrone.Core.Download.Pending;
 using NzbDrone.Core.Lifecycle;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
@@ -60,6 +61,9 @@ namespace NzbDrone.Core.Test.Download.Pending.PendingReleaseServiceTests
             });
 
             Subject.Handle(new ApplicationStartedEvent());
+
+            // Only the update from the action under test should be counted
+            Mocker.GetMock<IEventAggregator>().Invocations.Clear();
         }
 
         [Test]
@@ -77,6 +81,9 @@ namespace NzbDrone.Core.Test.Download.Pending.PendingReleaseServiceTests
         private void AssertRemoved(params int[] ids)
         {
             Mocker.GetMock<IPendingReleaseRepository>().Verify(c => c.DeleteMany(It.Is<IEnumerable<int>>(s => s.SequenceEqual(ids))));
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.IsAny<PendingReleasesUpdatedEvent>()), Times.Once());
         }
     }
 }

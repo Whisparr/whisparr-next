@@ -321,6 +321,8 @@ namespace NzbDrone.Core.Download.Pending
         private void UpdatePendingReleases()
         {
             _pendingReleases = IncludeRemoteMovies(_repository.All().ToList());
+
+            _eventAggregator.PublishEvent(new PendingReleasesUpdatedEvent());
         }
 
         // A library refresh publishes an update for every movie, so only a movie that has
@@ -463,14 +465,11 @@ namespace NzbDrone.Core.Download.Pending
             }
 
             _repository.Insert(release);
-
-            _eventAggregator.PublishEvent(new PendingReleasesUpdatedEvent());
         }
 
         private void Delete(PendingRelease pendingRelease)
         {
             _repository.Delete(pendingRelease);
-            _eventAggregator.PublishEvent(new PendingReleasesUpdatedEvent());
         }
 
         private int GetDelay(RemoteMovie remoteMovie)
