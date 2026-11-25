@@ -329,11 +329,11 @@ function parseHeads(report) {
   return Object.fromEntries(m[1].trim().split(/\s+/).map((pair) => pair.split('=')));
 }
 
-// The three standing gates from the sync-upstream skill, in the subset a
-// machine can decide. Passing these is NOT a decision to take a commit - it
-// only means nothing automatic is known to be wrong with it, so it is safe to
-// put in front of a human as an applied diff rather than as a link.
-function gateFor(name, commit) {
+// The standing gates from the sync-upstream skill, in the subset a machine
+// can decide. Passing these is NOT a decision to take a commit - it only means
+// nothing automatic is known to be wrong with it, so it is safe to put in
+// front of a human as an applied diff rather than as a link.
+function gateFor(commit) {
   // A merge has no single diff to replay, and `git cherry-pick` refuses one
   // without -m. Its constituent commits are listed separately by the compare
   // API anyway, so there is nothing here that is not covered elsewhere.
@@ -402,15 +402,6 @@ function gateFor(name, commit) {
     };
   }
 
-  if (name === 'radarr' && commit.files.some((f) => f.startsWith('frontend/'))) {
-    return {
-      gate: 'radarr-frontend',
-      reason:
-        'Radarr frontend. Ours follows Sonarr, which finished the react-query conversion ' +
-        'Radarr is still mid-way through.',
-    };
-  }
-
   return null;
 }
 
@@ -430,7 +421,7 @@ async function attempt(name, upstream, state) {
   const candidates = [];
 
   for (const c of commits) {
-    const g = gateFor(name, c);
+    const g = gateFor(c);
     if (g) {
       gated.push({ ...c, ...g });
     } else {
@@ -477,7 +468,7 @@ async function attempt(name, upstream, state) {
 }
 
 function renderAttempt(result) {
-  const { name, upstream, applied, gated, conflicted } = result;
+  const { upstream, applied, gated, conflicted } = result;
   const lines = [];
 
   lines.push(
