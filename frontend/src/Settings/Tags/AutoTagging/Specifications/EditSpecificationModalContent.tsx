@@ -109,7 +109,7 @@ export default function EditSpecificationModalContent({
 
   return (
     <ModalContent onModalClose={handleCancelPress}>
-      <ModalHeader>
+      <ModalHeader subtitle={specification.id ? specification.name : undefined}>
         {specification.id
           ? translate('EditConditionImplementation', { implementationName })
           : translate('AddConditionImplementation', { implementationName })}
@@ -137,7 +137,7 @@ export default function EditSpecificationModalContent({
               <div>
                 <InlineMarkdown
                   data={translate('RegularExpressionsCanBeTested', {
-                    url: 'http://regex101.com/',
+                    url: 'https://regex101.com/',
                   })}
                 />
               </div>

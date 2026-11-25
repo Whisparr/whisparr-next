@@ -119,7 +119,7 @@ namespace NzbDrone.Integration.Test.Client
         public TResource Post(TResource body, HttpStatusCode statusCode = HttpStatusCode.Created)
         {
             var request = BuildRequest();
-            request.AddJsonBody(body);
+            request.AddStringBody(body.ToJson(), DataFormat.Json);
             return Post<TResource>(request, statusCode);
         }
 
@@ -133,7 +133,7 @@ namespace NzbDrone.Integration.Test.Client
         public void InvalidPost(TResource body)
         {
             var request = BuildRequest();
-            request.AddJsonBody(body);
+            request.AddStringBody(body.ToJson(), DataFormat.Json);
             request.Method = Method.Post;
             FluentActions.Invoking(() => Execute<object>(request, HttpStatusCode.BadRequest))
                 .Should().Throw<HttpRequestException>();
@@ -142,7 +142,7 @@ namespace NzbDrone.Integration.Test.Client
         public TResource Put(TResource body, HttpStatusCode statusCode = HttpStatusCode.Accepted)
         {
             var request = BuildRequest();
-            request.AddJsonBody(body);
+            request.AddStringBody(body.ToJson(), DataFormat.Json);
             return Put<TResource>(request, statusCode);
         }
 
@@ -156,7 +156,7 @@ namespace NzbDrone.Integration.Test.Client
         public void InvalidPut(TResource body)
         {
             var request = BuildRequest();
-            request.AddJsonBody(body);
+            request.AddStringBody(body.ToJson(), DataFormat.Json);
             request.Method = Method.Put;
             FluentActions.Invoking(() => Execute<object>(request, HttpStatusCode.BadRequest))
                 .Should().Throw<HttpRequestException>();

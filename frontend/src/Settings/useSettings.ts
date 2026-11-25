@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
-import useApiQuery from 'Helpers/Hooks/useApiQuery';
+import useApiQuery, { QueryOptions } from 'Helpers/Hooks/useApiQuery';
 import { usePendingChangesStore } from 'Helpers/Hooks/usePendingChangesStore';
 import useQueryClient from 'Helpers/Hooks/useQueryClient';
 import selectSettings from 'Helpers/selectSettings';
@@ -10,9 +10,13 @@ import selectSettings from 'Helpers/selectSettings';
 // settings in a dependency array; the settings never change identity here.
 const NO_SETTINGS = {};
 
-export const useSettings = <T extends object>(path: string) => {
+export const useSettings = <T extends object>(
+  path: string,
+  queryOptions?: QueryOptions<T>['queryOptions']
+) => {
   const result = useApiQuery<T>({
     path,
+    queryOptions,
   });
 
   return {

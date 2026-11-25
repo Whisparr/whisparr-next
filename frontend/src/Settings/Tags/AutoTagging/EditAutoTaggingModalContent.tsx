@@ -106,7 +106,9 @@ export default function EditAutoTaggingModalContent({
 
   return (
     <ModalContent onModalClose={onModalClose}>
-      <ModalHeader>
+      <ModalHeader
+        subtitle={id ? (name.previousValue ?? name.value) : undefined}
+      >
         {id ? translate('EditAutoTag') : translate('AddAutoTag')}
       </ModalHeader>
 

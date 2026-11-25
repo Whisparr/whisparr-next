@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import * as commandNames from 'Commands/commandNames';
 import { useCommandExecuting } from 'Commands/useCommands';
 import Alert from 'Components/Alert';
@@ -27,6 +27,8 @@ function Calendar() {
 
   const view = useCalendarOption('view');
   const time = useCalendarTime();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
 
   const isRefreshingMovie = useCommandExecuting(commandNames.REFRESH_MOVIE);
 
@@ -61,6 +63,30 @@ function Calendar() {
     handleScheduleUpdate();
   }, [time, handleScheduleUpdate]);
 
+  // Month view scrolls today's cell into view, which would leave it under the
+  // sticky header. The header's height feeds the cell's scroll-margin-top.
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    const sticky = stickyRef.current;
+
+    if (!content || !sticky) {
+      return;
+    }
+
+    const updateHeight = () =>
+      content.style.setProperty(
+        '--calendarStickyHeight',
+        `${sticky.offsetHeight}px`
+      );
+
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(sticky);
+
+    return () => observer.disconnect();
+  }, [isFetched, error, view]);
+
   useEffect(() => {
     if (wasRefreshingMovie && !isRefreshingMovie) {
       refetch();
@@ -85,8 +111,8 @@ function Calendar() {
       ) : null}
 
       {!error && isFetched && view !== 'agenda' ? (
-        <div className={styles.calendarContent}>
-          <div className={styles.sticky}>
+        <div ref={contentRef} className={styles.calendarContent}>
+          <div ref={stickyRef} className={styles.sticky}>
             <CalendarHeader />
             <DaysOfWeek />
           </div>

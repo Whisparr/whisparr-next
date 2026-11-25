@@ -6,3 +6,9 @@
   border-bottom: 1px solid var(--borderColor);
   font-size: 18px;
 }
+
+.subtitle {
+  margin-left: 12px;
+  color: var(--helpTextColor);
+  font-weight: 400;
+}

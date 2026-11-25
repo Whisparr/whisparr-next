@@ -33,6 +33,14 @@ namespace Whisparr.Http.Middleware
                 return false;
             }
 
+            if (request.Path.StartsWithSegments("/login", StringComparison.CurrentCultureIgnoreCase) ||
+                request.Path.StartsWithSegments("/logout", StringComparison.CurrentCultureIgnoreCase) ||
+                request.Path.StartsWithSegments("/loggedout", StringComparison.CurrentCultureIgnoreCase) ||
+                request.Path.StartsWithSegments("/reset-password", StringComparison.CurrentCultureIgnoreCase))
+            {
+                return false;
+            }
+
             // Cached above when the query carries an `h`, which the cover mapper only adds once the
             // file is on disk. Without it the response is a 404 we must not let the browser keep.
             if (request.Path.StartsWithSegments("/MediaCover", StringComparison.CurrentCultureIgnoreCase))

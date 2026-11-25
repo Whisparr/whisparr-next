@@ -10,8 +10,8 @@
     "sonarr": {
       "repo": "Sonarr/Sonarr",
       "branch": "develop",
-      "highWater": "57816c149d02f95543973fefb4780c4495f8121c",
-      "highWaterNote": "2026-10-12 'Look for previous tag in same major version', the current tip of Sonarr develop (v5 was promoted to develop on 2026-10-12 and v5-develop deleted; v4 is on v4-develop). Everything at or before this mark is settled. Sonarr 2026-10 is 104 commits over four PRs: #963 (frontend fixes, Interactive Search virtualization, Transmission labels, the parser date window), #965 (the auth batch, including Forms by default and login lockout by paul's decision), a third for the 15 pushed on 2026-10-10, and a fourth for the 32 pushed 2026-10-11/12 (moment locales, tracked-download cleanup, calendar and select fixes; redesign follow-ups deferred). Advance only when everything at or before the new mark is settled."
+      "highWater": "b287a95ca03ef1001447e8687ce4f7c8d5b01e89",
+      "highWaterNote": "2026-10-16 'Automated API Docs update', the 40th commit after 57816c149d (the 2026-10-12 tip, where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted). Everything at or before this mark is settled. The post-12th part of 2026-10 is worked in upstream order, about 40 commits per PR; this first batch (Oct 12-16) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
     }
   },
   "dispositions": {
@@ -5092,6 +5092,371 @@
         "month": "2026-10",
         "disposition": "skip",
         "reason": "Tunes cardinalby/git-get-release-action in Sonarr's deploy.yml to stay inside a major version. Our deploy no longer uses that action: it finds the previous release through gh api (releases/latest for eros, newest prerelease otherwise), and we ship a single major."
+      },
+      "e52c9310a87a4308585858295a89068eacc644b1": {
+        "subject": "Label, alert link and quality profile contrast",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Redesign colour tuning: Label, Alert links and the quality profile cutoff chip move to color-mix over the redesign's --ink/--accent tokens. None of those tokens exist here (our themes are the TypeScript light/dark objects), and the patch does not apply to our stylesheets."
+      },
+      "5325f18b9a71e80c9462024e62e316eda587fc1d": {
+        "subject": "Series table column widths, tags and table options button",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Reworks the redesigned Series Index table and poster tags (a new SeriesIndexTags overflow component, a TableOptionsButton, column widths). 14 of its 16 files do not exist here; our index pages are Movie/Scene-shaped and still pre-redesign."
+      },
+      "2e1e3f61f3ee093b16bc03791475185611067132": {
+        "subject": "Add and delete buttons for settings tables",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Replaces the icon-only add buttons on remote path mappings, import list exclusions and delay profiles with labelled text links, on the redesign's Settings styles. Purely a restyle: the actions are the same. It does not apply to our stylesheets, and labelled buttons are the horizontal-space cost paul wants weighed when the redesign is ported."
+      },
+      "ed0dc41aac2afec77a8109e5166840fccc136454": {
+        "subject": "Light theme contrast and colors",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Splits calendar status colours into calendar-specific tokens in the redesign's themes.css. We have no themes.css; our calendar colours come from the TypeScript theme objects, and the patch does not apply."
+      },
+      "76c006b946c1e72e561a248e97a47f9de7d8da86": {
+        "subject": "Accent header color with optional gradient",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds a headerColor UI setting (accent or gradient) for the redesigned page header, wired through themes.css and Sonarr.Api.V5's UiSettingsController. It is a redesign theming option: our header, theme objects and V3-only API have nothing for it to hook into."
+      },
+      "cc90aba6b306d7c67e516cb8771b4daa1680601e": {
+        "subject": "Fixed: Series index legend colors not matching progress bars",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "The mismatch is between the redesign's footer legend (--accent/--successColor) and its progress bar tokens. SeriesIndexFooter.module.css does not exist here, and our footer and progress bars share the same theme colours."
+      },
+      "6100139f788a17c7ae791654df9da54f972faf68": {
+        "subject": "Full height calendar status bar and improved status colors",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restyles the redesigned calendar event status bar (an absolutely positioned ::before strip) and its themes.css colours. Our CalendarEvent keeps the pre-redesign status styling; the patch does not apply."
+      },
+      "3e788b38caf26d16d4eaaacc603d636c864b4dbb": {
+        "subject": "Fixed: Color-impaired mode patterns",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restores colour-impaired patterns that the redesign's themes.css had dropped, as new --calendarColorImpaired*/--progressBar*Pattern tokens. The regression came with the redesign; our colour-impaired mode still uses its pre-redesign patterns, and none of these tokens or the themes.css they live in exist here."
+      },
+      "70cb3609e624db578e72d5f3ff393081def45f34": {
+        "subject": "Tooltip arrow colors matching tooltip",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Moves the tooltip arrow fill from useThemeColor to CSS classes on the redesign's --paperCard/--hairlineStrong tokens and drops the popoverArrowBorder* entries from themes.css. Our arrow colour comes from the TypeScript theme objects and matches our tooltip."
+      },
+      "f5588436bb3b35232fbbcc39561637d210e225ec": {
+        "subject": "Lighter warm and card surfaces in light theme",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Two oklch values in the redesign's themes.css (--paperWarm, --paperCard). We have neither the file nor the tokens."
+      },
+      "61ececdda101776320f4fe9824c74bc13db6dbf6": {
+        "subject": "Improve quality group appearance when editing groups",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Restyles grouped qualities in the redesigned quality profile editor (indent, --inkMuted/--inkFaint colours). Our QualityProfileItem stylesheets predate the redesign and the patch does not apply. Appearance only; the drag fix for groups is a separate commit (0eaa157ce)."
+      },
+      "3f2a28767586d9e9e352132719f89d0d7edb38cd": {
+        "subject": "More subtle outline on tinted labels",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Tunes the redesign's tinted Label variant (--labelKindColor outline). Our Label has no tinted variant."
+      },
+      "c3234fba12c1e0b65d06b8e18b12250c9df8cd7e": {
+        "subject": "Outline style for buttons",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds an outline Button variant on the redesign's --inkSoft tokens and uses it for the import list exclusion actions. A new look, not a fix, and it does not apply to our Button stylesheet."
+      },
+      "f9243cee9992241ada6cb41b0b6f28f23f27610a": {
+        "subject": "Update icon sizes",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Raises IconButton's default size from 12 to 14 and evens out explicit sizes across redesigned rows and the Series Details hero. 8 of 15 files are Series/Episode redesign components we do not have; a global icon-size change belongs with the redesign port, not ahead of it."
+      },
+      "7c4ddf0fcd5151cb8fb524fd7f7c8a8898e27909": {
+        "subject": "Update series link color in episode details modal",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Swaps --accent for --accentDeep in Episode/EpisodeDetailsModalContent.module.css, which the redesign introduced and we do not have."
+      },
+      "82ade96e4691cff12b5da86bcc9258dc40aeed27": {
+        "subject": "Disable font ligatures",
+        "month": "2026-11",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Turns off ligatures globally in scaffolding.css for the redesign's Inter typeface. Our body font is still Roboto, so the change is tied to a typeface we have not taken."
+      },
+      "49a121e3c432f8b0fbd75ab77fdbbc20aa2b7116": {
+        "subject": "Increase custom format score input width and always show border",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Widens the redesigned score input from 80px to 125px and restores its border. Ours is the pre-redesign input (100px, border unset), so the patch does not apply and there is no transparent-border bug to fix."
+      },
+      "0f1846a352dd3a53bd1342075a8472b0453d7428": {
+        "subject": "Stack season stat labels on small screens",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Mobile layout for the redesigned Series Details season header (SeriesDetailsSeason.module.css). We have no seasons and no such stylesheet."
+      },
+      "30224890134b19147cb39e310bcc525b856de8f7": {
+        "subject": "Improve labels",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Moves protocol labels, tag chips and progress labels onto the redesign's tinted Label variant and retunes themes.css. Appearance only; 4 of its 12 files are redesign-only and the rest do not apply to our pre-redesign Label and TagInput."
+      },
+      "91d1fcde4010817d6571b2cf61f4b1e9dbf4728f": {
+        "subject": "Fix styling of poster select",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Gives the redesigned SeriesIndexPosterSelect its own themes.css token. Neither file exists here; our poster select uses the pre-redesign styling."
+      },
+      "9a3b85ef5cd1677c1a73156ee9ad07767f861e61": {
+        "subject": "Reduce spacing in interactive search results",
+        "month": "2026-11",
+        "disposition": "defer",
+        "blockedBy": "sonarr@5942d8f12 (interactive search as cards), itself deferred behind the v5 UI redesign decision. Take this in the same PR.",
+        "reason": "Tightens spacing in InteractiveSearchCard and friends, all six files introduced by 5942d8f12. Our interactive search is still the table."
+      },
+      "b0051ce25cb98ba35c7b3e287564418e6c15b685": {
+        "subject": "Interactive search layout",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Resizes the redesigned interactive search columns and the scene indicator chip. ReleaseSceneIndicator.module.css does not exist here and our InteractiveSearchRow widths differ, so the patch does not apply."
+      },
+      "88a36d043269cfddb1e37a78b5e9d4da68f79935": {
+        "subject": "Smaller modal padding on small screens",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Reduces modal header and body padding on small screens via the redesign's --modalBodyPadding variable, plus the redesigned episode details tabs. Our modal does not use that variable and the patch does not apply."
+      },
+      "9a04626f8db59b78099cdd61be8b658146e83f79": {
+        "subject": "Fixed: Copy to clipboard causing series links tooltip to scroll",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Adds overflow: hidden to the copy buttons in SeriesDetailsLinks and SeriesDetailsPath, both from the redesigned Series Details hero (sonarr@22d8961c4). Our details pages have neither."
+      },
+      "273d472e61c6a4286370d8c05359a42f38a987dc": {
+        "subject": "New: Redesigned episode details",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Rebuilds the episode details modal in the redesign (40 files, +1353/-752, 27 of them new). Episode-shaped throughout; if the redesign is ported, our scene details modal would be redesigned to match rather than this being replayed."
+      },
+      "5942d8f12e3ff7fe066135684fe820d9b50d525b": {
+        "subject": "New: Replace interactive search with cards instead of table",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation).",
+        "reason": "Replaces the interactive search table with release cards (31 files, +1284/-869, 20 new), on redesign components. Cards take more room per release than our table, which is the non-4K concern paul and Gykes want settled before the redesign is ported."
+      },
+      "43ed8fa16d8c5f545c54c3e96d36c88c7243337c": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Weblate translation sync (ca, ru). Our translations come from our own Weblate, not from cherry-picks."
+      },
+      "04538689745cff6c73c2be5ced3baf152219f88c": {
+        "subject": "Bump .NET to 10.0.13",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Every package this moves is already at or past its target here (Microsoft.Extensions.* and OpenIdConnect 10.0.13, MailKit 4.18.1, Swashbuckle 10.3.0, ImpromptuInterface 8.1.0, Test.Sdk 18.11.0, NUnit3TestAdapter 6.3.1, coverlet 10.1.0). Its global.json pin is Sonarr's SDK; ours rolls forward from 10.0.101."
+      },
+      "7c504d98ce9a7847553a9342c2c3b8341a5bdf6b": {
+        "subject": "Pin System.Security.Cryptography.Pkcs to 10.0.13",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Whisparr.Core.csproj already pins Pkcs 10.0.13, with a note to drop it once MimeKit requires it."
+      },
+      "234326c2ad9df88e2413f2c8505039d0f242a4c0": {
+        "subject": "New: Update series path after files have been moved",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "A product decision on whether Eros takes deferred path updates: a new PendingPath column on Movies (a migration in our sequence, 316 or later) plus MoveMovieService, the movie editor and the edit modal reworked to keep the old path until the files have moved. If taken, it is its own PR together with sonarr@916793ce4 (files always moved after changing path), which fixes a bug this introduces.",
+        "reason": "Worth having: today a path change saves the new path before the move finishes, so a failed or slow move leaves the movie pointing at a folder that is not there yet. But it is a feature with a migration and 885 lines across the series service, editor and API, not a sync pick."
+      },
+      "4a56bc32f96c1a00a5d32e5d1c3aa27336892bf9": {
+        "subject": "New: Fail torrents with rejected file extensions that qBittorrent skipped downloading",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "When nothing in a completed torrent imports, CompletedDownloadService asks the client for its file list and rejects the download if it names a dangerous or executable file (qBittorrent can skip those, leaving an empty folder). Same import flow here. Adapted: no user-defined rejected extensions (we never took that setting, see 2b7906724), so RejectedFileExtensionService checks dangerous and executable only and lives in MovieImport. Tests ported to the Movie fixtures."
+      },
+      "c28e4b71c6a6ffadffc5fd31d6afe1341aaf3afd": {
+        "subject": "Show indexer Fail Downloads settings without advanced settings enabled",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same change, re-applied by hand: Fail Downloads and Reject Blocked Extensions lose Advanced = true on our six indexer settings classes. Upstream's field numbers differ from ours, and BroadcastheNet, Fanzub, Nyaa and Torrentleech are not in our tree."
+      },
+      "1457b928fe72cd0e92b6e4d90e87f3a15cd5665e": {
+        "subject": "Update incomplete/invalid issue messaging",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Edits close_incomplete_issues.yml and label_invalid_issues.yml, Sonarr's issue triage workflows. We have neither."
+      },
+      "d9aba4ca50793c247db4c8514d27c5d798d9baef": {
+        "subject": "Don't run labeling workflows in parallel",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Serialises Sonarr's three labelling workflows (labeler, label_invalid_issues, no_autopilot) so their label writes do not race. We only have labeler.yml, so there is nothing to race."
+      },
+      "8b30015629812436804693237b2044de44dcf912": {
+        "subject": "Tooltips not flipping when they would overflow viewport padding",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Applied cleanly. Gives the tooltip's flip middleware the same viewport padding as shift, so a tooltip near the edge flips instead of being squeezed. Our Tooltip middleware matched upstream's pre-image."
+      },
+      "07442aa40892596a5caee73bf4ca3c80845c5afd": {
+        "subject": "New: Add name to edit modals",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Settings edit modals (download clients, indexers, import lists, notifications, custom formats, quality and release profiles, auto tagging) show the item's name beside the title. Adapted: our ModalHeader is a plain function component, so the subtitle prop went onto that rather than upstream's forwardRef rewrite, and the subtitle uses our helpTextColor instead of the redesign's inkMuted token."
+      },
+      "88b5b94e939b19e824d82569a946173a071786ff": {
+        "subject": "Stay on series details page when the title slug changes during a refresh",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Sonarr routes series details by title slug, so a refresh that renames the slug lost the page. Our details routes are by id (/movie/:id and friends), which a refresh cannot change."
+      },
+      "92736631010bb7320a0f2f381d636bd379c65211": {
+        "subject": "Don't start interactive search for episode until requested",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "The bug is EpisodeSearch calling useReleases just to read isFetched, which started a search on mount. We have no EpisodeSearch analog: InteractiveSearch is the only caller of useReleases here, and it is only mounted when a search is requested."
+      },
+      "1f546e5e3fb3b96042cfee9513ab455b8d0c5a21": {
+        "subject": "Fixed: Ignore download removing from download client",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "The broken mapping was between Sonarr's frontend and its new V5 queue endpoint. Our useQueue still sends removeFromClient, changeCategory, blocklist and skipRedownload to the V3 endpoint that expects them, so removal options work."
+      },
+      "863f52ab0c103cb2dbbc65b7db88cc479138c3b1": {
+        "subject": "Label queue progress popovers for screen readers",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Applied cleanly. Gives the queue progress popover an accessible label with state, percentage and title; Popover already takes accessibleLabel through TooltipProps."
+      },
+      "af34322ff627527309450ed142c2dde7b0556c67": {
+        "subject": "Show Test All results on download client cards",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "sonarr@7581ac887 (Test All results on indexer cards), itself deferred behind the v5 UI redesign decision: it adds Settings/ProviderTestAllResult, which this imports. Take this in the same PR.",
+        "reason": "The download client counterpart of 7581ac887: per-card test status and an announced Test All result. Wanted, but built on that commit's ProviderTestAllResult helper, which is not in our tree."
+      },
+      "179ff26355373926a868058349d4860b6750e3ad": {
+        "subject": "Consider unknown series queue items filter in queue status count",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Sonarr's count ignored its new unknown-items filter. We kept the includeUnknownMovieItems option instead (see 2d071eca9), and useQueueStatus already returns count rather than totalCount, and drops the unknown errors and warnings, when it is off."
+      },
+      "1c01b720a5049d8597a46862dd31321206aea979": {
+        "subject": "New: Fail executables and potentially dangerous files by default for most indexers",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "New Newznab, Torznab and Torrent RSS indexers and their presets start with Executables and Potentially Dangerous under Fail Downloads, via IIndexer.DefaultFailDownloads and IndexerFactory. Fanzub and Nyaa are not in our tree. The en.json hunk is left out (it points users at an Additional Rejected File Extensions setting we do not have). The integration client's switch from AddJsonBody is needed here too: without it, the non-empty default reaches the server as nested empty arrays and every IndexerFixture POST fails with a 500. Ours uses RestSharp 114's AddStringBody."
+      },
+      "d137dc5a19f46a8aa6d41e706143cad1f0af27af": {
+        "subject": "Automated API Docs update",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Regenerates Sonarr's checked-in V3 and V5 openapi.json. We retired the checked-in spec."
+      },
+      "dcadb5b1f3986941c67bcc562cfe4a5cc7299118": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Weblate translation sync (ca, de, es, hu, pl, pt_BR). Our translations come from our own Weblate, not from cherry-picks."
+      },
+      "bc7c87def00d1195657c0bd82a9c1dc8393277f1": {
+        "subject": "Disable response cache in authentication endpoints",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Login, logout, loggedout and reset-password responses are never cacheable, so a browser cannot replay a stale auth page. We serve the same routes. Only conflict was our comment above the MediaCover check."
+      },
+      "f0c202d66e940b64f190fc4a34ab364f74c3ced2": {
+        "subject": "Show season pack upgrade threshold examples on one line based on entered value",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Help text for the season pack upgrade threshold in Media Management. We have no seasons or season packs."
+      },
+      "227bd30d2656639730fc5f08ccd56732234fe325": {
+        "subject": "Ensure translations are available immediately",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Upstream moves setTranslations out of a useEffect so strings exist on the first render after load. Our useTranslations already calls setTranslations inside the query function, before the data is returned."
+      },
+      "29b428b7172838bf14791ccf350490719d450283": {
+        "subject": "Account for sticky header when scrolling to today on Month view",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same bug here: Month view scrolls today's cell into view, and our calendar has the same sticky header, so today landed under it. The header height now feeds a scroll-margin-top. Adapted: our today highlight is on the day-of-month row, so the cell gets its own isTodayCell class."
+      },
+      "e807a23462c4fb7cfb4d58c048356b497f5e9906": {
+        "subject": "Reduce how often UI settings are fetched",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "useSettings takes query options and the UI settings readers get a one-hour stale time; saving still writes the response into the cache. Adapted to our /config/ui path and UiSettings type."
+      },
+      "42359526c731b2d7d4b971dc46a7ba680d438b52": {
+        "subject": "Fixed: Calendar Search for Missing",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Fixes an empty press handler in Sonarr's CalendarMissingEpisodeSearchButton. We have no such component; our CalendarPage's search-for-missing handler runs the search and tracks its command, so the bug does not exist here."
+      },
+      "17c88203a6f1e6da882188f4bbbc9364bbefcc74": {
+        "subject": "Add place-content to stylelint properties order",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Our .stylelintrc already orders place-content, and PageJumpBar's place-content is already in position."
+      },
+      "4949bff1eb5cb98bf6ac7cfbed9b4002dc5c185a": {
+        "subject": "Show Test All results on import list cards",
+        "month": "2026-10",
+        "disposition": "defer",
+        "blockedBy": "sonarr@7581ac887 (Test All results on indexer cards), itself deferred behind the v5 UI redesign decision: it adds Settings/ProviderTestAllResult, which this imports. Take this in the same PR.",
+        "reason": "The import list counterpart of 7581ac887. Wanted, but built on that commit's ProviderTestAllResult helper, which is not in our tree."
+      },
+      "7d09ae5d457cc2fe7887b40154a2b7c40bfb0adc": {
+        "subject": "Fix removing tags from bulk edit series",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Sonarr's footer dropped applyTags, so remove and replace behaved as add. Our movie and scene index select footers already pass applyTags through."
+      },
+      "a2b6054a8f3746d149a811bddea2a8d063efc35e": {
+        "subject": "Detailed progress bar enabled by default for series overview",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Flips a default in Sonarr's series overview options. Our scene index carries the same detailedProgressBar option, defaulting to false; changing a default is a preference call, not a sync fix, and existing users keep their stored value either way."
+      },
+      "b287a95ca03ef1001447e8687ce4f7c8d5b01e89": {
+        "subject": "Automated API Docs update",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Regenerates Sonarr's checked-in V5 openapi.json. We retired the checked-in spec."
       }
     }
   }
