@@ -26,14 +26,32 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
             LegacyDbBuilder.CreateErosSqlite(_dbPath);
 
             // 10000 iterations is below v5's 220000, so a rehash-on-login would write.
-            var salt = new byte[16];
-            var hash = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Password), salt, 10000, HashAlgorithmName.SHA512, 32);
+            InsertUser(_dbPath, "user", Password);
+        }
 
-            using var connection = new System.Data.SQLite.SQLiteConnection(new System.Data.SQLite.SQLiteConnectionStringBuilder { DataSource = _dbPath, Pooling = false }.ConnectionString);
+        private static void InsertUser(string path, string username, string password)
+        {
+            var salt = new byte[16];
+            var hash = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, 10000, HashAlgorithmName.SHA512, 32);
+
+            using var connection = new System.Data.SQLite.SQLiteConnection(new System.Data.SQLite.SQLiteConnectionStringBuilder { DataSource = path, Pooling = false }.ConnectionString);
             connection.Open();
             connection.Execute(
-                "INSERT INTO \"Users\" (\"Identifier\", \"Username\", \"Password\", \"Salt\", \"Iterations\") VALUES (@id, 'user', @password, @salt, 10000)",
-                new { id = Guid.NewGuid().ToString(), password = Convert.ToBase64String(hash), salt = Convert.ToBase64String(salt) });
+                "INSERT INTO \"Users\" (\"Identifier\", \"Username\", \"Password\", \"Salt\", \"Iterations\") VALUES (@id, @username, @password, @salt, 10000)",
+                new { id = Guid.NewGuid().ToString(), username, password = Convert.ToBase64String(hash), salt = Convert.ToBase64String(salt) });
+        }
+
+        private LegacyInstall V2Install(string username, string password)
+        {
+            var path = Path.Combine(TempFolder, "whisparr2.db");
+            LegacyDbBuilder.CreateV2SqliteFromDump(path);
+            InsertUser(path, username, password);
+
+            return new LegacyInstall
+            {
+                Kind = LegacyKind.V2,
+                Database = new LegacyDatabaseLocation { Type = DatabaseType.SQLite, SqlitePath = path }
+            };
         }
 
         private LegacyUserService GivenService(params LegacyInstall[] installs)
@@ -126,18 +144,49 @@ namespace NzbDrone.Core.Test.Datastore.Migration.Setup
         }
 
         [Test]
-        public void should_prefer_eros_when_both_installs_exist()
+        public void should_find_users_from_both_installs_when_both_exist()
         {
-            var v2Path = Path.Combine(TempFolder, "whisparr2.db");
-            LegacyDbBuilder.CreateV2Sqlite(v2Path, 221);
+            // An Eros boot on a v2 config dir creates its own user, which must not hide the v2 one.
+            var service = GivenService(V2Install("v2user", "v2pass"), ErosInstall(_dbPath));
 
-            var v2 = new LegacyInstall
-            {
-                Kind = LegacyKind.V2,
-                Database = new LegacyDatabaseLocation { Type = DatabaseType.SQLite, SqlitePath = v2Path }
-            };
+            service.FindUser("user", Password).Username.Should().Be("user");
+            service.FindUser("v2user", "v2pass").Username.Should().Be("v2user");
+            service.FindUser("v2user", Password).Should().BeNull();
+        }
 
-            GivenService(v2, ErosInstall(_dbPath)).FindUser("user", Password).Should().NotBeNull();
+        [Test]
+        public void should_find_v2_user_by_identifier_when_both_installs_exist()
+        {
+            var service = GivenService(V2Install("v2user", "v2pass"), ErosInstall(_dbPath));
+            var user = service.FindUser("v2user", "v2pass");
+
+            service.FindUser(user.Identifier).Username.Should().Be("v2user");
+        }
+
+        [Test]
+        public void should_accept_either_password_when_both_installs_share_a_username()
+        {
+            var service = GivenService(V2Install("user", "v2pass"), ErosInstall(_dbPath));
+
+            service.FindUser("user", Password).Should().NotBeNull();
+            service.FindUser("user", "v2pass").Should().NotBeNull();
+            service.FindUser("user", "wrong").Should().BeNull();
+        }
+
+        [Test]
+        public void should_list_eros_user_first_when_both_installs_exist()
+        {
+            var service = GivenService(V2Install("v2user", "v2pass"), ErosInstall(_dbPath));
+
+            service.FindUser().Username.Should().Be("user");
+        }
+
+        [Test]
+        public void should_still_find_v2_user_when_eros_db_is_unreadable()
+        {
+            var service = GivenService(V2Install("v2user", "v2pass"), ErosInstall(Path.Combine(TempFolder, "missing.db")));
+
+            service.FindUser("v2user", "v2pass").Should().NotBeNull();
         }
 
         [Test]

@@ -48,9 +48,9 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
                 return null;
             }
 
-            var user = ReadUsers().FirstOrDefault(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
-
-            return PasswordHasher.Verify(user, password) ? user : null;
+            // Each install has its own Users, so the same name can appear twice with different passwords.
+            return ReadUsers().FirstOrDefault(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase) &&
+                                                   PasswordHasher.Verify(u, password));
         }
 
         public User FindUser(Guid identifier)
@@ -63,32 +63,32 @@ namespace NzbDrone.Core.Datastore.Migration.Setup
             return new InvalidOperationException("Users cannot be changed while Whisparr is in setup mode");
         }
 
-        // Eros wins when both installs exist, as it does for config5.xml. Setup mode can be required with no
-        // install at all (an unreadable legacy database), which leaves nobody to sign in.
-        private LegacyDatabaseLocation ChooseSource()
+        // Every install's Users, Eros first. Detection offers sign-in when any install has a user, and an Eros boot on
+        // a v2 config dir creates a user of its own, so reading only Eros would lock the v2 user out. Setup mode can be
+        // required with no install at all (an unreadable legacy database), which leaves nobody to sign in.
+        private IEnumerable<LegacyDatabaseLocation> ChooseSources()
         {
             var detection = _setupModeState.Detection;
 
             // A finished migration waiting for an env switch lists no install, its Users are in the v5 database.
             if (detection.PendingEnvSwitch)
             {
-                return detection.UserSource;
+                return detection.UserSource == null ? Enumerable.Empty<LegacyDatabaseLocation>() : new[] { detection.UserSource };
             }
 
-            var installs = detection.Installs;
-
-            return (installs.FirstOrDefault(i => i.Kind == LegacyKind.Eros) ?? installs.FirstOrDefault())?.Database;
+            return detection.Installs
+                .OrderBy(i => i.Kind == LegacyKind.Eros ? 0 : 1)
+                .Select(i => i.Database)
+                .Where(d => d != null);
         }
 
         private User[] ReadUsers()
         {
-            var source = ChooseSource();
+            return ChooseSources().SelectMany(ReadUsers).ToArray();
+        }
 
-            if (source == null)
-            {
-                return Array.Empty<User>();
-            }
-
+        private User[] ReadUsers(LegacyDatabaseLocation source)
+        {
             try
             {
                 using var connection = source.Type == DatabaseType.SQLite
