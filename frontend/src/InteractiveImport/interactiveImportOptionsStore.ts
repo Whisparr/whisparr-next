@@ -12,20 +12,23 @@ export interface InteractiveImportOptions {
 // entries of `persistState`. The table's columns are not here: the slice never
 // persisted them, and their visibility is computed per open from `showMovie`
 // and whether any item carries indexer flags.
-const { useOptions, getOptions, setOption, setSort } =
-  createOptionsStore<InteractiveImportOptions>(
-    'interactive_import_options',
-    () => ({
-      sortKey: 'relativePath',
-      sortDirection: 'ascending',
-      importMode: 'chooseImportMode',
-    })
-  );
+function createInteractiveImportOptionsStore(name: string) {
+  return createOptionsStore<InteractiveImportOptions>(name, () => ({
+    sortKey: 'relativePath',
+    sortDirection: 'ascending',
+    importMode: 'chooseImportMode',
+  }));
+}
 
-export const useInteractiveImportOptions = useOptions;
-export const getInteractiveImportOptions = getOptions;
-export const setInteractiveImportSort = setSort;
+export type InteractiveImportOptionsStore = ReturnType<
+  typeof createInteractiveImportOptionsStore
+>;
 
-export const setInteractiveImportMode = (importMode: ImportMode) => {
-  setOption('importMode', importMode);
-};
+export const interactiveImportOptionsStore =
+  createInteractiveImportOptionsStore('interactive_import_options');
+
+// Manage Files on a movie or scene keeps its own sort, so opening it no longer
+// resets the sort Manual Import remembers.
+export const manageFilesOptionsStore = createInteractiveImportOptionsStore(
+  'manage_files_options'
+);

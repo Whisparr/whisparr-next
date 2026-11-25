@@ -8,6 +8,7 @@ using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.Pending;
 using NzbDrone.Core.Lifecycle;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Profiles.Qualities;
@@ -94,6 +95,9 @@ namespace NzbDrone.Core.Test.Download.Pending.PendingReleaseServiceTests
             _heldReleases.AddRange(heldReleases);
 
             Subject.Handle(new ApplicationStartedEvent());
+
+            // Only the update from the action under test should be counted
+            Mocker.GetMock<IEventAggregator>().Invocations.Clear();
         }
 
         [Test]
@@ -130,12 +134,18 @@ namespace NzbDrone.Core.Test.Download.Pending.PendingReleaseServiceTests
         {
             Mocker.GetMock<IPendingReleaseRepository>()
                 .Verify(v => v.Delete(It.IsAny<PendingRelease>()), Times.Once());
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.IsAny<PendingReleasesUpdatedEvent>()), Times.Once());
         }
 
         private void VerifyNoDelete()
         {
             Mocker.GetMock<IPendingReleaseRepository>()
                 .Verify(v => v.Delete(It.IsAny<PendingRelease>()), Times.Never());
+
+            Mocker.GetMock<IEventAggregator>()
+                .Verify(v => v.PublishEvent(It.IsAny<PendingReleasesUpdatedEvent>()), Times.Once());
         }
     }
 }

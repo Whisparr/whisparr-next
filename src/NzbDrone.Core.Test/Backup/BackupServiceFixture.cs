@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
+using System.Net;
 using Dapper;
 using FluentAssertions;
 using Moq;
@@ -28,18 +29,47 @@ namespace NzbDrone.Core.Test.Backup
         {
             Mocker.GetMock<IAppFolderInfo>().SetupGet(s => s.AppDataFolder).Returns(_appData);
             Mocker.GetMock<IAppFolderInfo>().SetupGet(s => s.TempFolder).Returns(_temp);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.OpenReadStream(It.IsAny<string>()))
+                  .Returns<string>(path => new FileStream(path, FileMode.Open, FileAccess.Read));
+        }
+
+        private string GivenFile(string fileName, string contents)
+        {
+            var path = Path.Combine(TempFolder, fileName);
+            File.WriteAllText(path, contents);
+
+            return path;
+        }
+
+        private string GivenConfigFile(string fileName = "config5.xml")
+        {
+            return GivenFile(fileName, "<Config><Port>6969</Port></Config>");
+        }
+
+        private string GivenV5Database(string fileName = "whisparr5.db")
+        {
+            var path = Path.Combine(TempFolder, fileName);
+            SqliteVersionInfoDatabase.Create(path, 247, 300);
+
+            return path;
+        }
+
+        private void GivenZipContents(params string[] files)
+        {
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.GetFiles(Path.Combine(_temp, "whisparr_backup_restore"), false))
+                  .Returns(files);
         }
 
         [Test]
         public void should_restore_database_from_backup_zip()
         {
-            var restoreFolder = Path.Combine(_temp, "whisparr_backup_restore");
-            var database = Path.Combine(restoreFolder, "whisparr5.db");
-            var config = Path.Combine(restoreFolder, "config5.xml");
+            var database = GivenV5Database();
+            var config = GivenConfigFile();
 
-            Mocker.GetMock<IDiskProvider>()
-                  .Setup(s => s.GetFiles(restoreFolder, false))
-                  .Returns(new[] { database, config });
+            GivenZipContents(database, config);
 
             Subject.Restore("backup.zip");
 
@@ -84,7 +114,7 @@ namespace NzbDrone.Core.Test.Backup
         {
             var restoreFolder = Path.Combine(_temp, "whisparr_backup_restore");
             var legacy = Path.Combine(restoreFolder, "whisparr3.db");
-            var database = Path.Combine(restoreFolder, "whisparr5.db");
+            var database = GivenV5Database();
             var extracted = new List<string>();
 
             Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(restoreFolder)).Returns(true);
@@ -183,6 +213,103 @@ namespace NzbDrone.Core.Test.Backup
 
             Mocker.GetMock<IDiskProvider>()
                   .Verify(s => s.MoveFile(upload, Path.Combine(_appData, "whisparr5.restore"), true), Times.Once());
+        }
+
+        [Test]
+        public void should_restore_uploaded_xml_as_config()
+        {
+            var path = GivenFile("whisparr_backup_restore.xml", "<Config><Port>6969</Port></Config>");
+
+            Subject.Restore(path);
+
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.MoveFile(path, Path.Combine(_appData, "config5.xml"), true), Times.Once());
+            Mocker.GetMock<IDiskProvider>().Verify(v => v.MoveFile(It.IsAny<string>(), Path.Combine(_appData, "whisparr5.restore"), It.IsAny<bool>()), Times.Never());
+        }
+
+        [TestCase("<Config><Port>6969")]
+        [TestCase("<Settings><Port>6969</Port></Settings>")]
+        [TestCase("SQLite format 3")]
+        public void should_not_restore_uploaded_xml_that_is_not_a_config_file(string contents)
+        {
+            var path = GivenFile("whisparr_backup_restore.xml", contents);
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore(path));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_restore_database_from_zip_that_is_not_sqlite()
+        {
+            GivenZipContents(GivenFile("whisparr5.db", "<Config><Port>6969</Port></Config>"));
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"))
+                  .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_restore_config_from_zip_when_database_is_not_sqlite()
+        {
+            GivenZipContents(GivenConfigFile(), GivenFile("whisparr5.db", "not a database"));
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_restore_config_from_zip_when_database_is_a_legacy_schema()
+        {
+            var database = Path.Combine(TempFolder, "whisparr5.db");
+            SqliteVersionInfoDatabase.Create(database, 247);
+
+            GivenZipContents(GivenConfigFile(), database);
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_restore_database_from_zip_when_config_is_invalid()
+        {
+            GivenZipContents(GivenFile("config5.xml", "not xml"), GivenV5Database());
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(s => s.MoveFile(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_report_not_found_when_zip_has_no_config_or_database()
+        {
+            GivenZipContents(GivenFile("INFO", "v5"));
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"))
+                  .StatusCode.Should().Be(HttpStatusCode.NotFound);
+        }
+
+        [Test]
+        public void should_delete_extracted_files_when_restore_fails()
+        {
+            var restoreFolder = Path.Combine(_temp, "whisparr_backup_restore");
+
+            GivenZipContents(GivenFile("whisparr5.db", "not a database"));
+
+            Mocker.GetMock<IArchiveService>()
+                  .Setup(s => s.Extract("backup.zip", restoreFolder))
+                  .Callback(() => Mocker.GetMock<IDiskProvider>().Setup(s => s.FolderExists(restoreFolder)).Returns(true));
+
+            Assert.Throws<RestoreBackupFailedException>(() => Subject.Restore("backup.zip"));
+
+            Mocker.GetMock<IDiskProvider>().Verify(s => s.DeleteFolder(restoreFolder, true), Times.Once());
         }
 
         [Test]

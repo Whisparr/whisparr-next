@@ -7,6 +7,7 @@ import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import { kinds } from 'Helpers/Props';
+import MovieTitleLink from 'Movie/MovieTitleLink';
 import { useMoviesByIds } from 'Movie/useMovie';
 import { useDownloadClientsWithIds } from 'Settings/DownloadClients/DownloadClients/useDownloadClients';
 import { useImportListsWithIds } from 'Settings/ImportLists/ImportLists/useImportLists';
@@ -83,7 +84,14 @@ function TagDetailsModalContent({
         {movies.length ? (
           <FieldSet legend={translate('Movies')}>
             {movies.map((item) => {
-              return <div key={item.id}>{item.title}</div>;
+              return (
+                <div key={item.id}>
+                  <MovieTitleLink
+                    titleSlug={item.titleSlug}
+                    title={item.title}
+                  />
+                </div>
+              );
             })}
           </FieldSet>
         ) : null}

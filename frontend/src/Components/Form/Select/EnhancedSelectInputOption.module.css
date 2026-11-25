@@ -43,6 +43,10 @@
   }
 }
 
+.isFocused {
+  background-color: var(--inputHoverBackgroundColor);
+}
+
 .isDisabled {
   background-color: #aaa;
 }

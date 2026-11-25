@@ -24,14 +24,9 @@ import PageToolbarSeparator from 'Components/Page/Toolbar/PageToolbarSeparator';
 import posterPlaceholder from 'Components/posterPlaceholder';
 import TmdbRating from 'Components/TmdbRating';
 import Tooltip from 'Components/Tooltip/Tooltip';
-import {
-  icons,
-  kinds,
-  sizes,
-  sortDirections,
-  tooltipPositions,
-} from 'Helpers/Props';
+import { icons, kinds, sizes, tooltipPositions } from 'Helpers/Props';
 import InteractiveImportModal from 'InteractiveImport/InteractiveImportModal';
+import { manageFilesOptionsStore } from 'InteractiveImport/interactiveImportOptionsStore';
 import DeleteMovieModal from 'Movie/Delete/DeleteMovieModal';
 import EditMovieModal from 'Movie/Edit/EditMovieModal';
 import getMovieStatusDetails from 'Movie/getMovieStatusDetails';
@@ -539,8 +534,7 @@ function MovieDetails(props: Readonly<Partial<Props>>) {
           movieId={movieId}
           title={title}
           folder={path}
-          initialSortKey="relativePath"
-          initialSortDirection={sortDirections.ASCENDING}
+          optionsStore={manageFilesOptionsStore}
           showMovie={false}
           allowMovieChange={false}
           showDelete={true}

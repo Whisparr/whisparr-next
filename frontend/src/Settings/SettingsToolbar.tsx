@@ -27,7 +27,7 @@ function SettingsToolbar({
   hasPendingChanges,
   additionalButtons = null,
   onSavePress,
-}: SettingsToolbarProps) {
+}: Readonly<SettingsToolbarProps>) {
   const { bindShortcut, unbindShortcut } = useKeyboardShortcuts();
   const blocker = useBlocker(!!hasPendingChanges);
 
@@ -42,7 +42,10 @@ function SettingsToolbar({
   useEffect(() => {
     bindShortcut(
       'saveSettings',
-      () => {
+      (e) => {
+        // Keeps the browser's own Save Page dialog from opening as well
+        e.preventDefault();
+
         if (hasPendingChanges) {
           onSavePress?.();
         }

@@ -5,6 +5,7 @@ using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -71,6 +72,67 @@ namespace NzbDrone.Core.Test.Datastore
 
             File.ReadAllBytes(_database).Should().Equal(restored);
             File.Exists(_restore).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_keep_the_current_database_and_sidecars_as_pre_restore()
+        {
+            var before = File.ReadAllBytes(_database);
+            File.WriteAllText(_database + "-wal", "wal");
+            SqliteVersionInfoDatabase.Create(_restore, 247, 300, 301);
+
+            Subject.Restore();
+
+            File.ReadAllBytes(_database + ".pre-restore").Should().Equal(before);
+            File.ReadAllText(_database + ".pre-restore-wal").Should().Be("wal");
+            File.Exists(_database + "-wal").Should().BeFalse();
+        }
+
+        [Test]
+        public void should_replace_a_stale_pre_restore_database()
+        {
+            var before = File.ReadAllBytes(_database);
+            File.WriteAllText(_database + ".pre-restore", "stale");
+            File.WriteAllText(_database + ".pre-restore-wal", "stale");
+            SqliteVersionInfoDatabase.Create(_restore, 247, 300, 301);
+
+            Subject.Restore();
+
+            File.ReadAllBytes(_database + ".pre-restore").Should().Equal(before);
+            File.Exists(_database + ".pre-restore-wal").Should().BeFalse();
+        }
+
+        [Test]
+        public void should_move_the_current_database_back_if_the_restore_fails()
+        {
+            var before = File.ReadAllBytes(_database);
+            File.WriteAllText(_database + "-wal", "wal");
+            SqliteVersionInfoDatabase.Create(_restore, 247, 300, 301);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.MoveFile(_restore, _database, It.IsAny<bool>()))
+                  .Throws(new IOException());
+
+            Assert.Throws<IOException>(() => Subject.Restore());
+
+            File.ReadAllBytes(_database).Should().Equal(before);
+            File.ReadAllText(_database + "-wal").Should().Be("wal");
+            File.Exists(_database + ".pre-restore").Should().BeFalse();
+            File.Exists(_database + ".pre-restore-wal").Should().BeFalse();
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        [Test]
+        public void should_delete_the_pre_restore_files_after_startup()
+        {
+            File.WriteAllText(_database + ".pre-restore", "old");
+            File.WriteAllText(_database + ".pre-restore-wal", "old");
+
+            Subject.HandleAsync(new ApplicationStartedEvent());
+
+            File.Exists(_database + ".pre-restore").Should().BeFalse();
+            File.Exists(_database + ".pre-restore-wal").Should().BeFalse();
+            File.Exists(_database).Should().BeTrue();
         }
     }
 }
