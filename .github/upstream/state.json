@@ -5377,7 +5377,7 @@
         "subject": "New: Fail executables and potentially dangerous files by default for most indexers",
         "month": "2026-10",
         "disposition": "adapt",
-        "reason": "New Newznab, Torznab and Torrent RSS indexers and their presets start with Executables and Potentially Dangerous under Fail Downloads, via IIndexer.DefaultFailDownloads and IndexerFactory. Fanzub and Nyaa are not in our tree. The en.json hunk is left out (it points users at an Additional Rejected File Extensions setting we do not have), as is the integration client's switch from AddJsonBody, which our RestSharp version does not need."
+        "reason": "New Newznab, Torznab and Torrent RSS indexers and their presets start with Executables and Potentially Dangerous under Fail Downloads, via IIndexer.DefaultFailDownloads and IndexerFactory. Fanzub and Nyaa are not in our tree. The en.json hunk is left out (it points users at an Additional Rejected File Extensions setting we do not have). The integration client's switch from AddJsonBody is needed here too: without it, the non-empty default reaches the server as nested empty arrays and every IndexerFixture POST fails with a 500. Ours uses RestSharp 114's AddStringBody."
       },
       "d137dc5a19f46a8aa6d41e706143cad1f0af27af": {
         "subject": "Automated API Docs update",
