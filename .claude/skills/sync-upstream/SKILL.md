@@ -1,26 +1,24 @@
 ---
 name: sync-upstream
-description: Work one month-sized chunk of the Radarr or Sonarr upstream backlog for whisparr-next. Reads each upstream diff, applies the parser/localization/frontend skip rules, records a disposition with a reason, applies the picks, regenerates UPSTREAM_SYNC.md, and opens the PR. Use when catching up on upstream commits or when the upstream-watch tracking issue lists new work.
-argument-hint: "<radarr|sonarr> <YYYY-MM>"
+description: Work one month-sized chunk of the Sonarr upstream backlog for whisparr-next. Reads each upstream diff, applies the parser/localization skip rules, records a disposition with a reason, applies the picks, regenerates UPSTREAM_SYNC.md, and opens the PR. Use when catching up on upstream commits or when the upstream-watch tracking issue lists new work.
+argument-hint: "<YYYY-MM>"
 user-invocable: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, TodoWrite
 ---
 
 # Sync one upstream chunk
 
-whisparr-next tracks **two** upstreams on two clocks:
+whisparr-next tracks one upstream, `Sonarr/Sonarr:develop`, for the whole
+tree. Radarr is no longer synced: its `radarr/radarr@` trailers in our history
+are from before 2026-11-25, and its dispositions live in git history, not in
+`state.json`.
 
-| Tree | Upstream | Why |
-| --- | --- | --- |
-| `frontend/` | `Sonarr/Sonarr:develop` | Our React Query + zustand frontend was ported from Sonarr's completed migration (see `REDUX_MIGRATION.md`). |
-| `src/` and everything else | `Radarr/Radarr:develop` | Our code lineage. The chain is Sonarr → Radarr → us. |
-
-State lives in `.github/upstream/state.json` — high-water SHAs plus a
+State lives in `.github/upstream/state.json` — the high-water SHA plus a
 `sha → {subject, month, disposition, reason}` map. **That file is the only thing
 you edit by hand, and `UPSTREAM_SYNC.md` is generated from it.** Never edit the
 report directly; `--check` will catch you.
 
-Argument is an upstream and a month: `sync-upstream radarr 2026-04`. If omitted,
+Argument is a month: `sync-upstream 2026-10`. If omitted,
 read `UPSTREAM_SYNC.md` and propose the smallest outstanding month.
 
 Run the phases in order. Track them with TodoWrite when the chunk has more than
@@ -46,7 +44,7 @@ it yourself, drop what should not be there, and write the dispositions.
 Branch off `develop` — never work on it directly:
 
 ```sh
-git switch -c sync-<upstream>-<YYYY-MM> develop
+git switch -c sync-sonarr-<YYYY-MM> develop
 ```
 
 ## 2. Read every diff
@@ -54,7 +52,7 @@ git switch -c sync-<upstream>-<YYYY-MM> develop
 For each commit:
 
 ```sh
-gh api repos/<Radarr/Radarr|Sonarr/Sonarr>/commits/<sha> -q '.files[] | .filename, .patch'
+gh api repos/Sonarr/Sonarr/commits/<sha> -q '.files[] | .filename, .patch'
 ```
 
 **Never classify from the subject line.** Subjects routinely understate scope
@@ -68,10 +66,9 @@ here has actively cost us.
 
 ### Parser → skip by default
 
-Anything under `src/NzbDrone.Core/Parser/`. Our `Parser.cs` is ~1,100 lines
-against Radarr's ~640; we parse scenes with full dates, performers and studios,
-they parse movies by year or series by season/episode. Upstream regexes are
-tuned to a grammar we do not share.
+Anything under `src/NzbDrone.Core/Parser/`. We parse scenes with full dates,
+performers and studios, and movies by year; Sonarr parses series by
+season/episode. Upstream regexes are tuned to a grammar we do not share.
 
 The **only** way past this gate: write a test against *our* parser that fails
 before the fix. A ported regex plus a ported test proves nothing. If it does not
@@ -95,20 +92,13 @@ those files come from Weblate, not from cherry-picks.
 
 ### Generated API docs → skip
 
-Both upstreams regenerate a checked-in `openapi.json` from a bot, several times
-a month. We retired ours along with the workflow that produced it, so those
+Sonarr regenerates a checked-in `openapi.json` from a bot, several times a
+month. We retired ours along with the workflow that produced it, so those
 commits rewrite a file we do not have — automatic `skip`.
 
 Gated on the files, not the subject: commits with "API docs" in the title are
 often hand-written C# (a resource attribute, a controller change) and still have
 to be read.
-
-### Radarr `frontend/` → skip by default
-
-Our frontend follows Sonarr. Radarr is still mid-conversion to the react-query
-patterns Sonarr finished, so picking their frontend commits re-imports something
-we already moved past. Past the gate only for a genuine bug fix in code we still
-share.
 
 ## 4. Classify what survives
 
@@ -139,8 +129,8 @@ One of five, and **every one needs a reason** — `--check` rejects a bare or
 stub reason:
 
 - **`pick`** — applies as-is.
-- **`adapt`** — right idea, wrong entity model. Radarr `Movie`/`Collection` or
-  Sonarr `Series`/`Episode` vs our `Movie`/`Scene`/`Performer`/`Studio`.
+- **`adapt`** — right idea, wrong entity model. Sonarr `Series`/`Episode` vs
+  our `Movie`/`Scene`/`Performer`/`Studio`.
 - **`skip`** — upstream-specific, gated out, or not wanted. Say which.
 - **`have`** — already in our tree.
 - **`defer`** — we want it, something concrete is in the way. Needs a
@@ -169,16 +159,12 @@ the decision named, and raise it at handoff.
 
 ## 5. Apply the picks
 
-Keep the trailer convention already used throughout our history:
+Every pick or adapt carries the trailer, which is how a grep of our history
+finds what came from upstream:
 
 ```
-(cherry picked from commit radarr/radarr@<sha>)
 (cherry picked from commit sonarr/sonarr@<sha>)
 ```
-
-The Sonarr form barely exists in our history yet, which is exactly why the
-Sonarr side of the backlog was invisible until someone read `REDUX_MIGRATION.md`
-by hand. Use it.
 
 Commit prefixes: Servarr (`New:`/`Fix:`/`Chore:`) or conventional
 (`feat:`/`fix:`/`chore:`) — the repo tolerates both.
