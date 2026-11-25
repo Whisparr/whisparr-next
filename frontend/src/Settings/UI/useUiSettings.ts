@@ -10,14 +10,19 @@ import UiSettings from 'typings/Settings/UiSettings';
 // so is this one: Whisparr v5 serves the config routes under /config.
 const PATH = '/config/ui';
 
+// UI settings are read by most of the app but only change from Settings > UI,
+// whose save writes the result straight back into the cache. Without a stale
+// time every component that mounts a reader refetches them.
+const QUERY_OPTIONS = { staleTime: 60 * 60 * 1000 };
+
 export const useUiSettingsValues = () => {
-  const { data } = useSettings<UiSettings>(PATH);
+  const { data } = useSettings<UiSettings>(PATH, QUERY_OPTIONS);
 
   return data;
 };
 
 export const useUiSettings = () => {
-  return useSettings<UiSettings>(PATH);
+  return useSettings<UiSettings>(PATH, QUERY_OPTIONS);
 };
 
 export const useManageUiSettings = () => {
@@ -29,7 +34,7 @@ export const useManageUiSettings = () => {
 // merged the payload over the whole item before the PUT, because `/config/ui`
 // replaces the resource rather than patching it.
 export const useSaveUiSettings = () => {
-  const { data } = useSettings<UiSettings>(PATH);
+  const { data } = useSettings<UiSettings>(PATH, QUERY_OPTIONS);
   const { save } = useSaveSettings<UiSettings>(PATH);
 
   return useCallback(
