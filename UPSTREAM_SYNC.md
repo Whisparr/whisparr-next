@@ -3,7 +3,6 @@
 
 # Upstream sync
 
-We track two upstreams on two clocks: **frontend follows Sonarr, backend follows Radarr**.
 See `.github/upstream/state.json` for the machine state and the `sync-upstream` skill for the process.
 
 Backlogs below are as of radarr `af7814f7a8`, sonarr `57816c149d`. Run `--report` to refresh; the tracking issues are the live view.
@@ -12,7 +11,7 @@ Backlogs below are as of radarr `af7814f7a8`, sonarr `57816c149d`. Run `--report
 
 <!-- outstanding: 0 -->
 
-Owns: **backend**. High-water mark: `af7814f7a8`.
+High-water mark: `af7814f7a8`.
 
 Caught up — nothing outstanding.
 
@@ -20,7 +19,7 @@ Caught up — nothing outstanding.
 
 <!-- outstanding: 0 -->
 
-Owns: **frontend**. High-water mark: `57816c149d`.
+High-water mark: `57816c149d`.
 
 Caught up — nothing outstanding.
 

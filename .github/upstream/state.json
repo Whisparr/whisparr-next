@@ -4,14 +4,12 @@
     "radarr": {
       "repo": "Radarr/Radarr",
       "branch": "develop",
-      "owns": "backend",
       "highWater": "af7814f7a89ea46f21522f0a1b8bcdcf7644b8bf",
       "highWaterNote": "2026-10-12 'Fixed: NZBGet history message showing {scriptStatus} token', the current tip of Radarr develop. Everything at or before this mark is dispositioned: 2026-10 closed with two backend fixes picked and three adapted (disposed-container events without the deferred e80abdd60 guard, edition-tag mm casing, and the ImageSharp decoder restriction without the suppressions #954 already carries), then the 10-12 tail: indexer page size and the NZBGet token picked, the cache sweep already here via Sonarr, and the Discover Rotten Tomatoes option skipped. Advance only when everything at or before the new mark is settled."
     },
     "sonarr": {
       "repo": "Sonarr/Sonarr",
       "branch": "develop",
-      "owns": "frontend",
       "highWater": "57816c149d02f95543973fefb4780c4495f8121c",
       "highWaterNote": "2026-10-12 'Look for previous tag in same major version', the current tip of Sonarr develop (v5 was promoted to develop on 2026-10-12 and v5-develop deleted; v4 is on v4-develop). Everything at or before this mark is settled. Sonarr 2026-10 is 104 commits over four PRs: #963 (frontend fixes, Interactive Search virtualization, Transmission labels, the parser date window), #965 (the auth batch, including Forms by default and login lockout by paul's decision), a third for the 15 pushed on 2026-10-10, and a fourth for the 32 pushed 2026-10-11/12 (moment locales, tracked-download cleanup, calendar and select fixes; redesign follow-ups deferred). Advance only when everything at or before the new mark is settled."
     }

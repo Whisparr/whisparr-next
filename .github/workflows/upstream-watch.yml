@@ -24,14 +24,12 @@ jobs:
       # v5; Radarr's entry in .github/upstream/state.json is retired separately.
       fail-fast: false
       matrix:
-        # Titles carry a [v3] prefix. It is a leftover from when these issues
-        # lived on Whisparr/Whisparr alongside the v2 line, and is no longer
-        # needed for disambiguation now that they are on this repo -- but it is
-        # the lookup key, so dropping it orphans the existing issue and opens a
-        # new one. Rename the issues first if it is ever dropped.
+        # The title is the lookup key for the tracking issue. Changing it here
+        # without renaming the issue to match orphans the issue and opens a
+        # new one on the next run.
         include:
           - upstream: sonarr
-            title: '[v3] Upstream sync: Sonarr v5-develop'
+            title: 'Upstream sync: Sonarr develop'
 
     steps:
       # github.token cannot be used to open the PR: GitHub does not start
@@ -70,6 +68,7 @@ jobs:
         id: attempt
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          ISSUE_TITLE: ${{ matrix.title }}
         run: |
           set -euo pipefail
           node scripts/upstream-sync.mjs --attempt --upstream ${{ matrix.upstream }} > summary.json

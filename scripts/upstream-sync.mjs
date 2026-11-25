@@ -160,7 +160,7 @@ function renderUpstream(name, upstream, commits, { detailMonths = Infinity } = {
   // without parsing prose. Invisible once rendered.
   lines.push(`<!-- outstanding: ${commits.length} -->`);
   lines.push('');
-  lines.push(`Owns: **${upstream.owns}**. High-water mark: \`${upstream.highWater.slice(0, 10)}\`.`);
+  lines.push(`High-water mark: \`${upstream.highWater.slice(0, 10)}\`.`);
   lines.push('');
 
   if (commits.length === 0) {
@@ -302,7 +302,6 @@ async function render(state, heads) {
     '',
     '# Upstream sync',
     '',
-    'We track two upstreams on two clocks: **frontend follows Sonarr, backend follows Radarr**.',
     'See `.github/upstream/state.json` for the machine state and the `sync-upstream` skill for the process.',
     '',
     `Backlogs below are as of ${Object.entries(heads)
@@ -500,9 +499,11 @@ function renderAttempt(result) {
   lines.push('');
 
   if (conflicted.length > 0 || gated.length > 0) {
+    // The workflow passes the issue title in, since it is the lookup key there
+    // and would drift if rebuilt here.
+    const issue = process.env.ISSUE_TITLE ? '`' + process.env.ISSUE_TITLE + '`' : 'upstream sync';
     lines.push(
-      `Left out and tracked on the \`[v3] Upstream sync: ${upstream.repo.split('/')[1]} ${upstream.branch}\` issue`,
-      'on Whisparr/Whisparr, where issues for both repos live:',
+      `Left out and tracked on the ${issue} issue:`,
       `${conflicted.length} conflicted, ${gated.length} gated.`,
       ''
     );
