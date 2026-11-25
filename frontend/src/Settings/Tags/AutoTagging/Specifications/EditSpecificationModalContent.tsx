@@ -137,7 +137,7 @@ export default function EditSpecificationModalContent({
               <div>
                 <InlineMarkdown
                   data={translate('RegularExpressionsCanBeTested', {
-                    url: 'http://regex101.com/',
+                    url: 'https://regex101.com/',
                   })}
                 />
               </div>

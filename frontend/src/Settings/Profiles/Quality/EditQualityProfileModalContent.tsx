@@ -183,7 +183,7 @@ function EditQualityProfileModalContent({
     (qualityId: number, allowed: boolean) => {
       setItems(
         items.value.map((profileItem) =>
-          profileItem.quality && profileItem.quality.id === qualityId
+          profileItem.quality?.id === qualityId
             ? { ...profileItem, allowed }
             : profileItem
         )
@@ -287,21 +287,15 @@ function EditQualityProfileModalContent({
   }, []);
 
   const handleHeaderMeasure = useCallback(({ height }: { height: number }) => {
-    setHeaderHeight((currentHeight) =>
-      height > currentHeight ? height : currentHeight
-    );
+    setHeaderHeight((currentHeight) => Math.max(height, currentHeight));
   }, []);
 
   const handleBodyMeasure = useCallback(({ height }: { height: number }) => {
-    setBodyHeight((currentHeight) =>
-      height > currentHeight ? height : currentHeight
-    );
+    setBodyHeight((currentHeight) => Math.max(height, currentHeight));
   }, []);
 
   const handleFooterMeasure = useCallback(({ height }: { height: number }) => {
-    setFooterHeight((currentHeight) =>
-      height > currentHeight ? height : currentHeight
-    );
+    setFooterHeight((currentHeight) => Math.max(height, currentHeight));
   }, []);
 
   useEffect(() => {
@@ -338,7 +332,7 @@ function EditQualityProfileModalContent({
     });
 
     // If the cutoff isn't allowed anymore or there isn't a cutoff set one
-    if (!cutoffValue || !cutoffItem || !cutoffItem.allowed) {
+    if (!cutoffValue || !cutoffItem?.allowed) {
       const firstAllowed = items.value.find(
         (profileItem) => profileItem.allowed
       );
