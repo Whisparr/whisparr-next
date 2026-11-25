@@ -14,7 +14,7 @@ namespace Whisparr.Api.V5.Commands
         public string Name { get; set; }
         public string CommandName { get; set; }
         public string Message { get; set; }
-        public Command Body { get; set; }
+        public Command Body { get; internal set; }
         public CommandPriority Priority { get; set; } = CommandPriority.Normal;
         public CommandStatus Status { get; set; }
         public CommandResult Result { get; set; }
