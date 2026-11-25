@@ -70,6 +70,7 @@ jobs:
         id: attempt
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          ISSUE_TITLE: ${{ matrix.title }}
         run: |
           set -euo pipefail
           node scripts/upstream-sync.mjs --attempt --upstream ${{ matrix.upstream }} > summary.json
