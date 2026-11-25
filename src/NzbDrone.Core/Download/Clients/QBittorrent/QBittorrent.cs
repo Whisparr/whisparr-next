@@ -450,6 +450,7 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
 
             failures.AddIfNotNull(TestCategory());
             failures.AddIfNotNull(TestPrioritySupport());
+            failures.AddIfNotNull(TestSeedTimeTypeSupport());
             failures.AddIfNotNull(TestGetTorrents());
         }
 
@@ -575,6 +576,21 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
                         DetailedDescription = _localizationService.GetLocalizedString("DownloadClientQbittorrentValidationCategoryAddFailureDetail")
                     };
                 }
+            }
+
+            return null;
+        }
+
+        private ValidationFailure TestSeedTimeTypeSupport()
+        {
+            // inactiveSeedingTimeLimit was added in api v2.9.2 (qBittorrent 4.6.0)
+            if ((QBittorrentSeedTimeType)Settings.SeedTimeType == QBittorrentSeedTimeType.Inactive && Proxy.GetApiVersion(Settings) < new Version(2, 9, 2))
+            {
+                return new NzbDroneValidationFailure(nameof(Settings.SeedTimeType), _localizationService.GetLocalizedString("DownloadClientQbittorrentValidationInactiveSeedTimeUnsupported"))
+                {
+                    IsWarning = true,
+                    DetailedDescription = _localizationService.GetLocalizedString("DownloadClientQbittorrentValidationInactiveSeedTimeUnsupportedDetail")
+                };
             }
 
             return null;
