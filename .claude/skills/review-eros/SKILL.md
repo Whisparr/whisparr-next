@@ -1,17 +1,15 @@
 ---
 name: review-eros
-description: Review a GitHub PR against Whisparr/Whisparr-Eros:eros-develop with this repo's conventions (branch target, commit prefixes, 80% new-code coverage, en.json translation keys, DB-migration note, NUnit *Fixture tests, ParserTests scrutiny). Produces a structured terminal review, then offers to post it. Use when reviewing an Eros PR.
+description: Review a GitHub PR against Whisparr/whisparr-next:develop with this repo's conventions (branch target, commit prefixes, 80% new-code coverage, en.json translation keys, DB-migration note, NUnit *Fixture tests, ParserTests scrutiny). Produces a structured terminal review, then offers to post it. Use when reviewing a PR.
 argument-hint: "[PR number or URL]"
 user-invocable: true
 allowed-tools: Bash, Read, Grep, Glob, Agent, AskUserQuestion, TodoWrite
 ---
 
-# Review an Eros PR
+# Review a PR
 
-Review a pull request against `Whisparr/Whisparr-Eros:eros-develop` the same way
-every time. The repo is `Whisparr/Whisparr-Eros` (remote here). Eros issues live
-on this repo (since 2026-09-17), so a linked issue is a bare `Fixes #NNNN`;
-`Whisparr/Whisparr` keeps the v2 line and needs the qualified form.
+Review a pull request against `Whisparr/whisparr-next:develop` the same way
+every time. Issues live on this repo, so a linked issue is a bare `Fixes #NNNN`.
 
 Output rule: **produce the full review in the terminal first, then ask** whether
 to post it. Never auto-post. Never add an AI-attribution footer to anything
@@ -25,9 +23,9 @@ Run the phases in order. Track them with TodoWrite if the review is non-trivial.
   (`gh pr view --json number` on the checked-out branch) or ask which PR.
 - Gather everything up front:
   ```
-  gh pr view <n> --repo Whisparr/Whisparr-Eros \
+  gh pr view <n> --repo Whisparr/whisparr-next \
     --json number,title,body,baseRefName,headRefName,author,files,commits,url,isDraft
-  gh pr diff <n> --repo Whisparr/Whisparr-Eros
+  gh pr diff <n> --repo Whisparr/whisparr-next
   ```
 - Note: title, body, **base branch**, head branch, changed files, full diff,
   commit list, linked issues, draft status.
@@ -37,10 +35,10 @@ Run the phases in order. Track them with TodoWrite if the review is non-trivial.
 Flag every miss. Sources: `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `.editorconfig`, `src/stylecop.json`.
 
-- **Base branch MUST be `eros-develop`** (never `eros`). Wrong base = blocking
-  hard fail — PRs to `eros` get closed.
-- Head branch is meaningfully named (`fix-...`/`new-...`), not `patch`/`develop`/
-  `eros-develop`.
+- **Base branch MUST be `develop`**. Wrong base = blocking
+  hard fail.
+- Head branch is meaningfully named (`fix-...`/`new-...`), not `patch`/
+  `develop`.
 - Commit prefixes: accept **both** Servarr (`New:`/`Fix:`/`Chore:`) and
   conventional (`feat:`/`fix:`/`chore:`/`refactor:`) — the repo tolerates both.
 - One feature/bug-fix per PR — flag scope creep.
@@ -49,8 +47,7 @@ Flag every miss. Sources: `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
     under `src/NzbDrone.Core/Datastore/Migration/`, the note must give its
     number.
   - **Tests** checkbox and **Translation Keys** checkbox.
-  - Linked issue as `Fixes #NNNN` (Eros issues live on this repo);
-    `Fixes Whisparr/Whisparr#NNNN` only for a v2 issue.
+  - Linked issue as `Fixes #NNNN`.
 - **Localization**: any new user-facing string needs an `en.json` key at
   `src/NzbDrone.Core/Localization/Core/en.json`. Backend uses
   `_localizationService.GetLocalizedString("Key")`; frontend uses
@@ -87,7 +84,7 @@ Decide from the diff whether to run anything locally:
 
 - **Risky diff** — touches `src/NzbDrone.Core/Parser/`, a DB migration, core
   release/parsing/decision logic, or security-sensitive code:
-  1. `gh pr checkout <n> --repo Whisparr/Whisparr-Eros`
+  1. `gh pr checkout <n> --repo Whisparr/whisparr-next`
   2. Build + run the **targeted** fixtures for the touched area, excluding heavy
      categories, e.g.:
      ```
@@ -102,13 +99,13 @@ Decide from the diff whether to run anything locally:
 
 Never claim tests passed unless you actually ran them.
 
-## 5b. Read the actual CI result (always run)
+## 6. Read the actual CI result (always run)
 
 The PR's CI has usually already run — read it, don't just predict it:
 
 ```
-gh pr checks <n> --repo Whisparr/Whisparr-Eros
-gh pr view <n> --repo Whisparr/Whisparr-Eros --json statusCheckRollup,mergeStateStatus,mergeable
+gh pr checks <n> --repo Whisparr/whisparr-next
+gh pr view <n> --repo Whisparr/whisparr-next --json statusCheckRollup,mergeStateStatus,mergeable
 ```
 
 Report the real state of the key gates from `build_v5.yml` and `sonarqube.yml`:
@@ -128,7 +125,7 @@ checks there are worth a second look.
 `mergeStateStatus: BLOCKED` with `mergeable: MERGEABLE` and all checks green
 usually just means the PR is awaiting a review approval — not a CI problem.
 
-## 6. Emit the terminal review
+## 7. Emit the terminal review
 
 Always use this fixed structure:
 
@@ -139,16 +136,16 @@ Always use this fixed structure:
 - **Nits** — style, naming.
 - **Checklist** — one pass/fail line each: base branch, commit prefixes,
   migration note, tests present, `en.json` keys, ~80% coverage, and **actual CI
-  status** (from step 5b — real result of build_v5 + SonarQube, or "awaiting
+  status** (from step 6 — real result of build_v5 + SonarQube, or "awaiting
   maintainer approval" for a new contributor).
 
-## 7. Offer to post (never auto-post)
+## 8. Offer to post (never auto-post)
 
 After printing the review, use AskUserQuestion to ask whether to post it. Only on
 explicit approval:
 
-- Summary review: `gh pr review <n> --repo Whisparr/Whisparr-Eros --comment --body "..."`
+- Summary review: `gh pr review <n> --repo Whisparr/whisparr-next --comment --body "..."`
   (or `--request-changes` / `--approve` to match the verdict).
-- Inline notes: `gh pr comment <n> --repo Whisparr/Whisparr-Eros --body "..."`.
+- Inline notes: `gh pr comment <n> --repo Whisparr/whisparr-next --body "..."`.
 
 Confirm before this outward-facing step every time. No AI-attribution footer.

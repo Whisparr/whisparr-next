@@ -1,7 +1,7 @@
-# Whisparr-Eros
+# Whisparr
 
-[![Build-Develop](https://github.com/Whisparr/Whisparr-Eros/actions/workflows/build_v3.yml/badge.svg?branch=eros-develop)](https://github.com/Whisparr/Whisparr-Eros/actions/workflows/build_v3.yml)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/whisparr/whisparr-eros/total)
+[![Build](https://github.com/Whisparr/whisparr-next/actions/workflows/build_v5.yml/badge.svg?branch=develop)](https://github.com/Whisparr/whisparr-next/actions/workflows/build_v5.yml)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/whisparr/whisparr-next/total)
 [![Translation status](https://translate.servarr.com/widget/servarr/whisparr/svg-badge.svg)](https://translate.servarr.com/engage/servarr/?utm_source=widget)
 [![Docker](https://img.shields.io/badge/Docker-Info-blue)](https://wiki.servarr.com/whisparr/installation/docker)
 [![Backers on Open Collective](https://opencollective.com/Whisparr/backers/badge.svg)](#backers)
@@ -34,7 +34,7 @@ Note that only one type of a given movie is supported. If you want both an 4k ve
 
 Note: GitHub Issues are for Bugs and Feature Requests Only
 
-[![GitHub - Bugs and Feature Requests Only](https://img.shields.io/badge/github-issues-red.svg?maxAge=60)](https://github.com/Whisparr/Whisparr-Eros/issues)
+[![GitHub - Bugs and Feature Requests Only](https://img.shields.io/badge/github-issues-red.svg?maxAge=60)](https://github.com/Whisparr/whisparr-next/issues)
 
 ## Contributors & Developers
 

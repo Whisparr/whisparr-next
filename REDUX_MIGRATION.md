@@ -1,5 +1,7 @@
 # Getting eros-develop off Redux
 
+> Historical: `eros-develop` / `Whisparr-Eros` refs below are the pre-rename upstream. Current branch is `develop` on `Whisparr/whisparr-next`.
+
 Status assessment and playbook for migrating the Whisparr Eros frontend from Redux to
 React Query + zustand, benchmarked against Sonarr's completed `v5-develop` migration.
 
