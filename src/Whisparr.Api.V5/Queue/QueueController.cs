@@ -354,6 +354,11 @@ namespace Whisparr.Api.V5.Queue
                     throw new BadRequestException();
                 }
 
+                if (!trackedDownload.DownloadItem.DownloadClientInfo.HasPostImportCategory)
+                {
+                    throw new BadRequestException($"Queue item with ID {trackedDownload.DownloadItem.DownloadId} does not support category changing.");
+                }
+
                 downloadClient.MarkItemAsImported(trackedDownload.DownloadItem);
             }
 
@@ -384,14 +389,14 @@ namespace Whisparr.Api.V5.Queue
 
             if (queueItem == null)
             {
-                throw new NotFoundException();
+                throw new NotFoundException($"Queue item with ID {queueId} does not exist.");
             }
 
             var trackedDownload = _trackedDownloadService.Find(queueItem.DownloadId);
 
             if (trackedDownload == null)
             {
-                throw new NotFoundException();
+                throw new NotFoundException($"Tracked download with ID {queueItem.DownloadId} does not exist.");
             }
 
             return trackedDownload;
