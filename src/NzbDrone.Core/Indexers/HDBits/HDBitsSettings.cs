@@ -67,13 +67,13 @@ namespace NzbDrone.Core.Indexers.HDBits
         [FieldDefinition(9, Type = FieldType.Select, SelectOptions = typeof(RealLanguageFieldConverter), Label = "IndexerSettingsMultiLanguageRelease", HelpText = "IndexerSettingsMultiLanguageReleaseHelpText", Advanced = true)]
         public IEnumerable<int> MultiLanguages { get; set; }
 
-        [FieldDefinition(10, Type = FieldType.Select, SelectOptions = typeof(FailDownloads), Label = "IndexerSettingsFailDownloads", HelpText = "IndexerSettingsFailDownloadsHelpText", Advanced = true)]
+        [FieldDefinition(10, Type = FieldType.Select, SelectOptions = typeof(FailDownloads), Label = "IndexerSettingsFailDownloads", HelpText = "IndexerSettingsFailDownloadsHelpText")]
         public IEnumerable<int> FailDownloads { get; set; }
 
         [FieldDefinition(11, Type = FieldType.Checkbox, Label = "IndexerSettingsRejectBlocklistedTorrentHashes", HelpText = "IndexerSettingsRejectBlocklistedTorrentHashesHelpText", Advanced = true)]
         public bool RejectBlocklistedTorrentHashesWhileGrabbing { get; set; }
 
-        [FieldDefinition(12, Type = FieldType.Checkbox, Label = "IndexerSettingsRejectTorrentFilesWithBlockedExtensions", HelpText = "IndexerSettingsRejectTorrentFilesWithBlockedExtensionsHelpText", Advanced = true)]
+        [FieldDefinition(12, Type = FieldType.Checkbox, Label = "IndexerSettingsRejectTorrentFilesWithBlockedExtensions", HelpText = "IndexerSettingsRejectTorrentFilesWithBlockedExtensionsHelpText")]
         public bool RejectTorrentFilesWithBlockedExtensionsWhileGrabbing { get; set; }
 
         public NzbDroneValidationResult Validate()
