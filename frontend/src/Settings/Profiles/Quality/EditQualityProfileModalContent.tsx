@@ -366,7 +366,9 @@ function EditQualityProfileModalContent({
   return (
     <ModalContent onModalClose={onModalClose}>
       <Measure onMeasure={handleHeaderMeasure}>
-        <ModalHeader>
+        <ModalHeader
+          subtitle={id ? (name.previousValue ?? name.value) : undefined}
+        >
           {id
             ? translate('EditQualityProfile')
             : translate('AddQualityProfile')}

@@ -64,7 +64,9 @@ function EditReleaseProfileModalContent({
 
   return (
     <ModalContent onModalClose={onModalClose}>
-      <ModalHeader>
+      <ModalHeader
+        subtitle={id ? (name.previousValue ?? name.value) : undefined}
+      >
         {id ? translate('EditReleaseProfile') : translate('AddReleaseProfile')}
       </ModalHeader>
 
