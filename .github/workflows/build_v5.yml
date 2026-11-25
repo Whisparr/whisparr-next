@@ -13,7 +13,7 @@ on:
 
 concurrency:
   # pull_request.number is empty on push, so keying on it alone put every push
-  # run - eros and eros-develop alike - in one group named "Build-pr-", where
+  # run in one group named "Build-pr-", where
   # each merge cancelled whatever was building on the other branch.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   # Superseding a PR run is useful; killing a half-finished release build that
@@ -58,8 +58,8 @@ jobs:
         shell: bash
         run: |
           # Base version = highest base tag (strictly vX.Y.Z) reachable from THIS
-          # branch's history. --merged keeps it reachability-scoped so eros-develop
-          # and eros each resolve their own base; the strict regex rejects both the
+          # branch's history. --merged keeps it reachability-scoped so each
+          # branch resolves its own base; the strict regex rejects both the
           # CI-minted -develop.N/-release.N tags and the legacy 4-part vX.Y.Z.B tags
           # inherited from upstream (which glob-based matching cannot separate).
           # `|| true` keeps the default bash `-eo pipefail` shell from aborting the

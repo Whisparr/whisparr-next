@@ -12,7 +12,7 @@ permissions: {}
 
 jobs:
   watch:
-    if: github.repository == 'Whisparr/Whisparr-Eros'
+    if: github.repository == 'Whisparr/whisparr-next'
     permissions:
       contents: read # the app token does the writing, not github.token
 
@@ -50,12 +50,12 @@ jobs:
           # enabled here on 2026-09-17 and the tracking issues moved over.)
           owner: ${{ github.repository_owner }}
           repositories: |
-            Whisparr-Eros
+            whisparr-next
 
       - name: Check out
         uses: actions/checkout@v7
         with:
-          ref: eros-develop
+          ref: develop
           fetch-depth: 0 # cherry-picking needs real history
           token: ${{ steps.app.outputs.token }}
 
@@ -101,7 +101,7 @@ jobs:
             echo "updated PR #${NUMBER}"
           else
             gh pr create \
-              --base eros-develop \
+              --base develop \
               --head "$BRANCH" \
               --draft \
               --title "Upstream ${UPSTREAM}: picks that apply cleanly" \

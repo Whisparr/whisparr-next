@@ -24,12 +24,10 @@ name: CodeQL
 on:
   push:
     branches:
-      - eros-develop
-      - eros
+      - develop
   pull_request:
     branches:
-      - eros-develop
-      - eros
+      - develop
   schedule:
     # Keeps parity with the weekly scan default setup performed.
     - cron: "27 4 * * 1"
@@ -43,7 +41,7 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     # prevent runs outside default repo
-    if: github.repository == 'Whisparr/Whisparr-Eros'
+    if: github.repository == 'Whisparr/whisparr-next'
     runs-on: ubuntu-latest
     permissions:
       # Required to upload results to the code scanning API.

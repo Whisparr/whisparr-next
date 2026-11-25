@@ -3,10 +3,10 @@ name: SonarQube
 on:
   push:
     branches:
-      - eros-develop
+      - develop
   pull_request_target:
     branches:
-      - eros-develop
+      - develop
   workflow_dispatch:
 
 env:
@@ -49,7 +49,7 @@ jobs:
   approve-fork-analysis:
     name: Approve fork analysis
     if: >-
-      github.repository == 'Whisparr/Whisparr-Eros' &&
+      github.repository == 'Whisparr/whisparr-next' &&
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
@@ -75,7 +75,7 @@ jobs:
     # 'skipped' is the same-repo / push / dispatch path, where no gate applies.
     if: >-
       !cancelled() &&
-      github.repository == 'Whisparr/Whisparr-Eros' &&
+      github.repository == 'Whisparr/whisparr-next' &&
       (needs.approve-fork-analysis.result == 'success' ||
        needs.approve-fork-analysis.result == 'skipped')
     runs-on: windows-latest
@@ -155,7 +155,7 @@ jobs:
       # SonarCloud's New Code period is "previous_version", but nothing ever
       # passed sonar.projectVersion, so no version boundary has ever existed and
       # the branch's new-code window has been accumulating since the project was
-      # created ("New code: since 5 months ago"). That is why eros-develop
+      # created ("New code: since 5 months ago"). That is why develop
       # reports ~14% new-code coverage while an individual PR reports 93% -- PR
       # analysis scopes new code to the PR diff and is unaffected.
       #
