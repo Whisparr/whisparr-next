@@ -34,6 +34,8 @@ namespace NzbDrone.Core.Download
         private readonly IMovieService _movieService;
         private readonly ITrackedDownloadAlreadyImported _trackedDownloadAlreadyImported;
         private readonly IRejectedImportService _rejectedImportService;
+        private readonly IRejectedFileExtensionService _rejectedFileExtensionService;
+        private readonly IProvideDownloadClient _downloadClientProvider;
         private readonly Logger _logger;
 
         public CompletedDownloadService(IEventAggregator eventAggregator,
@@ -44,6 +46,8 @@ namespace NzbDrone.Core.Download
                                         IMovieService movieService,
                                         ITrackedDownloadAlreadyImported trackedDownloadAlreadyImported,
                                         IRejectedImportService rejectedImportService,
+                                        IRejectedFileExtensionService rejectedFileExtensionService,
+                                        IProvideDownloadClient downloadClientProvider,
                                         Logger logger)
         {
             _eventAggregator = eventAggregator;
@@ -54,6 +58,8 @@ namespace NzbDrone.Core.Download
             _movieService = movieService;
             _trackedDownloadAlreadyImported = trackedDownloadAlreadyImported;
             _rejectedImportService = rejectedImportService;
+            _rejectedFileExtensionService = rejectedFileExtensionService;
+            _downloadClientProvider = downloadClientProvider;
             _logger = logger;
         }
 
@@ -162,6 +168,11 @@ namespace NzbDrone.Core.Download
 
             if (importResults.Empty())
             {
+                if (ProcessRejectedDownloadClientFiles(trackedDownload))
+                {
+                    return;
+                }
+
                 trackedDownload.Warn("No files found are eligible for import in {0}", outputPath);
 
                 return;
@@ -258,6 +269,55 @@ namespace NzbDrone.Core.Download
 
             _logger.Debug("Not all movies have been imported for {0}", trackedDownload.DownloadItem.Title);
             return false;
+        }
+
+        private bool ProcessRejectedDownloadClientFiles(TrackedDownload trackedDownload)
+        {
+            var files = GetDownloadClientFiles(trackedDownload);
+
+            if (files.Empty())
+            {
+                return false;
+            }
+
+            var rejection = _rejectedFileExtensionService.GetRejection(files.Select(f => f.RelativePath));
+
+            if (rejection == null)
+            {
+                return false;
+            }
+
+            _logger.Debug("Download '{0}' has no files to import, but the download client reports a rejected file: {1}", trackedDownload.DownloadItem.Title, rejection.Message);
+
+            var importResult = new ImportResult(new ImportDecision(null, rejection), rejection.Message);
+
+            if (!_rejectedImportService.Process(trackedDownload, importResult))
+            {
+                return false;
+            }
+
+            if (trackedDownload.State != TrackedDownloadState.FailedPending)
+            {
+                SetStateToImportBlocked(trackedDownload);
+            }
+
+            return true;
+        }
+
+        private List<DownloadClientFile> GetDownloadClientFiles(TrackedDownload trackedDownload)
+        {
+            try
+            {
+                var downloadClient = _downloadClientProvider.Get(trackedDownload.DownloadClient);
+
+                return downloadClient.GetFiles(trackedDownload.DownloadItem).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Unable to get files for download '{0}' from download client", trackedDownload.DownloadItem.Title);
+
+                return new List<DownloadClientFile>();
+            }
         }
 
         private void SetStateToImportBlocked(TrackedDownload trackedDownload)
