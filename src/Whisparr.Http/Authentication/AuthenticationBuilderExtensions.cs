@@ -32,7 +32,7 @@ namespace Whisparr.Http.Authentication
 
         private static readonly Lock BackchannelHttpHandlerLock = new();
 
-        private static SocketsHttpHandler _backchannelHttpHandler;
+        private static HttpMessageHandler _backchannelHttpHandler;
 
         public static AuthenticationBuilder AddApiKey(this AuthenticationBuilder authenticationBuilder, string name, Action<ApiKeyAuthenticationOptions> options)
         {
@@ -208,17 +208,17 @@ namespace Whisparr.Http.Authentication
                 });
         }
 
-        private static SocketsHttpHandler GetBackchannelHttpHandler(ICertificateValidationService certificateValidationService)
+        private static HttpMessageHandler GetBackchannelHttpHandler(ICertificateValidationService certificateValidationService)
         {
             lock (BackchannelHttpHandlerLock)
             {
-                return _backchannelHttpHandler ??= new SocketsHttpHandler
+                return _backchannelHttpHandler ??= new JsonContentTypeHandler(new SocketsHttpHandler
                 {
                     SslOptions = new SslClientAuthenticationOptions
                     {
                         RemoteCertificateValidationCallback = certificateValidationService.ShouldByPassValidationError
                     }
-                };
+                });
             }
         }
 
