@@ -243,7 +243,8 @@ function StudioIndexRow(props: StudioIndexRowProps) {
 
           <IconButton
             name={icons.EDIT}
-            title={translate('EditStudio')}
+            title={translate('EditWithTitle', { title })}
+            aria-label={translate('EditWithTitle', { title })}
             onPress={onEditStudioPress}
           />
         </TableRowCell>

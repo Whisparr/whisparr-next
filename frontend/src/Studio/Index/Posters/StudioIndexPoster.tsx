@@ -75,7 +75,8 @@ function StudioIndexPoster(props: Readonly<StudioIndexPosterProps>) {
         <Label className={styles.controls}>
           <IconButton
             name={icons.EDIT}
-            title={translate('EditStudio')}
+            title={translate('EditWithTitle', { title })}
+            aria-label={translate('EditWithTitle', { title })}
             tabIndex={-1}
             onPress={onEditStudioPress}
           />

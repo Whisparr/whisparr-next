@@ -295,7 +295,8 @@ function PerformerIndexRow(props: PerformerIndexRowProps) {
           </span>
           <IconButton
             name={icons.EDIT}
-            title={translate('EditPerformer')}
+            title={translate('EditWithTitle', { title: fullName })}
+            aria-label={translate('EditWithTitle', { title: fullName })}
             onPress={onEditPerformerPress}
           />
         </TableRowCell>

@@ -327,7 +327,8 @@ function SceneIndexRow(props: Readonly<SceneIndexRowProps>) {
 
               <SpinnerIconButton
                 name={icons.REFRESH}
-                title={translate('RefreshScene')}
+                title={translate('RefreshWithTitle', { title })}
+                aria-label={translate('RefreshWithTitle', { title })}
                 isSpinning={isRefreshingScene}
                 onPress={onRefreshPress}
               />
@@ -335,7 +336,8 @@ function SceneIndexRow(props: Readonly<SceneIndexRowProps>) {
               {showSearchAction ? (
                 <SpinnerIconButton
                   name={icons.SEARCH}
-                  title={translate('SearchForScene')}
+                  title={translate('SearchWithTitle', { title })}
+                  aria-label={translate('SearchWithTitle', { title })}
                   isSpinning={isSearchingScene}
                   onPress={onSearchPress}
                 />
@@ -343,7 +345,8 @@ function SceneIndexRow(props: Readonly<SceneIndexRowProps>) {
 
               <IconButton
                 name={icons.EDIT}
-                title={translate('EditScene')}
+                title={translate('EditWithTitle', { title })}
+                aria-label={translate('EditWithTitle', { title })}
                 onPress={onEditScenePress}
               />
             </VirtualTableRowCell>

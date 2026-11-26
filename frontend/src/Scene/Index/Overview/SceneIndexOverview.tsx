@@ -196,7 +196,8 @@ function SceneIndexOverview(props: Readonly<SceneIndexOverviewProps>) {
 
               <SpinnerIconButton
                 name={icons.REFRESH}
-                title={translate('RefreshScene')}
+                title={translate('RefreshWithTitle', { title })}
+                aria-label={translate('RefreshWithTitle', { title })}
                 isSpinning={isRefreshingScene}
                 onPress={onRefreshPress}
               />
@@ -205,7 +206,8 @@ function SceneIndexOverview(props: Readonly<SceneIndexOverviewProps>) {
                 <SpinnerIconButton
                   className={styles.actions}
                   name={icons.SEARCH}
-                  title={translate('SearchForScene')}
+                  title={translate('SearchWithTitle', { title })}
+                  aria-label={translate('SearchWithTitle', { title })}
                   isSpinning={isSearchingScene}
                   onPress={onSearchPress}
                 />
@@ -213,7 +215,8 @@ function SceneIndexOverview(props: Readonly<SceneIndexOverviewProps>) {
 
               <IconButton
                 name={icons.EDIT}
-                title={translate('EditScene')}
+                title={translate('EditWithTitle', { title })}
+                aria-label={translate('EditWithTitle', { title })}
                 onPress={onEditScenePress}
               />
             </div>

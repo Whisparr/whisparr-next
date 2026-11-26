@@ -70,7 +70,10 @@ function PerformerIndexPoster(props: PerformerIndexPosterProps) {
         <Label className={styles.controls}>
           <IconButton
             name={icons.EDIT}
-            title={translate('EditPerformer')}
+            title={translate('EditWithTitle', { title: performer.fullName })}
+            aria-label={translate('EditWithTitle', {
+              title: performer.fullName,
+            })}
             tabIndex={-1}
             onPress={onEditPerformerPress}
           />

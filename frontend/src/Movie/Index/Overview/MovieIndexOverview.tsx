@@ -212,7 +212,8 @@ function MovieIndexOverview(props: Readonly<MovieIndexOverviewProps>) {
 
               <SpinnerIconButton
                 name={icons.REFRESH}
-                title={translate('RefreshMovie')}
+                title={translate('RefreshWithTitle', { title })}
+                aria-label={translate('RefreshWithTitle', { title })}
                 isSpinning={isRefreshingMovie}
                 onPress={onRefreshPress}
               />
@@ -221,7 +222,8 @@ function MovieIndexOverview(props: Readonly<MovieIndexOverviewProps>) {
                 <SpinnerIconButton
                   className={styles.actions}
                   name={icons.SEARCH}
-                  title={translate('SearchForMovie')}
+                  title={translate('SearchWithTitle', { title })}
+                  aria-label={translate('SearchWithTitle', { title })}
                   isSpinning={isSearchingMovie}
                   onPress={onSearchPress}
                 />
@@ -229,7 +231,8 @@ function MovieIndexOverview(props: Readonly<MovieIndexOverviewProps>) {
 
               <IconButton
                 name={icons.EDIT}
-                title={translate('EditMovie')}
+                title={translate('EditWithTitle', { title })}
+                aria-label={translate('EditWithTitle', { title })}
                 onPress={onEditMoviePress}
               />
             </div>

@@ -326,7 +326,8 @@ function MovieIndexRow(props: MovieIndexRowProps) {
 
               <SpinnerIconButton
                 name={icons.REFRESH}
-                title={translate('RefreshMovie')}
+                title={translate('RefreshWithTitle', { title })}
+                aria-label={translate('RefreshWithTitle', { title })}
                 isSpinning={isRefreshingMovie}
                 onPress={onRefreshPress}
               />
@@ -334,7 +335,8 @@ function MovieIndexRow(props: MovieIndexRowProps) {
               {showSearchAction ? (
                 <SpinnerIconButton
                   name={icons.SEARCH}
-                  title={translate('SearchForMovie')}
+                  title={translate('SearchWithTitle', { title })}
+                  aria-label={translate('SearchWithTitle', { title })}
                   isSpinning={isSearchingMovie}
                   onPress={onSearchPress}
                 />
@@ -342,7 +344,8 @@ function MovieIndexRow(props: MovieIndexRowProps) {
 
               <IconButton
                 name={icons.EDIT}
-                title={translate('EditMovie')}
+                title={translate('EditWithTitle', { title })}
+                aria-label={translate('EditWithTitle', { title })}
                 onPress={onEditMoviePress}
               />
             </VirtualTableRowCell>
