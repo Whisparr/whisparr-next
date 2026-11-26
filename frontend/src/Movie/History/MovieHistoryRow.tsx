@@ -71,6 +71,11 @@ function MovieHistoryRow({
     setIsMarkAsFailedModalOpen(false);
   }, []);
 
+  const detailsLabel = translate('DetailsForTitle', { title: sourceTitle });
+  const markAsFailedLabel = translate('MarkAsFailedWithTitle', {
+    title: sourceTitle,
+  });
+
   return (
     <TableRow>
       <HistoryEventTypeCell eventType={eventType} data={data} />
@@ -98,13 +103,15 @@ function MovieHistoryRow({
       <TableRowCell className={styles.actions}>
         <IconButton
           name={icons.INFO}
-          aria-label={translate('Details')}
+          title={detailsLabel}
+          aria-label={detailsLabel}
           onPress={handleDetailsPress}
         />
 
         {eventType === 'grabbed' ? (
           <IconButton
-            title={translate('MarkAsFailed')}
+            title={markAsFailedLabel}
+            aria-label={markAsFailedLabel}
             name={icons.REMOVE}
             size={14}
             onPress={handleMarkAsFailedPress}
