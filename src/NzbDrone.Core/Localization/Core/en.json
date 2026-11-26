@@ -490,6 +490,7 @@
   "DeleteSelectedCustomFormatsMessageText": "Are you sure you want to delete {count} selected custom format(s)?",
   "DeleteSelectedDownloadClients": "Delete Download Client(s)",
   "DeleteSelectedDownloadClientsMessageText": "Are you sure you want to delete {count} selected download client(s)?",
+  "DeleteSelectedFilesCount": "{fileCount} files totaling {size}",
   "DeleteSelectedImportListExclusionsMessageText": "Are you sure you want to delete the selected import list exclusions?",
   "DeleteSelectedImportLists": "Delete Import List(s)",
   "DeleteSelectedImportListsMessageText": "Are you sure you want to delete {count} selected import list(s)?",
