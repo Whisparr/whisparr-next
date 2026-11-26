@@ -149,7 +149,7 @@ namespace NzbDrone.Common.Cache
         {
             get
             {
-                return _store.Values.Select(c => c.Object).ToList();
+                return _store.Values.Where(c => !c.IsExpired()).Select(c => c.Object).ToList();
             }
         }
 
