@@ -4,8 +4,8 @@
     "sonarr": {
       "repo": "Sonarr/Sonarr",
       "branch": "develop",
-      "highWater": "58fe69664800283237cbca06ace87766dfc66615",
-      "highWaterNote": "2026-10-27 'Show warning before closing Edit Series modal when there are pending changes', the last commit of batch 3 (Oct 24-27, 36 commits after b3d4bb8c18, 4 of them redesign deferrals recorded in batch 1). Everything at or before this mark is settled. The post-12th part of 2026-10 (after 57816c149d, the 2026-10-12 tip where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted) is worked in upstream order, about 40 commits per PR. Batch 1 (Oct 12-16, ending b287a95ca0) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
+      "highWater": "9a41dfc129d5bbf8f3950f871623b46eea4f914e",
+      "highWaterNote": "2026-10-31 'Fix actions spacing for override and grab modal', the last 2026-10 commit, closing batch 4 (35 commits after 58fe696648). Everything at or before this mark is settled. The post-12th part of 2026-10 (after 57816c149d, the 2026-10-12 tip where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted) is worked in upstream order, about 40 commits per PR. Batch 1 (Oct 12-16, ending b287a95ca0) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
     }
   },
   "dispositions": {
@@ -5093,6 +5093,217 @@
         "month": "2026-10",
         "disposition": "adapt",
         "reason": "Ported the Modal close guard, useUnsavedChanges, useBeforeUnload and useModalCloseGuard, moved PendingChangesModal to Components/Modal and applied it to Edit Movie, our Edit Series. SettingsToolbar (our useSettingsSave) now uses the same hook. The usePendingChangesStore original-value comparison is not taken: Edit Movie keeps local state and already derives its pending changes against the movie. Own en.json keys."
+      },
+      "527d3e6e3b671a71592160c1ca4124ce4670c46b": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Multiple Translations updated by Weblate: those files come from Weblate, not from cherry-picks."
+      },
+      "967240dff86585d0755e42800f967e1e1d7a220a": {
+        "subject": "New: TMDb Import Lists",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Adds TMDb list, discover, person and account import lists for series. We already have the movie versions, from Radarr's TMDb import lists, under ImportLists/TMDb; this is Sonarr's TV port of the same family."
+      },
+      "9ad65e1e6b94a822e56ea46276d6f07da6e26013": {
+        "subject": "Display every season of multi-season packs",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Shows every season of a multi-season pack across queue, manual import and interactive search, and changes ParsingService and ParsedEpisodeInfo. Seasons don't exist here, and the parser half is gated."
+      },
+      "39cc101890bbef9e402c065d682260460f11d0ba": {
+        "subject": "Add Multi-Season Pack release type",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Adds a Multi-Season Pack release type to ParsedEpisodeInfo and ReleaseType. A season concept we don't have, and it touches the parser model."
+      },
+      "a6bda47cf0ef044f38d81c693164d9cc98907a06": {
+        "subject": "Fixed: Calendar height in Safari and show fewer days on narrower devices",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Took the wider minimum day width (225px, so narrow screens show fewer days) and a static header below 500px of height. The Safari height fix (a flex day grid) doesn't apply: our calendar doesn't stretch to the page height."
+      },
+      "06500f5443064f9ee6c8d75002161467cec15819": {
+        "subject": "Collapsible sidebar on touch devices",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same appStore and sidebar. Added isSidebarCollapsible and isSidebarOverlay dimensions plus matching --sidebarCollapsible/--sidebarOverlay custom media. The header toggle now shows on touch devices too. Our PageSidebar takes its mode from Page as props rather than reading the store."
+      },
+      "8e25f1631589486e5c752e88d6e3bb237d163aa2": {
+        "subject": "Improve cleansing of long log messages",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same cleansing rules and layouts. Took the four regex rewrites that stop catastrophic backtracking, plus the timeout fallback: a timed-out line is written truncated with a note, never uncleansed. Our rules already went through Rule() with RegexDefaults.Timeout (5s), so the 1s MatchTimeout wasn't taken. The tests for slow input fail on the old rules here (3 of 5 hit the timeout)."
+      },
+      "cb4d5e07bb6c124828dbd911dc6175d98b186f67": {
+        "subject": "Series search input refactor",
+        "month": "2026-10",
+        "disposition": "defer",
+        "reason": "Replaces react-autosuggest in the header search with a hand-built combobox on floating-ui. Wanted, since it drops a dependency and fixes keyboard and screen-reader behaviour. But our MovieSearchInput searches movies, scenes, performers and studios, so this is a rewrite, not a port.",
+        "blockedBy": "Its own PR: rewrite MovieSearchInput on @floating-ui/react (already a dependency) along upstream's design, covering all four result types. paul deferred it on 2026-11-26."
+      },
+      "76f3e4570d8cf113a7733647d91a9b5cfdf8cadc": {
+        "subject": "Add download context to queue action buttons",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Queue's Manual Import, Grab and Remove buttons now name the download. Own en.json keys (ManualImportWithTitle, GrabWithTitle, RemoveFromQueueWithTitle)."
+      },
+      "562b679a76215cc5e7dc1199ad827c87ae8cf091": {
+        "subject": "Add release names to history and blocklist actions",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "History, Blocklist and Movie History details, remove and mark-failed buttons now name the release. Own en.json keys. Our movie history row uses an IconButton for details where upstream used a Popover."
+      },
+      "eddc90690546eca31c177a5f70f81888ce85eae1": {
+        "subject": "Fixed: Norwegian translations and date formats not working",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same bug: IsoLanguages maps Norwegian to \"no\" first, so GetLanguageIdentifier returned \"no\". There's no no.json, so the UI fell back to English. It now returns nb-NO, and moment falls back to English when a locale is missing. Both tests failed before the fix."
+      },
+      "272c751f1ff9c0da7b93f5e57a580e1266f2e05f": {
+        "subject": "Ignore dotnet-tools generated by dotnet new manifest",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Ignores the dotnet-tools.json that `dotnet new tool-manifest` creates. Our .gitignore already ignores .config/, where the manifest lives."
+      },
+      "7aac06dd6cbb5db45c4ceff03b5e75f7be426db4": {
+        "subject": "Bump github actions",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Bumps actions/checkout to v7 and action-setup-postgres to v9. Our workflows and the test action already use both."
+      },
+      "43d500c02e56aa2e7ab5738dc5807b9b480b96dc": {
+        "subject": "Fixed: Episode file details missing when opened from History or Queue",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Fixes EpisodeFileProvider's context-only lookup when episode details open from History or Queue. We have no file-context provider: our MovieFile hooks fetch by id."
+      },
+      "e45e2e375ff6741f069fc9fd8597f2d05afc5b5f": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Multiple Translations updated by Weblate: those files come from Weblate, not from cherry-picks."
+      },
+      "98ab33b815e1c1324ed078788d4110cec2ee9a68": {
+        "subject": "Automated API Docs update",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Regenerates the checked-in openapi.json, which we retired along with the bot workflow that produced it."
+      },
+      "ad10503c91436c838856423e2acaac41737a0d05": {
+        "subject": "Fix duplicate requests on load and memoize command lookups",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Adds a 30s staleTime to commands, custom filters, quality profiles, system status and tags, and memoizes useCommand's constraints. Our queryClient already defaults staleTime to 60s, and tags and custom filters use Infinity. useCommand already keys its memo on JSON.stringify(constraints)."
+      },
+      "1da336d948da4dae5c1e231ec21d570f8cb2e7e7": {
+        "subject": "Apply auto tags to refreshed series during full refresh",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same bug in RefreshMovieService: the full-refresh loop updated tags on the movie it loaded before refreshing. Saving that stale copy undid what RefreshMovieInfo had just written. Now passes movieLocal. The new test failed before the fix."
+      },
+      "126ba171de4e0816511d559c5e9c6cf90badb096": {
+        "subject": "Use hash lookups in import list sync",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same scans in ProcessMovieReport and CleanLibrary. Exclusions, pending adds and the list check are now hash lookups. Pending adds use an OrderedDictionary so add order is kept. Also fixes a duplicated exclusion throwing from SingleOrDefault and aborting the whole sync; that test failed before."
+      },
+      "54c6f38468f08955e0bfc1c2d481d932f2aafd07": {
+        "subject": "Use lookups instead of nested scans when updating series and downloads",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Our MoviesBulkEdited and MoviesDeleted handlers compared every cached download against every event movie via MovieMatches. They now build id and non-zero TMDb-id sets once. The useSeries frontend half has no counterpart: our movie hooks don't scan the updated list per item."
+      },
+      "3abdde77e24c9d05b1c8697ed77de41606b0f7af": {
+        "subject": "Exclude expired entries from cached values",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Same Cached<T>.Values. Cherry-picked with its test; the conflict was our should_honor_ttl having dropped the macOS exclusion."
+      },
+      "4d2d1eac478c3a68c7c7f1270f1489edcc7e283b": {
+        "subject": "New: Mark advanced settings and make fewer settings advanced",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Took the reclassification, aligned to ours. Removed Advanced from every provider field upstream did where we have the same file and label (57 fields across download clients, indexers and notifications). Did the same for the matching settings rows: client and indexer priority, indexer download client, completed download handling, backups, instance name, log size, folder formats, and most of Media Management. Ours-only pairs got the same treatment: Stash Map Paths, Kodi Movie Metadata URL, and the scene and JAV folder formats. Our FormGroup already marks advanced labels, so FormRowContext wasn't needed. Settings only we have stay advanced. paul chose take-and-align on 2026-11-26."
+      },
+      "a2c90d021f09de8df3502de8b625a59e828d8445": {
+        "subject": "Improve rejection message for import failures due to permissions",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same catch chain in ImportApprovedMovie: an UnauthorizedAccessException now reports a permissions failure with the exception message and publishes MovieImportFailedEvent. Test added."
+      },
+      "8afe4f9c62b388b8a64036c1e72dcc0f91f0a788": {
+        "subject": "Include error message for import failures",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "ImportApprovedMovie's generic failure now carries the exception message. Test added."
+      },
+      "562de53ba17b938f8e6d46a574471a6e595d56bc": {
+        "subject": "Use correct branding for external series links",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Renames the TheTVDB, TVmaze and IMDb link labels on series details. Our movie and scene links are TMDb and TPDb through translate(), with no IMDb link."
+      },
+      "b3321b15a5e1a2fd52011851bf31348cb305a41b": {
+        "subject": "Fixed: Interactive search failing when a release couldn't be processed",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Same catch path in DownloadDecisionMaker: an erroring release had no ParsedMovieInfo, and ReleaseResource then threw a NullReferenceException that failed the whole interactive search. Verified with an API test using the old shape. It now carries quality and languages from the title. FindByTitleInexact's original-title half is series-only."
+      },
+      "807b7b7d5667bc3b8d073fc33cf412ff079ef29d": {
+        "subject": "Improve System action labels for screen readers",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Backup restore/delete, health wiki, test-all and settings links, and queued/scheduled task buttons now name what they act on. Own en.json keys; the test-all and settings keys already existed."
+      },
+      "00cb3de89f1d95ec1207877481419962172b4476": {
+        "subject": "Add folder paths to Manual Import buttons",
+        "month": "2026-10",
+        "disposition": "adapt",
+        "reason": "Manual Import's favourite and recent folder buttons now name the folder. Own en.json keys."
+      },
+      "2a7c4c408c1656ff1c35eaf1cc575f969bfd5975": {
+        "subject": "TVRage ID in Kodi episode guide",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Fixes TvRage in KodiEpisodeGuide reading the TvMaze id. We have no episode guide; our Kodi metadata writes movie ids."
+      },
+      "3b21b27d235b2b8c88c430bba59347e81f58de14": {
+        "subject": "Use series ID in series URLs and allow duplicate title slugs",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Moves series URLs from title slugs to ids and drops the slug uniqueness validator. Our movie route is already /movie/:id and there's no slug validator; performer and studio routes use foreign ids."
+      },
+      "106a86a2c84d4ef9e9158eadcc044c5bef07bc00": {
+        "subject": "Import list tags shared between lists",
+        "month": "2026-10",
+        "disposition": "have",
+        "reason": "Copies the list's tag set before assigning it to a new series so lists don't share one HashSet. Our ProcessMovieReport already builds Tags with new HashSet<int>(importList.Tags)."
+      },
+      "8545d06e45c11dc282084ce5548a6ae89aa261b8": {
+        "subject": "BTN multi-season searches",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "BroadcastheNet season-range searches. We have no BTN indexer, and season searches don't exist here."
+      },
+      "1222907baa453f714df0dc21cf0a8e1a6fa910d0": {
+        "subject": "Fix HDB multi-season searches",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "HDBits multi-season search ids. Season searches don't exist here; our HDBits searches by movie."
+      },
+      "979fc5ae7ee993266726b5f465d4f56c970b1967": {
+        "subject": "Fixed: Series details navigation to use filters and sorting from index",
+        "month": "2026-10",
+        "disposition": "skip",
+        "reason": "Makes series details previous/next follow the index's sort and filter. Our movie and scene details have no previous/next navigation."
+      },
+      "9a41dfc129d5bbf8f3950f871623b46eea4f914e": {
+        "subject": "Fix actions spacing for override and grab modal",
+        "month": "2026-10",
+        "disposition": "pick",
+        "reason": "Same OverrideMatchModalContent buttons with no gap. Cherry-picked cleanly."
       }
     }
   }
