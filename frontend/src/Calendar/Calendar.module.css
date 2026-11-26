@@ -22,3 +22,9 @@
     padding-top: var(--pageContentBodyPaddingSmallScreen);
   }
 }
+
+@media (max-height: 500px) {
+  .sticky {
+    position: static;
+  }
+}
