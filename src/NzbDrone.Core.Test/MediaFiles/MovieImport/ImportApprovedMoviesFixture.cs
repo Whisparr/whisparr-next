@@ -163,6 +163,24 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             ExceptionVerification.ExpectedWarns(1);
         }
 
+        [Test]
+        public void permission_failure_is_reported_with_its_message_and_published()
+        {
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
+                  .Throws(new UnauthorizedAccessException("Access to the path is denied."));
+
+            var results = Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
+
+            results.Should().ContainSingle();
+            results[0].Errors.Should().Equal("Failed to import movie due to permission issues.", "Access to the path is denied.");
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<MovieImportFailedEvent>()), Times.Once());
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
         // ownerMovieId: 0 is an untracked file, 1 the scene being imported, 99 another scene, 98 a scene since deleted
         [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 0, true)]
         [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 99, false)]
