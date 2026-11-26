@@ -15,7 +15,7 @@ namespace NzbDrone.Common.Instrumentation
         private static readonly Regex[] CleansingRules =
         {
             // Url
-            Rule(@"(?<=\?|&|: )(apikey|(?:access[-_]?)?token|passkey|auth|authkey|user|uid|api|[a-z_]*apikey|account|passwd)=(?<secret>[^&=]+?)(?=[ ""&=]|$)"),
+            Rule(@"(?<=\?|&|\\u0026|: )(apikey|(?:access[-_]?)?token|passkey|auth|authkey|user|uid|api|[a-z_]*apikey|account|passwd)=(?<secret>[^&=]+?)(?=[ ""&=]|\\u0026|$)"),
             Rule(@"(?<=\?|&)[^=&?]*?(username|password)=(?<secret>[^&=]+?)(?= |&|$)"),
             Rule(@"rss(24h)?\.torrentleech\.org/(?!rss)(?<secret>[0-9a-z]+)"),
             Rule(@"torrentleech\.org/rss/download/[0-9]+/(?<secret>[0-9a-z]+)"),
