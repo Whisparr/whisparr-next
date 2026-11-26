@@ -105,7 +105,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 mediaInfoModel.AudioStreamCount = analysis.AudioStreams.Count;
                 mediaInfoModel.AudioChannels = analysis.PrimaryAudioStream?.Channels ?? 0;
                 mediaInfoModel.AudioChannelPositions = analysis.PrimaryAudioStream?.ChannelLayout;
-                mediaInfoModel.VideoFps = primaryVideoStream?.FrameRate ?? 0;
+                mediaInfoModel.VideoFps = primaryVideoStream?.RealFrameRate ?? 0;
                 mediaInfoModel.AudioLanguages = analysis.AudioStreams?.Select(x => x.Language)
                     .Where(l => l.IsNotNullOrWhiteSpace())
                     .ToList();
@@ -117,7 +117,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                     "tt" or "bb" or "tb" or "bt" => "Interlaced",
                     _ => "Progressive"
                 };
-                mediaInfoModel.RawStreamData = string.Concat(analysis.OutputData);
+                mediaInfoModel.RawStreamData = analysis.Json;
                 mediaInfoModel.SchemaRevision = CURRENT_MEDIA_INFO_SCHEMA_REVISION;
 
                 if (analysis.Format.Tags?.TryGetValue("title", out var title) ?? false)
@@ -130,13 +130,13 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 // if it looks like PQ10 or similar HDR, do a frame analysis to figure out which type it is
                 if (PqTransferFunctions.Contains(mediaInfoModel.VideoTransferCharacteristics))
                 {
-                    var videoStreamIndex = analysis.VideoStreams.FindIndex(stream => stream.Index == primaryVideoStream?.Index);
+                    var videoStreamIndex = analysis.VideoStreams.ToList().FindIndex(stream => stream.Index == primaryVideoStream?.Index);
 
                     frames = FFProbe.GetFrames(filename, customArguments: $"-read_intervals \"%+#1\" -select_streams v:{(videoStreamIndex == -1 ? 0 : videoStreamIndex)}");
                 }
 
-                var streamSideData = primaryVideoStream?.SideData ?? new();
-                var framesSideData = frames?.Frames.FirstOrDefault()?.SideData ?? new();
+                var streamSideData = primaryVideoStream?.SideData ?? new List<IReadOnlyDictionary<string, JsonNode>>().AsReadOnly();
+                var framesSideData = frames?.Frames.ToList().FirstOrDefault()?.SideData ?? new List<IReadOnlyDictionary<string, JsonNode>>().AsReadOnly();
 
                 var sideData = streamSideData.Concat(framesSideData).ToList();
                 mediaInfoModel.VideoHdrFormat = GetHdrFormat(mediaInfoModel.VideoBitDepth, mediaInfoModel.VideoColourPrimaries, mediaInfoModel.VideoTransferCharacteristics, sideData);
@@ -213,7 +213,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
         {
             if (mediaStream?.BitRate is > 0)
             {
-                return mediaStream.BitRate;
+                return mediaStream.BitRate.Value;
             }
 
             if ((mediaStream?.Tags?.TryGetValue("BPS", out var bitratePerSecond) ?? false) && bitratePerSecond.IsNotNullOrWhiteSpace())
@@ -247,7 +247,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             return FFProbe.TryGetPixelFormat(format, out var pixelFormat) ? pixelFormat : null;
         }
 
-        public static HdrFormat GetHdrFormat(int bitDepth, string colorPrimaries, string transferFunction, List<Dictionary<string, JsonNode>> sideData)
+        public static HdrFormat GetHdrFormat(int bitDepth, string colorPrimaries, string transferFunction, IReadOnlyList<IReadOnlyDictionary<string, JsonNode>> sideData)
         {
             if (bitDepth < 10)
             {
@@ -299,7 +299,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             return HdrFormat.None;
         }
 
-        private static bool TryGetSideData(IReadOnlyList<Dictionary<string, JsonNode>> list, string name, out Dictionary<string, JsonNode> result)
+        private static bool TryGetSideData(IReadOnlyList<IReadOnlyDictionary<string, JsonNode>> list, string name, out IReadOnlyDictionary<string, JsonNode> result)
         {
             result = list?.FirstOrDefault(item =>
                 item.TryGetValue("side_data_type", out var rawSideDataType) &&
