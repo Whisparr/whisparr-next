@@ -20,6 +20,7 @@ namespace NzbDrone.Core.Notifications.Ntfy
     public class NtfyProxy : INtfyProxy
     {
         private const string DEFAULT_PUSH_URL = "https://ntfy.sh";
+        private const string ICON_URL = "https://raw.githubusercontent.com/Whisparr/Whisparr/eros/Logo/256.png";
 
         private readonly IHttpClient _httpClient;
         private readonly ILocalizationService _localizationService;
@@ -117,6 +118,7 @@ namespace NzbDrone.Core.Notifications.Ntfy
                 requestBuilder.AddQueryParam("title", title);
                 requestBuilder.AddQueryParam("message", message);
                 requestBuilder.AddQueryParam("priority", settings.Priority.ToString());
+                requestBuilder.AddQueryParam("icon", ICON_URL);
 
                 if (settings.Tags.Any())
                 {

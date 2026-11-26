@@ -46,6 +46,7 @@ import {
 import { QualityModel } from 'Quality/Quality';
 import { SortCallback } from 'typings/callbacks';
 import { CheckInputChanged } from 'typings/inputs';
+import formatBytes from 'Utilities/Number/formatBytes';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
 import getSelectedIds from 'Utilities/Table/getSelectedIds';
@@ -347,6 +348,20 @@ function InteractiveImportModalContent(
   const onDeleteSelectedPress = useCallback(() => {
     setIsConfirmDeleteModalOpen(true);
   }, [setIsConfirmDeleteModalOpen]);
+
+  const { totalDeleteFileCount, totalDeleteFileSize } = useMemo(() => {
+    return items.reduce(
+      (acc, item) => {
+        if (selectedIds.includes(item.id) && item.movieFileId) {
+          acc.totalDeleteFileCount++;
+          acc.totalDeleteFileSize += item.size;
+        }
+
+        return acc;
+      },
+      { totalDeleteFileCount: 0, totalDeleteFileSize: 0 }
+    );
+  }, [items, selectedIds]);
 
   const onConfirmDelete = useCallback(() => {
     setIsConfirmDeleteModalOpen(false);
@@ -750,7 +765,18 @@ function InteractiveImportModalContent(
         isOpen={isConfirmDeleteModalOpen}
         kind={kinds.DANGER}
         title={translate('DeleteSelectedMovieFiles')}
-        message={translate('DeleteSelectedMovieFilesHelpText')}
+        message={
+          <>
+            <div>{translate('DeleteSelectedMovieFilesHelpText')}</div>
+
+            <div className={styles.deleteFilesMessage}>
+              {translate('DeleteSelectedFilesCount', {
+                fileCount: totalDeleteFileCount,
+                size: formatBytes(totalDeleteFileSize),
+              })}
+            </div>
+          </>
+        }
         confirmLabel={translate('Delete')}
         onConfirm={onConfirmDelete}
         onCancel={onConfirmDeleteModalClose}

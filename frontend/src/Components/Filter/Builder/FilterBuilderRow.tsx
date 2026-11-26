@@ -148,6 +148,22 @@ function FilterBuilderRow<T>({
     [filterBuilderProps, filterKey]
   );
 
+  const selectedFilterLabel = selectedFilterBuilderProp?.label;
+  const addFilterLabel = translate('AddFilterCondition');
+
+  const filterLabel =
+    typeof selectedFilterLabel === 'function'
+      ? selectedFilterLabel()
+      : selectedFilterLabel;
+
+  const removeFilterLabel = filterLabel
+    ? translate('RemoveFilterConditionWithName', {
+        name: filterLabel,
+        index: index + 1,
+        count: filterCount,
+      })
+    : translate('RemoveFilterCondition');
+
   // A row rendered without a key is the empty one the modal seeds itself with,
   // and it picks up the first available filter. The parent re-keys the row on
   // the value that comes back, so this runs once per row either way.
@@ -272,14 +288,16 @@ function FilterBuilderRow<T>({
       <div className={styles.actionsContainer}>
         <IconButton
           name={icons.SUBTRACT}
-          aria-label={translate('Remove')}
+          title={removeFilterLabel}
+          aria-label={removeFilterLabel}
           isDisabled={filterCount === 1}
           onPress={handleRemovePress}
         />
 
         <IconButton
           name={icons.ADD}
-          aria-label={translate('Add')}
+          title={addFilterLabel}
+          aria-label={addFilterLabel}
           onPress={handleAddPress}
         />
       </div>

@@ -14,7 +14,7 @@ export interface ErrorBoundaryErrorProps {
   };
 }
 
-function ErrorBoundaryError(props: ErrorBoundaryErrorProps) {
+function ErrorBoundaryError(props: Readonly<ErrorBoundaryErrorProps>) {
   const {
     className = styles.container,
     messageClassName = styles.message,
@@ -44,6 +44,7 @@ function ErrorBoundaryError(props: ErrorBoundaryErrorProps) {
 
       <div className={styles.imageContainer}>
         <img
+          alt=""
           className={styles.image}
           src={`${window.Whisparr.urlBase}/Content/Images/error.png`}
         />

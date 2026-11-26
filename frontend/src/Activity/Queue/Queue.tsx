@@ -1,6 +1,6 @@
 import React, {
-  ReactElement,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -38,6 +38,7 @@ import {
   setQueueSort,
   useQueueOptions,
 } from './queueOptionsStore';
+import { forceRefreshQueue, setQueueRefreshBlocked } from './queueRefresh';
 import QueueRow from './QueueRow';
 import RemoveQueueItemModal, { RemovePressProps } from './RemoveQueueItemModal';
 import useQueueStatus from './Status/useQueueStatus';
@@ -60,6 +61,7 @@ function Queue() {
     isFetching,
     isLoading,
     isFetched,
+    isPlaceholderData,
     error,
     page,
     goToPage,
@@ -75,8 +77,10 @@ function Queue() {
     commandNames.REFRESH_MONITORED_DOWNLOADS
   );
 
-  const shouldBlockRefresh = useRef(false);
-  const currentQueue = useRef<ReactElement | null>(null);
+  // A manual refresh re-fetches once the command finishes, even while
+  // SignalR refreshes are being held back.
+  const manualRefreshState = useRef<'idle' | 'requested' | 'executing'>('idle');
+  const [isQueueRowModalOpen, setIsQueueRowModalOpen] = useState(false);
 
   const [selectState, setSelectState] = useSelectState();
   const { allSelected, allUnselected, selectedState } = selectState;
@@ -143,13 +147,15 @@ function Queue() {
   );
 
   const handleRefreshPress = useCallback(() => {
+    manualRefreshState.current = 'requested';
+
     executeCommand({
       name: commandNames.REFRESH_MONITORED_DOWNLOADS,
     });
   }, [executeCommand]);
 
   const handleQueueRowModalOpenOrClose = useCallback((isOpen: boolean) => {
-    shouldBlockRefresh.current = isOpen;
+    setIsQueueRowModalOpen(isOpen);
   }, []);
 
   const handleGrabSelectedPress = useCallback(() => {
@@ -157,13 +163,11 @@ function Queue() {
   }, [selectedIds, grabQueueItems]);
 
   const handleRemoveSelectedPress = useCallback(() => {
-    shouldBlockRefresh.current = true;
     setIsConfirmRemoveModalOpen(true);
   }, [setIsConfirmRemoveModalOpen]);
 
   const handleRemoveSelectedConfirmed = useCallback(
     (payload: RemovePressProps) => {
-      shouldBlockRefresh.current = false;
       removeQueueItems({ ids: selectedIds, ...payload });
       setIsConfirmRemoveModalOpen(false);
     },
@@ -171,17 +175,14 @@ function Queue() {
   );
 
   const handleConfirmRemoveModalClose = useCallback(() => {
-    shouldBlockRefresh.current = false;
     setIsConfirmRemoveModalOpen(false);
   }, [setIsConfirmRemoveModalOpen]);
 
   const handleImportSelectedPress = useCallback(() => {
-    shouldBlockRefresh.current = true;
     setImportDownloadIds(selectedDownloadIds);
   }, [selectedDownloadIds]);
 
   const handleImportSelectedModalClose = useCallback(() => {
-    shouldBlockRefresh.current = false;
     setImportDownloadIds([]);
   }, []);
 
@@ -231,73 +232,38 @@ function Queue() {
     [goToPage]
   );
 
-  if (!shouldBlockRefresh.current) {
-    currentQueue.current = (
-      <PageContentBody>
-        {isRefreshing && !isAllPopulated ? <LoadingIndicator /> : null}
+  const isRefreshBlocked =
+    selectedCount > 0 ||
+    isQueueRowModalOpen ||
+    isConfirmRemoveModalOpen ||
+    importDownloadIds.length > 0 ||
+    isRemoving ||
+    isGrabbing;
 
-        {!isRefreshing && hasError ? (
-          <Alert kind={kinds.DANGER}>{translate('QueueLoadError')}</Alert>
-        ) : null}
+  useEffect(() => {
+    setQueueRefreshBlocked(isRefreshBlocked);
+  }, [isRefreshBlocked]);
 
-        {isAllPopulated && !hasError && !items.length ? (
-          <Alert kind={kinds.INFO}>
-            {selectedFilterKey !== 'all' && count > 0
-              ? translate('QueueFilterHasNoItems')
-              : translate('QueueIsEmpty')}
-          </Alert>
-        ) : null}
+  useEffect(() => {
+    if (isRefreshMonitoredDownloadsExecuting) {
+      if (manualRefreshState.current === 'requested') {
+        manualRefreshState.current = 'executing';
+      }
 
-        {isAllPopulated && !hasError && !!items.length ? (
-          <div>
-            <Table
-              selectAll={true}
-              allSelected={allSelected}
-              allUnselected={allUnselected}
-              columns={columns}
-              pageSize={pageSize}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              optionsComponent={QueueOptions}
-              onTableOptionChange={handleTableOptionChange}
-              onSelectAllChange={handleSelectAllChange}
-              onSortPress={handleSortPress}
-            >
-              <TableBody>
-                {items.map((item) => {
-                  return (
-                    <QueueRow
-                      key={item.id}
-                      movieId={item.movieId}
-                      isSelected={selectedState[item.id]}
-                      columns={columns}
-                      {...item}
-                      onSelectedChange={handleSelectedChange}
-                      onQueueRowModalOpenOrClose={
-                        handleQueueRowModalOpenOrClose
-                      }
-                    />
-                  );
-                })}
-              </TableBody>
-            </Table>
+      return;
+    }
 
-            <TablePager
-              page={page}
-              totalPages={totalPages}
-              totalRecords={totalRecords}
-              isFetching={isFetching}
-              onFirstPagePress={handleFirstPagePress}
-              onPreviousPagePress={handlePreviousPagePress}
-              onNextPagePress={handleNextPagePress}
-              onLastPagePress={handleLastPagePress}
-              onPageSelect={handlePageSelect}
-            />
-          </div>
-        ) : null}
-      </PageContentBody>
-    );
-  }
+    if (manualRefreshState.current === 'executing') {
+      manualRefreshState.current = 'idle';
+      forceRefreshQueue();
+    }
+  }, [isRefreshMonitoredDownloadsExecuting]);
+
+  useEffect(() => {
+    return () => {
+      setQueueRefreshBlocked(false);
+    };
+  }, []);
 
   return (
     <PageContent title={translate('Queue')}>
@@ -306,7 +272,7 @@ function Queue() {
           <PageToolbarButton
             label={translate('Refresh')}
             iconName={icons.REFRESH}
-            isSpinning={isRefreshing}
+            isSpinning={isLoading || isRefreshMonitoredDownloadsExecuting}
             onPress={handleRefreshPress}
           />
 
@@ -364,7 +330,69 @@ function Queue() {
         </PageToolbarSection>
       </PageToolbar>
 
-      {currentQueue.current}
+      <PageContentBody>
+        {isRefreshing && !isAllPopulated ? <LoadingIndicator /> : null}
+
+        {!isRefreshing && hasError && !items.length ? (
+          <Alert kind={kinds.DANGER}>{translate('QueueLoadError')}</Alert>
+        ) : null}
+
+        {isAllPopulated && !hasError && !items.length ? (
+          <Alert kind={kinds.INFO}>
+            {selectedFilterKey !== 'all' && count > 0
+              ? translate('QueueFilterHasNoItems')
+              : translate('QueueIsEmpty')}
+          </Alert>
+        ) : null}
+
+        {isAllPopulated && !!items.length ? (
+          <div>
+            <Table
+              selectAll={true}
+              allSelected={allSelected}
+              allUnselected={allUnselected}
+              columns={columns}
+              pageSize={pageSize}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              optionsComponent={QueueOptions}
+              onTableOptionChange={handleTableOptionChange}
+              onSelectAllChange={handleSelectAllChange}
+              onSortPress={handleSortPress}
+            >
+              <TableBody>
+                {items.map((item) => {
+                  return (
+                    <QueueRow
+                      key={item.id}
+                      movieId={item.movieId}
+                      isSelected={selectedState[item.id]}
+                      columns={columns}
+                      {...item}
+                      onSelectedChange={handleSelectedChange}
+                      onQueueRowModalOpenOrClose={
+                        handleQueueRowModalOpenOrClose
+                      }
+                    />
+                  );
+                })}
+              </TableBody>
+            </Table>
+
+            <TablePager
+              page={page}
+              totalPages={totalPages}
+              totalRecords={totalRecords}
+              isFetching={isFetching && isPlaceholderData}
+              onFirstPagePress={handleFirstPagePress}
+              onPreviousPagePress={handlePreviousPagePress}
+              onNextPagePress={handleNextPagePress}
+              onLastPagePress={handleLastPagePress}
+              onPageSelect={handlePageSelect}
+            />
+          </div>
+        ) : null}
+      </PageContentBody>
 
       <RemoveQueueItemModal
         isOpen={isConfirmRemoveModalOpen}

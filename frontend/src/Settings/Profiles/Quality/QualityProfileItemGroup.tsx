@@ -5,14 +5,17 @@ import classNames from 'classnames';
 import React, { useCallback } from 'react';
 import CheckInput from 'Components/Form/CheckInput';
 import TextInput from 'Components/Form/TextInput';
-import Icon from 'Components/Icon';
 import Label from 'Components/Label';
 import IconButton from 'Components/Link/IconButton';
+import SortableHandle, {
+  SortableHandleOption,
+} from 'Components/Sortable/SortableHandle';
 import { icons } from 'Helpers/Props';
 import { CheckInputChanged, InputChanged } from 'typings/inputs';
 import { QualityProfileQualityItem } from 'typings/QualityProfile';
 import translate from 'Utilities/String/translate';
 import QualityProfileItem from './QualityProfileItem';
+import type { QualityProfileMoveTarget } from './QualityProfileItems';
 import { groupContainerKey, ROOT_CONTAINER } from './useQualityProfileDnd';
 import styles from './QualityProfileItemGroup.module.css';
 
@@ -23,6 +26,9 @@ export interface QualityProfileItemGroupProps {
   allowed: boolean;
   items: QualityProfileQualityItem[];
   index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  moveTargets: QualityProfileMoveTarget[];
   // A group can only hold qualities, so the sources below never need the
   // handlers that act on a group.
   onItemGroupAllowedChange?: (groupId: number, allowed: boolean) => void;
@@ -31,6 +37,12 @@ export interface QualityProfileItemGroupProps {
   onQualityProfileItemAllowedChange: (
     qualityId: number,
     allowed: boolean
+  ) => void;
+  onMoveItem: (itemId: string, containerId: string, offset: number) => void;
+  onMoveItemTo: (
+    itemId: string,
+    sourceContainerId: string,
+    targetContainerId: string
   ) => void;
 }
 
@@ -41,15 +53,22 @@ function QualityProfileItemGroup({
   allowed,
   items,
   index,
+  isFirst,
+  isLast,
+  moveTargets,
   onItemGroupAllowedChange,
   onItemGroupNameChange,
   onDeleteGroupPress,
   onQualityProfileItemAllowedChange,
+  onMoveItem,
+  onMoveItemTo,
 }: Readonly<QualityProfileItemGroupProps>) {
+  const itemId = groupContainerKey(groupId);
+
   // While editing groups the qualities inside take priority, so dropping onto
   // a group's items puts a quality into the group rather than beside it.
   const { ref, handleRef, isDragging } = useSortable({
-    id: groupContainerKey(groupId),
+    id: itemId,
     index,
     group: ROOT_CONTAINER,
     type: 'group',
@@ -60,6 +79,20 @@ function QualityProfileItemGroup({
   });
 
   const { source } = useDragOperation();
+
+  const moveOptions: SortableHandleOption[] = [
+    {
+      isDisabled: isFirst,
+      label: translate('MoveItemUp', { item: name }),
+      onPress: () => onMoveItem(itemId, ROOT_CONTAINER, -1),
+    },
+    {
+      isDisabled: isLast,
+      label: translate('MoveItemDown', { item: name }),
+      onPress: () => onMoveItem(itemId, ROOT_CONTAINER, 1),
+    },
+  ];
+
   const handleAllowedChange = useCallback(
     ({ value }: CheckInputChanged) => {
       onItemGroupAllowedChange?.(groupId, value);
@@ -138,13 +171,12 @@ function QualityProfileItemGroup({
           </label>
         )}
 
-        <div ref={handleRef} className={styles.dragHandle}>
-          <Icon
-            className={styles.dragIcon}
-            name={icons.REORDER}
-            title={translate('Reorder')}
-          />
-        </div>
+        <SortableHandle
+          className={styles.dragHandle}
+          handleRef={handleRef}
+          label={name}
+          options={moveOptions}
+        />
       </div>
 
       {editGroups && (
@@ -162,9 +194,14 @@ function QualityProfileItemGroup({
                 qualityId={quality.id}
                 name={quality.name}
                 allowed={allowed}
+                isFirst={subIndex === 0}
+                isLast={subIndex === items.length - 1}
+                moveTargets={moveTargets}
                 onQualityProfileItemAllowedChange={
                   onQualityProfileItemAllowedChange
                 }
+                onMoveItem={onMoveItem}
+                onMoveItemTo={onMoveItemTo}
               />
             );
           })}

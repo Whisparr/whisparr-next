@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
@@ -590,6 +591,43 @@ namespace NzbDrone.Core.Test.ParserTests
             result.Languages.Should().Contain(Language.German);
             result.Languages.Should().Contain(Language.Original);
             result.Languages.Should().Contain(Language.English);
+        }
+
+        [TestCase("Movie.Title.2025.ICELANDIC.1080p.WEB.H264-RlsGrp", "Icelandic")]
+        [TestCase("Movie.Title.2025.FINNISH.1080p.WEB.H264-RlsGrp", "Finnish")]
+        [TestCase("Movie.Title.2025.VIETNAMESE.1080p.WEB.H264-RlsGrp", "Vietnamese")]
+        [TestCase("Movie.Title.2025.Italian.1080p.WEB.H264-RlsGrp", "Italian")]
+        [TestCase("Movie.Title.2025.FLEMISH.1080p.WEB.H264-RlsGrp", "Flemish")]
+        public void should_parse_language_regardless_of_culture(string postTitle, string languageName)
+        {
+            var current = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
+
+            try
+            {
+                var result = LanguageParser.ParseLanguages(postTitle);
+                result.Should().Contain(Language.All.Single(l => l.Name == languageName));
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = current;
+            }
+        }
+
+        [Test]
+        public void should_parse_subtitle_language_regardless_of_culture()
+        {
+            var current = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("tr-TR");
+
+            try
+            {
+                LanguageParser.ParseSubtitleLanguage("Movie Title (2025).IT.sub").Should().Be(Language.Italian);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = current;
+            }
         }
     }
 }

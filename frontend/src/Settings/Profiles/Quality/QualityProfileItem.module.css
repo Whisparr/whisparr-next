@@ -68,10 +68,6 @@
   touch-action: none;
 }
 
-.dragIcon {
-  top: 0;
-}
-
 .isDragging {
   opacity: 0.25;
 }

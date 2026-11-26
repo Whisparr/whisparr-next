@@ -11,10 +11,10 @@ interface MovieLanguagesProps {
   isCutoffNotMet?: boolean;
 }
 
-function MovieLanguages(props: MovieLanguagesProps) {
+function MovieLanguages(props: Readonly<MovieLanguagesProps>) {
   const { className, languages, isCutoffNotMet = true } = props;
 
-  // TODO: Typescript - Remove once everything is converted
+  // Guards callers that still pass a missing list.
   if (!languages || languages.length === 0) {
     return null;
   }
@@ -32,7 +32,6 @@ function MovieLanguages(props: MovieLanguagesProps) {
 
   return (
     <Popover
-      className={className}
       anchor={
         <Label
           className={className}

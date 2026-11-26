@@ -42,7 +42,7 @@ namespace NzbDrone.Core.Parser
                                                                             (?<mongolian>\b(?:mongolian|khalkha)\b)|
                                                                             (?<georgian>\b(?:georgian|geo|ka|kat)\b)|
                                                                             (?<original>\b(?:orig|original)\b)",
-                                                                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace,
+                                                                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace | RegexOptions.CultureInvariant,
                                                                 RegexDefaults.Timeout);
 
         private static readonly Regex CaseSensitiveLanguageRegex = new Regex(@"(?:(?i)(?<!SUB[\W|_|^]))(?:(?<english>\bEN\b)|
@@ -53,17 +53,17 @@ namespace NzbDrone.Core.Parser
                                                                                                           (?<slovak>\bSK\b)|
                                                                                                           (?<german>\bDE\b)|
                                                                                                           (?<spanish>\b(?<!DTS[._ -])ES\b))(?:(?i)(?![\W|_|^]SUB))",
-                                                                RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace,
+                                                                RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace | RegexOptions.CultureInvariant,
                                                                 RegexDefaults.Timeout);
 
-        private static readonly Regex GermanDualLanguageRegex = new (@"(?<!WEB[-_. ]?)\bDL\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex GermanMultiLanguageRegex = new (@"\bML\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex GermanDualLanguageRegex = new (@"(?<!WEB[-_. ]?)\bDL\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex GermanMultiLanguageRegex = new (@"\bML\b", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-        private static readonly Regex SubtitleLanguageRegex = new Regex(".+?[-_. ](?<iso_code>[a-z]{2,3})([-_. ](?<tags>full|forced|foreign|default|cc|psdh|sdh))*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, RegexDefaults.Timeout);
+        private static readonly Regex SubtitleLanguageRegex = new Regex(".+?[-_. ](?<iso_code>[a-z]{2,3})([-_. ](?<tags>full|forced|foreign|default|cc|psdh|sdh))*$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexDefaults.Timeout);
 
         public static List<Language> ParseLanguages(string title)
         {
-            var lowerTitle = title.ToLower();
+            var lowerTitle = title.ToLowerInvariant();
             var languages = new List<Language>();
 
             if (lowerTitle.Contains("english"))
@@ -479,7 +479,7 @@ namespace NzbDrone.Core.Parser
                 var match = SubtitleLanguageRegex.Match(simpleFilename);
                 var languageTags = match.Groups["tags"].Captures
                     .Where(tag => !tag.Value.Empty())
-                    .Select(tag => tag.Value.ToLower());
+                    .Select(tag => tag.Value.ToLowerInvariant());
                 return languageTags.ToList();
             }
             catch (Exception ex)
@@ -502,7 +502,7 @@ namespace NzbDrone.Core.Parser
                 if (languageMatch.Success)
                 {
                     var isoCode = languageMatch.Groups["iso_code"].Value;
-                    var isoLanguage = IsoLanguages.Find(isoCode.ToLower());
+                    var isoLanguage = IsoLanguages.Find(isoCode.ToLowerInvariant());
 
                     return isoLanguage?.Language ?? Language.Unknown;
                 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import FormGroup from 'Components/Form/FormGroup';
 import FormInputHelpText from 'Components/Form/FormInputHelpText';
 import FormLabel from 'Components/Form/FormLabel';
@@ -11,8 +11,17 @@ import { Failure } from 'typings/pending';
 import translate from 'Utilities/String/translate';
 import QualityProfileItem from './QualityProfileItem';
 import QualityProfileItemGroup from './QualityProfileItemGroup';
-import { DisplayItem, ROOT_CONTAINER } from './useQualityProfileDnd';
+import {
+  DisplayItem,
+  groupContainerKey,
+  ROOT_CONTAINER,
+} from './useQualityProfileDnd';
 import styles from './QualityProfileItems.module.css';
+
+export interface QualityProfileMoveTarget {
+  id: string;
+  name: string;
+}
 
 interface QualityProfileItemsProps {
   editGroups: boolean;
@@ -29,6 +38,12 @@ interface QualityProfileItemsProps {
   ) => void;
   onItemGroupAllowedChange: (groupId: number, allowed: boolean) => void;
   onItemGroupNameChange: (groupId: number, name: string) => void;
+  onMoveItem: (itemId: string, containerId: string, offset: number) => void;
+  onMoveItemTo: (
+    itemId: string,
+    sourceContainerId: string,
+    targetContainerId: string
+  ) => void;
 }
 
 function QualityProfileItems({
@@ -42,7 +57,19 @@ function QualityProfileItems({
   onQualityProfileItemAllowedChange,
   onItemGroupAllowedChange,
   onItemGroupNameChange,
+  onMoveItem,
+  onMoveItemTo,
 }: Readonly<QualityProfileItemsProps>) {
+  const moveTargets = useMemo<QualityProfileMoveTarget[]>(
+    () =>
+      displayItems.flatMap((entry) =>
+        entry.kind === 'group'
+          ? [{ id: groupContainerKey(entry.group.id), name: entry.group.name }]
+          : []
+      ),
+    [displayItems]
+  );
+
   // The list is measured in both modes and each height kept, so switching modes
   // does not shrink the container back and forth.
   const [qualitiesHeight, setQualitiesHeight] = useState(0);
@@ -125,12 +152,17 @@ function QualityProfileItems({
                     name={group.name}
                     allowed={group.allowed}
                     items={items}
+                    isFirst={index === 0}
+                    isLast={index === displayItems.length - 1}
+                    moveTargets={moveTargets}
                     onItemGroupAllowedChange={onItemGroupAllowedChange}
                     onItemGroupNameChange={onItemGroupNameChange}
                     onDeleteGroupPress={onDeleteGroupPress}
                     onQualityProfileItemAllowedChange={
                       onQualityProfileItemAllowedChange
                     }
+                    onMoveItem={onMoveItem}
+                    onMoveItemTo={onMoveItemTo}
                   />
                 );
               }
@@ -146,10 +178,15 @@ function QualityProfileItems({
                   qualityId={quality.id}
                   name={quality.name}
                   allowed={allowed}
+                  isFirst={index === 0}
+                  isLast={index === displayItems.length - 1}
+                  moveTargets={moveTargets}
                   onCreateGroupPress={onCreateGroupPress}
                   onQualityProfileItemAllowedChange={
                     onQualityProfileItemAllowedChange
                   }
+                  onMoveItem={onMoveItem}
+                  onMoveItemTo={onMoveItemTo}
                 />
               );
             })}

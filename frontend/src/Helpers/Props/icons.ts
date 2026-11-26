@@ -78,6 +78,7 @@ import {
   faFolderTree as farFolderTree,
   faForward as fasForward,
   faGlobe as fasGlobe,
+  faGripVertical as fasGripVertical,
   faHeart as fasHeart,
   faHistory as fasHistory,
   faHome as fasHome,
@@ -193,6 +194,7 @@ export const FOLDER = farFolder;
 export const FOLDER_OPEN = fasFolderOpen;
 export const GENRE = fasTheaterMasks;
 export const GLOBE = fasGlobe;
+export const GRIP = fasGripVertical;
 export const GROUP = farObjectGroup;
 export const HEALTH = fasMedkit;
 export const HEART = fasHeart;

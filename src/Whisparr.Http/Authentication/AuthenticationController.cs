@@ -25,13 +25,15 @@ namespace Whisparr.Http.Authentication
         private readonly IAuthenticationService _authService;
         private readonly IConfigFileProvider _configFileProvider;
         private readonly IAppFolderInfo _appFolderInfo;
+        private readonly IOidcBackchannelLogoutService _backchannelLogoutService;
         private readonly Logger _logger;
 
-        public AuthenticationController(IAuthenticationService authService, IConfigFileProvider configFileProvider, IAppFolderInfo appFolderInfo, Logger logger)
+        public AuthenticationController(IAuthenticationService authService, IConfigFileProvider configFileProvider, IAppFolderInfo appFolderInfo, IOidcBackchannelLogoutService backchannelLogoutService, Logger logger)
         {
             _authService = authService;
             _configFileProvider = configFileProvider;
             _appFolderInfo = appFolderInfo;
+            _backchannelLogoutService = backchannelLogoutService;
             _logger = logger;
         }
 
@@ -184,6 +186,20 @@ namespace Whisparr.Http.Authentication
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
             return Redirect(_configFileProvider.UrlBase + "/");
+        }
+
+        [HttpPost("logout/backchannel")]
+        [Consumes("application/x-www-form-urlencoded")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> BackchannelLogout([FromForm(Name = "logout_token")] string logoutToken)
+        {
+            if (await _backchannelLogoutService.LogoutAsync(logoutToken, HttpContext.RequestAborted))
+            {
+                return Ok();
+            }
+
+            return BadRequest();
         }
 
         private string GetRedirectUrl(string returnUrl)

@@ -33,6 +33,7 @@ function ManageCustomFormatsModalRow(
   } = props;
 
   const { deleteCustomFormat, isDeleting } = useDeleteCustomFormat(id);
+  const editLabel = translate('EditCustomFormatName', { name });
 
   const [isEditCustomFormatModalOpen, setIsEditCustomFormatModalOpen] =
     useState(false);
@@ -87,7 +88,8 @@ function ManageCustomFormatsModalRow(
       <TableRowCell className={styles.actions}>
         <IconButton
           name={icons.EDIT}
-          aria-label={translate('Edit')}
+          title={editLabel}
+          aria-label={editLabel}
           onPress={handleEditCustomFormatModalOpen}
         />
       </TableRowCell>

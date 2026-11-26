@@ -4,8 +4,8 @@
     "sonarr": {
       "repo": "Sonarr/Sonarr",
       "branch": "develop",
-      "highWater": "9a41dfc129d5bbf8f3950f871623b46eea4f914e",
-      "highWaterNote": "2026-10-31 'Fix actions spacing for override and grab modal', the last 2026-10 commit, closing batch 4 (35 commits after 58fe696648). Everything at or before this mark is settled. The post-12th part of 2026-10 (after 57816c149d, the 2026-10-12 tip where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted) is worked in upstream order, about 40 commits per PR. Batch 1 (Oct 12-16, ending b287a95ca0) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
+      "highWater": "03f822c78293981e6e1459fbce59d11476b2107f",
+      "highWaterNote": "2026-11 'Bump FFprobe to 9.1', the last 2026-11 commit, closing the November sync (47 commits after 9a41dfc12). Everything at or before this mark is settled. The post-12th part of 2026-10 (after 57816c149d, the 2026-10-12 tip where the Eros-era sync stopped; v5 was promoted to develop that day and v5-develop deleted) is worked in upstream order, about 40 commits per PR. Batch 1 (Oct 12-16, ending b287a95ca0) also recorded 26 redesign styling deferrals from later in the backlog, kept open on the redesign decision (deferred, not skipped, per paul and Gykes on 2026-11-25). Advance only when everything at or before the new mark is settled."
     }
   },
   "dispositions": {
@@ -3452,9 +3452,8 @@
       "9f0cb9284b887eca4748381f8339932430a3c157": {
         "subject": "New: OIDC authentication",
         "month": "2026-09",
-        "disposition": "defer",
-        "blockedBy": "A product decision on whether Eros gains OIDC as a fourth authentication method. Our AuthenticationType is None/Basic/Forms/External; this adds a fifth member plus config-file keys (AuthenticationAuthority/ClientId/ClientSecret), an OidcDiscoveryService, a health check, an authority validator, a new logout.html served by a new static mapper, and a rewritten Settings/General auth section. That is a feature, not a sync fix, and it is not a call to wave through in an upstream sweep.",
-        "reason": "Deferred rather than skipped because nothing in it is inapplicable: it is auth plumbing over our existing Forms/External types, with no series or episode concept anywhere in it, so it would work here as written. Two conditions on taking it: the upstream en.json hunk (18 keys) is not ours to copy, so each string needs a key we author in case-insensitive sorted position, and the Sonarr.Api.V5 half (GeneralSettingsController/Resource) is dropped - only the V3 HostConfigController/HostConfigResource half applies here. Worth letting upstream settle first too: it landed as one 1,300-line commit with no follow-ups yet."
+        "disposition": "have",
+        "reason": "Ported as afd3de4dc9 ('New: OIDC sign-in and V5 host config settings', 2026-10-25) from Whisparr/Whisparr@8fe35a5f3, Whisparr v2's port of this commit. The defer was never closed when it landed; corrected in the 2026-11 sync."
       },
       "91aeb5260c4b4082dbfbf92cbf1bebd709222cf9": {
         "subject": "Cleanse email addresses from logs",
@@ -3513,8 +3512,8 @@
       "7bfb953e8af1a8c3cf55e3a6ee16908a5e62e3e6": {
         "subject": "Bump Microsoft.AspNetCore.Authentication.OpenIdConnect to 10.0.12",
         "month": "2026-09",
-        "disposition": "skip",
-        "reason": "Bumps Microsoft.AspNetCore.Authentication.OpenIdConnect, which we do not reference at all. It came to Sonarr with OIDC authentication (9f0cb9284), which is deferred here as a product decision; the package arrives with that port."
+        "disposition": "have",
+        "reason": "Bumps Microsoft.AspNetCore.Authentication.OpenIdConnect to 10.0.12. We reference it since OIDC came in as afd3de4dc9, and it moved with the rest of the 10.0.x set (10.0.15 as of the 2026-11 sync). The earlier skip predated the OIDC port and was corrected then."
       },
       "93bed3223d90a2bf2debaa6cb41677a896ab6d99": {
         "subject": "Remove System.Drawing.Common",
@@ -3713,8 +3712,8 @@
         "subject": "Fix authentication settings after merge conflict",
         "month": "2026-10",
         "disposition": "defer",
-        "reason": "Repairs FormsAuthenticationSettings and OidcAuthenticationSettings after an upstream merge conflict. Neither component exists here; they came with OIDC authentication.",
-        "blockedBy": "sonarr@9f0cb9284 (OIDC authentication), itself deferred as a product decision on whether Eros gains OIDC as a fourth authentication method."
+        "reason": "Converts FormsAuthenticationSettings and OidcAuthenticationSettings from FormGroup/FormInputGroup to the redesign's FormRow/FormInput/FormInputHelpText. We have both components (OIDC came in as afd3de4dc9), but no FormRow, so it follows the v5 redesign rather than OIDC.",
+        "blockedBy": "A product decision on whether Eros adopts Sonarr's v5 UI redesign. Deferred by paul on 2026-09-27. If it is adopted, this follow-up comes with it, after d9e7ea050 (UI Foundation) and a7c95ce33 (Convert remaining FormGroup usages to FormRow)."
       },
       "7004c3df7bab19d3b2ae82652c1e6c716edefec3": {
         "subject": "Series search results styling",
@@ -5304,6 +5303,288 @@
         "month": "2026-10",
         "disposition": "pick",
         "reason": "Same OverrideMatchModalContent buttons with no gap. Cherry-picked cleanly."
+      },
+      "71e95b541e9cdc343ceebe68d7792b87f9e8168e": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Multiple Translations updated by Weblate: those files come from Weblate, not from cherry-picks."
+      },
+      "51a2412af235197ce15d7d4a17c053a8e2c26609": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Multiple Translations updated by Weblate: those files come from Weblate, not from cherry-picks."
+      },
+      "413aa6c96d0dc76191d5d18f00691da46f784e47": {
+        "subject": "Multiple Translations updated by Weblate",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Multiple Translations updated by Weblate: those files come from Weblate, not from cherry-picks."
+      },
+      "a19a42ceea22a396dab3b46740a29c3ec2567479": {
+        "subject": "Automated API Docs update",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Regenerates the checked-in openapi.json, which we retired along with the bot workflow that produced it."
+      },
+      "fad31c8de551a3db2001beb5cfa0e6ca9b70fa1f": {
+        "subject": "Allow importing multi-season packs",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Imports multi-season packs: a MultiSeasonPackSpecification, season-pack handling in redownload and manual import, and a Parser.cs change. Seasons don't exist here, and the parser half is gated."
+      },
+      "21041246bf6930abdf3462ca251ebd49adcf8c24": {
+        "subject": "Find season folder for nested anime files in multi-season packs",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Finds the season folder for nested anime files in multi-season packs. Follows fad31c8de, which we skipped; no seasons or anime here."
+      },
+      "162dcb5834fa816e3d0704de7bf676bb57dfe11f": {
+        "subject": "Fixed: Reject releases and imports that match multiple series",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Reworks series matching so a title that matches several series rejects instead of picking one: SeriesRepository FindAllByTitle, ParsingService, AmbiguousSeriesExtensions. Our movie matching is a different grammar, and it already throws and handles MultipleMoviesFoundException in TrackedDownloadService and ManualImportService (Radarr lineage). Matching is too critical to port a series rework into on spec."
+      },
+      "8a55af790a197d1337a2d296e31a53af34dd4999": {
+        "subject": "Load only the series needed for calendar episodes",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Loads only the series the calendar's episodes need instead of every series. Our calendar queries movies directly with GetMoviesBetweenDates; there is no parent entity to load."
+      },
+      "c7e87b16ff23ef654bf807562b8bc0e6ddc4daa3": {
+        "subject": "Fix delete files progress logger messaging",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Fixes a stray brace in the series delete-files progress message. Our MediaFileDeletionService logs different messages and has no such typo."
+      },
+      "c55bf29f18741336f801fa9d4ac3227a072f29ee": {
+        "subject": "Fixed: Removing pending releases from queue via v3 API",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Points FindPendingQueueItemObsolete at GetPendingQueueObsolete. We have no obsolete pending-queue path; FindPendingQueueItem is the only one."
+      },
+      "41e0fd8c3d7cd4c0dc4b99cf20f8c30b2e799415": {
+        "subject": "Remove leftover Kometa translations",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Removes the MetadataKometaDeprecated keys. We still ship the Kometa metadata consumer and use both keys."
+      },
+      "69ff21107b84fe142d673d567816aa0c9f622c03": {
+        "subject": "Push series updates when episode monitored status changes",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Publishes SeriesEpisodesMonitoredChangedEvent so the V5 series resource refreshes when episode monitoring changes. Only Sonarr's V5 SeriesController handles it; we have no parent aggregate whose stats follow a child's monitored flag."
+      },
+      "035d4c2c6532ba5cf8c2fd0122dfd542f7bf2579": {
+        "subject": "Fix displaying season numbers in parse result",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Shows multiple season numbers in the parse result. No seasons here; our parse result shows movie and scene fields."
+      },
+      "6c1dba24a270226cf49c9f6734271db9d2942edc": {
+        "subject": "Fix conditions by using the logical AND operator",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Replaces & with && in the anime episode-count comparison and SeriesStatisticsRepository. Neither exists here, and our DownloadDecisionComparer and statistics repositories have no non-short-circuit &."
+      },
+      "6803fff0591886343deea4c291c6a5e035d659d8": {
+        "subject": "Deserialize JSON with STJson directly from UTF-8 bytes",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Adds STJson overloads that deserialize from UTF-8 bytes, for Sonarr's AniList, TMDb and Trakt list parsers. Nothing here parses HTTP responses through STJson (our import lists use Newtonsoft Json), so the overloads would have no callers."
+      },
+      "57f6aa8b55f9c20b383a85792d77e661b258cb40": {
+        "subject": "Fixed: Links to series details for newly added series",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Links an existing add-search result to the library series rather than the lookup copy, whose slug can differ. Our titleSlug is not stored: MovieResource derives it from the ids (tmdb:{id}, else the ForeignId), and the lookup marks a result existing by matching ForeignId, so both resolve to the same path. Not reproduced live: lookups return nothing on the TPDB-locked dev instance."
+      },
+      "b10180c37e93771fb80d40be3a6e8b1c6bf7de18": {
+        "subject": "Fixed: Exclude commentary streams from media info augmentation",
+        "month": "2026-11",
+        "disposition": "skip",
+        "reason": "Leaves commentary audio tracks out of language detection. Our MediaInfoModel keeps a flat AudioLanguages list with no stream titles, so the filter could only go in VideoFileInfoReader, which changes the stored and displayed languages too. paul chose skip on 2026-11-26."
+      },
+      "fcee4b7bfa99dbc8183f0d1645b995eee1bea3fc": {
+        "subject": "Query only deleted series in removed series health check",
+        "month": "2026-11",
+        "disposition": "have",
+        "reason": "Queries only deleted series for the removed-series health check. RemovedMovieCheck already calls GetDeletedMovies."
+      },
+      "8c50e4469ea7d297173f4f1fc9dd37e6438d4b90": {
+        "subject": "Fixed: On Import Complete notifications when manually importing multiple downloads",
+        "month": "2026-11",
+        "disposition": "have",
+        "reason": "Uses each download's own series for its DownloadCompletedEvent after a multi-download manual import. Our ManualImportService already takes the movie from groupedTrackedDownload.First()."
+      },
+      "acdd7baa9ad058fbb12ffdab58b8d542ec6932de": {
+        "subject": "Fixed: Table pagination",
+        "month": "2026-11",
+        "disposition": "have",
+        "reason": "Landed as 80b88d4636 with its trailer, ahead of this batch, but was never written into state."
+      },
+      "0646137363932bb729e27862b044d3bb9abd72bd": {
+        "subject": "Fixed: Update screen when toggling monitored on Wanted pages",
+        "month": "2026-11",
+        "disposition": "have",
+        "reason": "Updates paged Wanted results after a monitored toggle. Our useToggleMoviesMonitored invalidates the paged query on success."
+      },
+      "606eca6fbd98802f5bc958e47cb667b60332c926": {
+        "subject": "Fixed: Spinner not shown while bulk deleting series",
+        "month": "2026-11",
+        "disposition": "have",
+        "reason": "Moves the bulk delete call to the footer so its button spins. Our MovieIndexSelectFooter already spins on the pending delete from useDeleteMovieModalFooterHandler."
+      },
+      "fdb286731c0cd9205895d23d755f93b249c6e52a": {
+        "subject": "Only split JSON up to the failing line when building error snippet",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same DetailedJsonReaderException. Cherry-picked cleanly."
+      },
+      "c018578e4b79ee048575c02d7a8aa2b929e4b837": {
+        "subject": "Fixed: Don't log Postgres password during database migration",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same MigrationController. Cherry-picked; the conflict was our RefuseLegacyDatabase sitting where the new helper goes."
+      },
+      "9fcb70e6895262a9c9d3232adc4a73d6b99c1ae9": {
+        "subject": "Fix getting items from Flood with an empty post-import tags setting",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same Flood GetItems: an empty post-import tag list matched every item and hid it. Cherry-picked cleanly."
+      },
+      "1a8d5a2b1b0836ea78b677cc223eb84a95e2fdfe": {
+        "subject": "Support virtiofs mounts in Disk Space",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same FindDriveType map. Cherry-picked with its Mono test."
+      },
+      "81dffabd9a717c9999c9de30f26960088977a9bc": {
+        "subject": "Deserialize typed HTTP responses from bytes instead of a string copy",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same HttpResponse<T> and Json. Cherry-picked; the conflict was our trace-log condition."
+      },
+      "dd1026b945c9799068b07bd2605c8f887c9be3bf": {
+        "subject": "Parse SABnzbd queue and history responses in a single pass",
+        "month": "2026-11",
+        "disposition": "pick",
+        "reason": "Same SabnzbdProxy. Cherry-picked cleanly; depends on 81dffabd9's byte deserialization."
+      },
+      "2247ad959e50880d730362514b789393428e0063": {
+        "subject": "Cleanse API keys in JSON-escaped query strings from logs",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Our URL rule also matches ': ' and access tokens, so \\u0026 went into our lookbehind and lookahead rather than upstream's. Their test case passes."
+      },
+      "c6b705a701954592e3e79b74e3e44e53c99a7e17": {
+        "subject": "Compact JSON responses for API endpoints",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "We register the serializer through AddControllers().AddJsonOptions, not ConfigureHttpJsonOptions, so the Release-only WriteIndented = false goes there. Checked live: /api/v3/system/status is no longer indented."
+      },
+      "fa1a97e647abaca47f8837b388da05173e1e0230": {
+        "subject": "Copy series images directly instead of a JSON round trip",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Applied to our V3 and V5 MovieResource, which both cloned images through JSON. Checked live: posters still come back as /MediaCover URLs."
+      },
+      "1bf18e099634bff74535bf661aa07da0779f9edb": {
+        "subject": "Display the Sonarr icon in ntfy notifications",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Adds the icon to ntfy notifications, pointing at the Whisparr logo URL the Discord notifier already uses."
+      },
+      "a91cde06e323ee42ae1483ebc4ee705b6681ac5c": {
+        "subject": "Fix OIDC login when userinfo returns an unparsable JSON Content-Type",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Our OIDC came from Whisparr v2's port of 9f0cb9284. Same back-channel handler, so the JsonContentTypeHandler wraps it as upstream; the fixture lives in NzbDrone.Api.Test, which holds our Whisparr.Http tests."
+      },
+      "d6b4af3c733a4be3cd92434081cce9d92314e568": {
+        "subject": "New: OIDC back-channel logout",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Migration 317 (upstream 241) adds OidcLogouts. Our cookie validation is the static ValidateOidcPrincipal, so the logout check goes there behind an optional service argument; the endpoint returns IActionResult like its neighbours. Ported the three fixtures and added controller and cookie-validation tests. Checked live: an anonymous POST to /logout/backchannel returns 400 with OIDC off. paul chose adapt on 2026-11-26."
+      },
+      "d3eee35422e10150483c3684a346236a38411066": {
+        "subject": "Fixed: Parsing languages on cultures with a dotless i",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Past the parser gate: under tr-TR, 9 of the 12 new culture tests failed against our parser before the fix (IsoLanguages.Find(\"IT\") lowercases to \"ıt\"). Our LanguageParser regexes differ, so CultureInvariant went onto ours. Upstream's Irish title case was dropped: our LanguageRegex has no Irish token in any culture."
+      },
+      "59a1175b6f9ae8e6f13630d699db24fa8206612d": {
+        "subject": "Bump .NET to 10.0.15",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Moved the same package set to 10.0.15 (Microsoft.Extensions.*, OpenIdConnect, KeyDerivation, SignalR.Client, Pkcs, ServiceController), plus Polly 8.9.1, Ical.Net 5.2.4, coverlet 10.1.1 and Test.Sdk 18.12.0. Our global.json pins 10.0.101 with latestFeature roll-forward, so the SDK pin was left alone."
+      },
+      "e5617ddaa37da5a2e5c969dea0fa525632fb3de5": {
+        "subject": "Update Dapper and Npgsql",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Dapper 2.1.100 and Npgsql 10.0.4, including our Test.Common and Common references."
+      },
+      "03f822c78293981e6e1459fbce59d11476b2107f": {
+        "subject": "Bump FFprobe to 9.1",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "FFprobeStatic 9.1.0.534 in Core and Test.Common."
+      },
+      "bdeefe835354dc58e5c4e49560cef322df1bf9a0": {
+        "subject": "Bump FFMpegCore to 6.0.0",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "FFMpegCore 6.0.0.60 with the VideoFileInfoReader API changes (RealFrameRate, analysis.Json, read-only side data, nullable BitRate). Our model has no PrimaryAudioStream and migration 163 does not exist here, so those hunks don't apply. MediaInfo tests pass."
+      },
+      "5e8440054bd543d7f01e53f3a08c07c2c221944f": {
+        "subject": "Fix label for select with multi-languages in manual import",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Same duplicated className on the multi-language popover, in our Movie/MovieLanguages."
+      },
+      "c36f2298c26135fe98bd5793c5ba96ab93507c98": {
+        "subject": "Give custom filter buttons more context",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Filter builder add/remove and custom filter edit/remove buttons now name the condition or filter. Own en.json keys. Checked live in the movies filter builder."
+      },
+      "7d83c6c83eaa7a73a39cc4266ecb4291bded85de": {
+        "subject": "Improve edit settings buttons accessibility",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Custom format and import list exclusion edit buttons now name the item; the exclusion uses its movie title. Own EditImportListExclusionWithTitle key."
+      },
+      "8108f9ae165e602d155d6b66ccf996c1a032295c": {
+        "subject": "File stats for deletion confirmation in manage episodes",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Manual import's delete confirmation now shows how many selected rows have a file and their total size. Own DeleteSelectedFilesCount key, worded for movies and scenes."
+      },
+      "1f6730ff71cd671a6abc9c97be2ba928ca352e7e": {
+        "subject": "Fixed: Queue refreshing too often",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "SignalR queue refreshes are throttled to one per 5s and held while rows are selected or a modal is open, then replayed once; a manual refresh re-fetches when its command finishes. Our queue fetches no episodes and never registered a page populator, so those halves don't apply."
+      },
+      "ea16d697619a82ed223e4a0652f7deb02396721e": {
+        "subject": "Add accessible move controls to sortable lists",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Hand-ported onto our table options, delay profile and quality profile components, which predate upstream's redesigned layouts. Uses our Font Awesome set (a new GRIP icon, REORDER for the menu) and theme colours; delay moves go through our reorderDelayProfile(id, after). Own keys. Checked live: column, delay and quality menus move items, and delay moves persist."
+      },
+      "dc753a6c52a72c3e08356b5303729e4d35958a88": {
+        "subject": "Improve image descriptions for screen readers",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Decorative alt on the error, 404 and loading images and a real one on the login logo. MovieImage already passes alt to its placeholder, and there is no TheTvdb panel here."
+      },
+      "4f3e73cb01271eac977785fbfe09867054d8e2a3": {
+        "subject": "Add a skip link to the main content",
+        "month": "2026-11",
+        "disposition": "adapt",
+        "reason": "Same skip link and focusable main, styled with our theme variables since the redesign's tokens don't exist here. Checked live: it sits off-screen and targets #main-content."
       }
     }
   }

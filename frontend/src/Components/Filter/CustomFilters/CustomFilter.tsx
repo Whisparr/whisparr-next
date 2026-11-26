@@ -21,12 +21,14 @@ function CustomFilter({
   selectedFilterKey,
   dispatchSetFilter,
   onEditPress,
-}: CustomFilterProps) {
+}: Readonly<CustomFilterProps>) {
   const { deleteCustomFilter, isDeleting, deleteError } =
     useDeleteCustomFilter(id);
 
   const wasDeleting = usePrevious(isDeleting);
   const [isDeletingInternal, setIsDeletingInternal] = useState(false);
+  const editLabel = translate('EditCustomFilterName', { name: label });
+  const removeLabel = translate('RemoveCustomFilterName', { name: label });
 
   const handleEditPress = useCallback(() => {
     onEditPress(id);
@@ -62,12 +64,14 @@ function CustomFilter({
       <div className={styles.actions}>
         <IconButton
           name={icons.EDIT}
-          aria-label={translate('Edit')}
+          title={editLabel}
+          aria-label={editLabel}
           onPress={handleEditPress}
         />
 
         <SpinnerIconButton
-          title={translate('RemoveFilter')}
+          title={removeLabel}
+          aria-label={removeLabel}
           name={icons.REMOVE}
           isSpinning={isDeleting}
           onPress={handleRemovePress}

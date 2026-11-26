@@ -7,7 +7,7 @@ interface NotFoundProps {
   message?: string;
 }
 
-function NotFound(props: NotFoundProps) {
+function NotFound(props: Readonly<NotFoundProps>) {
   const { message = translate('DefaultNotFoundMessage') } = props;
 
   return (
@@ -16,6 +16,7 @@ function NotFound(props: NotFoundProps) {
         <div className={styles.message}>{message}</div>
 
         <img
+          alt=""
           className={styles.image}
           src={`${window.Whisparr.urlBase}/Content/Images/404.png`}
         />
