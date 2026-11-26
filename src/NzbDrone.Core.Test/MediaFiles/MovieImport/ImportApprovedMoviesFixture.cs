@@ -181,6 +181,21 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             ExceptionVerification.ExpectedWarns(1);
         }
 
+        [Test]
+        public void unexpected_failure_includes_the_exception_message()
+        {
+            Mocker.GetMock<IUpgradeMediaFiles>()
+                  .Setup(s => s.UpgradeMovieFile(It.IsAny<MovieFile>(), It.IsAny<LocalMovie>(), It.IsAny<bool>()))
+                  .Throws(new IOException("Disk full"));
+
+            var results = Subject.Import(new List<ImportDecision> { _approvedDecisions.First() }, true);
+
+            results.Should().ContainSingle();
+            results[0].Errors.Should().Equal("Failed to import movie", "Disk full");
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
         // ownerMovieId: 0 is an untracked file, 1 the scene being imported, 99 another scene, 98 a scene since deleted
         [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 0, true)]
         [TestCase("/library/Studio/Studio - 2026-08-13 - Title.mp4", 99, false)]
