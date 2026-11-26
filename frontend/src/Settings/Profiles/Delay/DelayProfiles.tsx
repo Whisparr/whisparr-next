@@ -1,4 +1,4 @@
-import { move } from '@dnd-kit/helpers';
+import { arrayMove, move } from '@dnd-kit/helpers';
 import { DragDropProvider, DragEndEvent, DragOverEvent } from '@dnd-kit/react';
 import React, { useCallback, useMemo, useState } from 'react';
 import FieldSet from 'Components/FieldSet';
@@ -82,6 +82,25 @@ function DelayProfiles() {
     [items, reorderDelayProfile]
   );
 
+  const handleMove = useCallback(
+    (id: number, offset: number) => {
+      const index = items.findIndex((item) => item.id === id);
+      const nextIndex = index + offset;
+
+      if (index === -1 || nextIndex < 0 || nextIndex >= items.length) {
+        return;
+      }
+
+      const moved = arrayMove([...items], index, nextIndex);
+
+      reorderDelayProfile(
+        id,
+        nextIndex > 0 ? moved[nextIndex - 1].id : undefined
+      );
+    },
+    [items, reorderDelayProfile]
+  );
+
   return (
     <FieldSet legend={translate('DelayProfiles')}>
       <PageSectionContent
@@ -118,6 +137,9 @@ function DelayProfiles() {
                       delayProfile={item}
                       tagList={tagList}
                       index={index}
+                      isFirst={index === 0}
+                      isLast={index === displayedItems.length - 1}
+                      onMove={handleMove}
                     />
                   );
                 })}
@@ -130,6 +152,9 @@ function DelayProfiles() {
                   delayProfile={defaultProfile}
                   tagList={tagList}
                   index={-1}
+                  isFirst={true}
+                  isLast={true}
+                  onMove={handleMove}
                 />
               </div>
             ) : null}

@@ -1,9 +1,11 @@
 import { useSortable } from '@dnd-kit/react/sortable';
 import classNames from 'classnames';
 import React, { useCallback } from 'react';
-import Icon from 'Components/Icon';
 import IconButton from 'Components/Link/IconButton';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
+import SortableHandle, {
+  SortableHandleOption,
+} from 'Components/Sortable/SortableHandle';
 import TagList from 'Components/TagList';
 import useModalOpenState from 'Helpers/Hooks/useModalOpenState';
 import { icons, kinds } from 'Helpers/Props';
@@ -40,12 +42,18 @@ export interface DelayProfileProps {
   tagList: readonly Tag[];
   // Position in the sortable list; the default profile sits outside it.
   index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onMove: (id: number, offset: number) => void;
 }
 
 function DelayProfile({
   delayProfile,
   tagList,
   index,
+  isFirst,
+  isLast,
+  onMove,
 }: Readonly<DelayProfileProps>) {
   const {
     id,
@@ -66,6 +74,20 @@ function DelayProfile({
     index,
     disabled: isDefault,
   });
+
+  const itemLabel = translate('DelayProfileNumber', { number: index + 1 });
+  const moveOptions: SortableHandleOption[] = [
+    {
+      isDisabled: isFirst,
+      label: translate('MoveItemUp', { item: itemLabel }),
+      onPress: () => onMove(id, -1),
+    },
+    {
+      isDisabled: isLast,
+      label: translate('MoveItemDown', { item: itemLabel }),
+      onPress: () => onMove(id, 1),
+    },
+  ];
 
   const [
     isEditDelayProfileModalOpen,
@@ -126,9 +148,12 @@ function DelayProfile({
           />
 
           {isDefault ? null : (
-            <div ref={handleRef} className={styles.dragHandle}>
-              <Icon className={styles.dragIcon} name={icons.REORDER} />
-            </div>
+            <SortableHandle
+              className={styles.dragHandle}
+              handleRef={handleRef}
+              label={itemLabel}
+              options={moveOptions}
+            />
           )}
         </div>
 
