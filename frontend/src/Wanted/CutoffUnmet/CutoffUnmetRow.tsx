@@ -105,7 +105,7 @@ function CutoffUnmetRow({
         }
 
         if (name === 'actions') {
-          return <MovieSearchCell key={name} movieId={id} />;
+          return <MovieSearchCell key={name} movieId={id} movieTitle={title} />;
         }
 
         return null;

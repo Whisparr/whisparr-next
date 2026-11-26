@@ -285,7 +285,7 @@ export default function SceneRow(props: Readonly<SceneRowProps>) {
         }
 
         if (name === 'actions') {
-          return <MovieSearchCell key={name} movieId={id} />;
+          return <MovieSearchCell key={name} movieId={id} movieTitle={title} />;
         }
 
         return null;
