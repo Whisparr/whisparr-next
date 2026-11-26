@@ -27,7 +27,7 @@ interface PerformerIndexPosterProps {
   posterHeight: number;
 }
 
-function PerformerIndexPoster(props: PerformerIndexPosterProps) {
+function PerformerIndexPoster(props: Readonly<PerformerIndexPosterProps>) {
   const { isSelectMode, posterWidth, posterHeight, performer, sortKey } = props;
 
   const safeForWorkMode = useSafeForWorkMode();

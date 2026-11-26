@@ -186,7 +186,7 @@ function isSelectedItem<V, T extends EnhancedSelectInputValue<V>>(
 }
 
 function EnhancedSelectInput<V, T extends EnhancedSelectInputValue<V>>(
-  props: EnhancedSelectInputProps<V, T>
+  props: Readonly<EnhancedSelectInputProps<V, T>>
 ) {
   const {
     className = styles.enhancedSelect,

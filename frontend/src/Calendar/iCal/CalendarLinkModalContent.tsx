@@ -21,7 +21,7 @@ interface CalendarLinkModalContentProps {
 
 function CalendarLinkModalContent({
   onModalClose,
-}: CalendarLinkModalContentProps) {
+}: Readonly<CalendarLinkModalContentProps>) {
   const [state, setState] = useState({
     unmonitored: false,
     asAllDay: false,

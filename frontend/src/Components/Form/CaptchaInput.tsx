@@ -32,7 +32,7 @@ function CaptchaInput({
   hasError,
   hasWarning,
   onChange,
-}: CaptchaInputProps) {
+}: Readonly<CaptchaInputProps>) {
   const {
     token,
     refreshing,

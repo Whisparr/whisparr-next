@@ -43,7 +43,7 @@ function handleSuggestionsClearRequested() {
   // because we don't want to reset the paths after a path is selected.
 }
 
-export function PathInputInternal(props: PathInputInternalProps) {
+export function PathInputInternal(props: Readonly<PathInputInternalProps>) {
   const {
     className = styles.inputWrapper,
     name,
@@ -203,7 +203,7 @@ export function PathInputInternal(props: PathInputInternalProps) {
   );
 }
 
-function PathInput(props: PathInputProps) {
+function PathInput(props: Readonly<PathInputProps>) {
   const { includeFiles, value = '' } = props;
 
   // The path being listed trails the input's own value -- it only moves when

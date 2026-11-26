@@ -30,7 +30,7 @@ interface PerformerIndexRowProps {
   isSelectMode: boolean;
 }
 
-function PerformerIndexRow(props: PerformerIndexRowProps) {
+function PerformerIndexRow(props: Readonly<PerformerIndexRowProps>) {
   const { performer, columns, isSelectMode } = props;
   const {
     id: performerId,

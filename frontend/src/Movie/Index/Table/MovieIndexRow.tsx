@@ -36,7 +36,7 @@ interface MovieIndexRowProps {
   isSelectMode: boolean;
 }
 
-function MovieIndexRow(props: MovieIndexRowProps) {
+function MovieIndexRow(props: Readonly<MovieIndexRowProps>) {
   const { movie, columns, isSelectMode } = props;
   const movieId = movie.id;
 

@@ -36,7 +36,7 @@ function DeviceInput({
   provider,
   providerData,
   onChange,
-}: DeviceInputProps) {
+}: Readonly<DeviceInputProps>) {
   const {
     data: items,
     isFetching,
