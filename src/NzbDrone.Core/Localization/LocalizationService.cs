@@ -89,6 +89,13 @@ namespace NzbDrone.Core.Localization
         public string GetLanguageIdentifier()
         {
             var isoLanguage = IsoLanguages.Get((Language)_configService.UILanguage) ?? IsoLanguages.Get(Language.English);
+
+            // IsoLanguages maps Norwegian to "no" first, but the translation is nb_NO.json.
+            if (isoLanguage.Language == Language.Norwegian)
+            {
+                return "nb-NO";
+            }
+
             var language = isoLanguage.TwoLetterCode;
 
             if (isoLanguage.CountryCode.IsNotNullOrWhiteSpace())
