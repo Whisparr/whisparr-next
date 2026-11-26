@@ -66,7 +66,7 @@ interface QueueRowProps {
   onQueueRowModalOpenOrClose: (isOpen: boolean) => void;
 }
 
-function QueueRow(props: QueueRowProps) {
+function QueueRow(props: Readonly<QueueRowProps>) {
   const {
     id,
     movieId,
@@ -184,7 +184,7 @@ function QueueRow(props: QueueRowProps) {
 
         if (name === 'movies.sortTitle') {
           return (
-            <TableRowCell key={name}>
+            <TableRowCell key={name} className={styles.movie}>
               {movie ? (
                 <MovieTitleLink
                   titleSlug={movie.titleSlug}

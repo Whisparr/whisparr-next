@@ -57,6 +57,7 @@ import { NONE } from 'Helpers/Props/scrollDirections';
 import { isMobile as isMobileUtil } from 'Utilities/browser';
 import * as keyCodes from 'Utilities/Constants/keyCodes';
 import getUniqueElementId from 'Utilities/getUniqueElementId';
+import translate from 'Utilities/String/translate';
 import TextInput from '../TextInput';
 import HintedSelectInputOption from './HintedSelectInputOption';
 import HintedSelectInputSelectedValue from './HintedSelectInputSelectedValue';
@@ -185,7 +186,7 @@ function isSelectedItem<V, T extends EnhancedSelectInputValue<V>>(
 }
 
 function EnhancedSelectInput<V, T extends EnhancedSelectInputValue<V>>(
-  props: EnhancedSelectInputProps<V, T>
+  props: Readonly<EnhancedSelectInputProps<V, T>>
 ) {
   const {
     className = styles.enhancedSelect,
@@ -688,6 +689,8 @@ function EnhancedSelectInput<V, T extends EnhancedSelectInputValue<V>>(
               <div className={styles.mobileCloseButtonContainer}>
                 <Link
                   className={styles.mobileCloseButton}
+                  title={translate('CloseOptions')}
+                  aria-label={translate('CloseOptions')}
                   onPress={handleOptionsModalClose}
                 >
                   <Icon name={icons.CLOSE} size={18} />

@@ -44,6 +44,7 @@ function CalendarHeaderViewButton({
     <Button
       isDisabled={selectedView === view}
       {...otherProps}
+      aria-pressed={selectedView === view}
       onPress={handlePress}
     >
       {getTitle(view)}

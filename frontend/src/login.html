@@ -332,6 +332,7 @@
                     type="checkbox"
                     name="rememberMe"
                     id="rememberMe"
+                    value="true"
                     checked="checked"
                   />
                   <label for="rememberMe">Remember Me</label>
@@ -353,6 +354,17 @@
             </form>
 
             <div class="oidc-only">
+              <div class="remember-me-container">
+                <span class="remember-me">
+                  <input
+                    type="checkbox"
+                    id="ssoRememberMe"
+                    checked="checked"
+                  />
+                  <label for="ssoRememberMe">Remember Me</label>
+                </span>
+              </div>
+
               <a id="sso-login" class="button" href="__URL_BASE__/login/sso"
                 >Login</a
               >
@@ -562,11 +574,30 @@
     var ssoButton = document.getElementById("sso-login");
 
     if (ssoButton) {
-      var returnUrl = searchParams.get("returnUrl");
+      var ssoRememberMe = document.getElementById('ssoRememberMe');
+      var ssoUrl = ssoButton.href;
 
-      if (returnUrl) {
-        ssoButton.href = ssoButton.href + "?returnUrl=" + encodeURIComponent(returnUrl);
-      }
+      var returnUrl = searchParams.get('returnUrl');
+
+      var updateSsoUrl = function () {
+        var params = new URLSearchParams();
+
+        if (returnUrl) {
+          params.set('returnUrl', returnUrl);
+        }
+
+        if (ssoRememberMe.checked) {
+          params.set('rememberMe', 'true');
+        }
+
+        var query = params.toString();
+
+        ssoButton.href = query ? ssoUrl + '?' + query : ssoUrl;
+      };
+
+      updateSsoUrl();
+
+      ssoRememberMe.addEventListener('change', updateSsoUrl);
     }
 
     var light = {

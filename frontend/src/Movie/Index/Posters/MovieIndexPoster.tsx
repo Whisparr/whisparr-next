@@ -191,7 +191,8 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
         <Label className={styles.controls}>
           <SpinnerIconButton
             name={icons.REFRESH}
-            title={translate('RefreshMovie')}
+            title={translate('RefreshWithTitle', { title })}
+            aria-label={translate('RefreshWithTitle', { title })}
             isSpinning={isRefreshingMovie}
             tabIndex={-1}
             onPress={onRefreshPress}
@@ -201,7 +202,8 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
             <SpinnerIconButton
               className={styles.action}
               name={icons.SEARCH}
-              title={translate('SearchForMovie')}
+              title={translate('SearchWithTitle', { title })}
+              aria-label={translate('SearchWithTitle', { title })}
               isSpinning={isSearchingMovie}
               tabIndex={-1}
               onPress={onSearchPress}
@@ -210,7 +212,8 @@ function MovieIndexPoster(props: Readonly<MovieIndexPosterProps>) {
 
           <IconButton
             name={icons.EDIT}
-            title={translate('EditMovie')}
+            title={translate('EditWithTitle', { title })}
+            aria-label={translate('EditWithTitle', { title })}
             tabIndex={-1}
             onPress={onEditMoviePress}
           />

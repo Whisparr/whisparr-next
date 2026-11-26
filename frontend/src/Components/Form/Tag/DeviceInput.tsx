@@ -7,6 +7,7 @@ import useProviderOptions, {
   ProviderOptionsDevice,
 } from 'Settings/useProviderOptions';
 import { InputChanged } from 'typings/inputs';
+import translate from 'Utilities/String/translate';
 import TagInput, { TagInputProps } from './TagInput';
 import styles from './DeviceInput.module.css';
 
@@ -35,7 +36,7 @@ function DeviceInput({
   provider,
   providerData,
   onChange,
-}: DeviceInputProps) {
+}: Readonly<DeviceInputProps>) {
   const {
     data: items,
     isFetching,
@@ -109,7 +110,11 @@ function DeviceInput({
         onTagDelete={handleTagDelete}
       />
 
-      <FormInputButton onPress={handleRefreshPress}>
+      <FormInputButton
+        title={translate('RefreshDevices')}
+        aria-label={translate('RefreshDevices')}
+        onPress={handleRefreshPress}
+      >
         <Icon name={icons.REFRESH} isSpinning={isFetching} />
       </FormInputButton>
     </div>

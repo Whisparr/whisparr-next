@@ -192,6 +192,8 @@ function SecuritySettings({
             <FormInputButton
               key="reset"
               kind={kinds.DANGER}
+              title={translate('ResetAPIKey')}
+              aria-label={translate('ResetAPIKey')}
               onPress={handleResetApiKeyPress}
             >
               <Icon name={icons.REFRESH} isSpinning={isResettingApiKey} />
@@ -203,6 +205,7 @@ function SecuritySettings({
               to="/docs"
               target="_blank"
               title={translate('ApiDocumentation')}
+              aria-label={translate('ApiDocumentation')}
               noRouter={true}
             >
               <Icon name={icons.DOCUMENTATION} />

@@ -13,10 +13,14 @@ import styles from './MovieSearchCell.module.css';
 
 interface MovieSearchCellProps {
   movieId: number;
+  movieTitle: string;
   movieEntity?: Movie;
 }
 
-function MovieSearchCell({ movieId }: MovieSearchCellProps) {
+function MovieSearchCell({
+  movieId,
+  movieTitle,
+}: Readonly<MovieSearchCellProps>) {
   const executingCommands = useExecutingCommands();
   const isSearching = executingCommands.some(({ name, body }) => {
     const { movieIds = [] } = body;
@@ -31,6 +35,13 @@ function MovieSearchCell({ movieId }: MovieSearchCellProps) {
     setInteractiveSearchModalClosed,
   ] = useModalOpenState(false);
 
+  const automaticSearchLabel = translate('AutomaticSearchForTitle', {
+    title: movieTitle,
+  });
+  const interactiveSearchLabel = translate('InteractiveSearchForTitle', {
+    title: movieTitle,
+  });
+
   const handleSearchPress = useCallback(() => {
     executeCommand({
       name: MOVIE_SEARCH,
@@ -43,13 +54,15 @@ function MovieSearchCell({ movieId }: MovieSearchCellProps) {
       <SpinnerIconButton
         name={icons.SEARCH}
         isSpinning={isSearching}
-        title={translate('AutomaticSearch')}
+        title={automaticSearchLabel}
+        aria-label={automaticSearchLabel}
         onPress={handleSearchPress}
       />
 
       <IconButton
         name={icons.INTERACTIVE}
-        title={translate('InteractiveSearch')}
+        title={interactiveSearchLabel}
+        aria-label={interactiveSearchLabel}
         onPress={setInteractiveSearchModalOpen}
       />
 

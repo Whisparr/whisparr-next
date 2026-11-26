@@ -155,7 +155,8 @@ function SceneIndexPoster(props: Readonly<SceneIndexPosterProps>) {
         <Label className={styles.controls}>
           <SpinnerIconButton
             name={icons.REFRESH}
-            title={translate('RefreshScene')}
+            title={translate('RefreshWithTitle', { title })}
+            aria-label={translate('RefreshWithTitle', { title })}
             isSpinning={isRefreshingScene}
             tabIndex={-1}
             onPress={onRefreshPress}
@@ -165,7 +166,8 @@ function SceneIndexPoster(props: Readonly<SceneIndexPosterProps>) {
             <SpinnerIconButton
               className={styles.action}
               name={icons.SEARCH}
-              title={translate('SearchForScene')}
+              title={translate('SearchWithTitle', { title })}
+              aria-label={translate('SearchWithTitle', { title })}
               isSpinning={isSearchingScene}
               tabIndex={-1}
               onPress={onSearchPress}
@@ -174,7 +176,8 @@ function SceneIndexPoster(props: Readonly<SceneIndexPosterProps>) {
 
           <IconButton
             name={icons.EDIT}
-            title={translate('EditScene')}
+            title={translate('EditWithTitle', { title })}
+            aria-label={translate('EditWithTitle', { title })}
             tabIndex={-1}
             onPress={onEditScenePress}
           />

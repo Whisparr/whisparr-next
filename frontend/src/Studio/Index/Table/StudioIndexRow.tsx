@@ -28,7 +28,7 @@ interface StudioIndexRowProps {
   isSelectMode: boolean;
 }
 
-function StudioIndexRow(props: StudioIndexRowProps) {
+function StudioIndexRow(props: Readonly<StudioIndexRowProps>) {
   const { studio, columns, isSelectMode } = props;
   const { id: studioId, qualityProfileId } = studio;
 
@@ -243,7 +243,8 @@ function StudioIndexRow(props: StudioIndexRowProps) {
 
           <IconButton
             name={icons.EDIT}
-            title={translate('EditStudio')}
+            title={translate('EditWithTitle', { title })}
+            aria-label={translate('EditWithTitle', { title })}
             onPress={onEditStudioPress}
           />
         </TableRowCell>

@@ -115,6 +115,7 @@ namespace Whisparr.Api.V3.CustomFormats
         }
 
         [HttpGet("schema")]
+        [Produces("application/json")]
         public List<CustomFormatSpecificationSchema> GetTemplates()
         {
             var schema = _specifications.OrderBy(x => x.Order).Select(x => x.ToSchema()).ToList();

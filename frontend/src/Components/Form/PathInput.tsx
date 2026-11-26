@@ -16,6 +16,7 @@ import usePrevious from 'Helpers/Hooks/usePrevious';
 import { icons } from 'Helpers/Props';
 import usePaths, { Path } from 'Path/usePaths';
 import { InputChanged } from 'typings/inputs';
+import translate from 'Utilities/String/translate';
 import AutoSuggestInput from './AutoSuggestInput';
 import FormInputButton from './FormInputButton';
 import styles from './PathInput.module.css';
@@ -42,7 +43,7 @@ function handleSuggestionsClearRequested() {
   // because we don't want to reset the paths after a path is selected.
 }
 
-export function PathInputInternal(props: PathInputInternalProps) {
+export function PathInputInternal(props: Readonly<PathInputInternalProps>) {
   const {
     className = styles.inputWrapper,
     name,
@@ -181,6 +182,8 @@ export function PathInputInternal(props: PathInputInternalProps) {
               styles.fileBrowserButton,
               hasButton && styles.fileBrowserMiddleButton
             )}
+            title={translate('OpenFileBrowser')}
+            aria-label={translate('OpenFileBrowser')}
             onPress={handleFileBrowserOpenPress}
           >
             <Icon name={icons.FOLDER_OPEN} />
@@ -200,7 +203,7 @@ export function PathInputInternal(props: PathInputInternalProps) {
   );
 }
 
-function PathInput(props: PathInputProps) {
+function PathInput(props: Readonly<PathInputProps>) {
   const { includeFiles, value = '' } = props;
 
   // The path being listed trails the input's own value -- it only moves when

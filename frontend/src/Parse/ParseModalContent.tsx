@@ -20,7 +20,7 @@ interface ParseModalContentProps {
   onModalClose: () => void;
 }
 
-function ParseModalContent(props: ParseModalContentProps) {
+function ParseModalContent(props: Readonly<ParseModalContentProps>) {
   const { onModalClose } = props;
 
   const [title, setTitle] = useState('');
@@ -59,7 +59,12 @@ function ParseModalContent(props: ParseModalContentProps) {
             onChange={onInputChange}
           />
 
-          <Button className={styles.clearButton} onPress={onClearPress}>
+          <Button
+            className={styles.clearButton}
+            title={translate('ClearParseInput')}
+            aria-label={translate('ClearParseInput')}
+            onPress={onClearPress}
+          >
             <Icon name={icons.REMOVE} size={20} />
           </Button>
         </div>

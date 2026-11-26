@@ -6,6 +6,7 @@ import usePrevious from 'Helpers/Hooks/usePrevious';
 import { icons } from 'Helpers/Props';
 import { InputChanged } from 'typings/inputs';
 import { ProviderData } from 'Utilities/requestAction';
+import translate from 'Utilities/String/translate';
 import FormInputButton from './FormInputButton';
 import TextInput from './TextInput';
 import useCaptcha from './useCaptcha';
@@ -31,7 +32,7 @@ function CaptchaInput({
   hasError,
   hasWarning,
   onChange,
-}: CaptchaInputProps) {
+}: Readonly<CaptchaInputProps>) {
   const {
     token,
     refreshing,
@@ -91,7 +92,11 @@ function CaptchaInput({
           onChange={onChange}
         />
 
-        <FormInputButton onPress={handleRefreshPress}>
+        <FormInputButton
+          title={translate('RefreshCaptcha')}
+          aria-label={translate('RefreshCaptcha')}
+          onPress={handleRefreshPress}
+        >
           <Icon name={icons.REFRESH} isSpinning={refreshing} />
         </FormInputButton>
       </div>

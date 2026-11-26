@@ -30,7 +30,7 @@ interface PerformerIndexRowProps {
   isSelectMode: boolean;
 }
 
-function PerformerIndexRow(props: PerformerIndexRowProps) {
+function PerformerIndexRow(props: Readonly<PerformerIndexRowProps>) {
   const { performer, columns, isSelectMode } = props;
   const {
     id: performerId,
@@ -295,7 +295,8 @@ function PerformerIndexRow(props: PerformerIndexRowProps) {
           </span>
           <IconButton
             name={icons.EDIT}
-            title={translate('EditPerformer')}
+            title={translate('EditWithTitle', { title: fullName })}
+            aria-label={translate('EditWithTitle', { title: fullName })}
             onPress={onEditPerformerPress}
           />
         </TableRowCell>

@@ -21,7 +21,7 @@ interface CalendarLinkModalContentProps {
 
 function CalendarLinkModalContent({
   onModalClose,
-}: CalendarLinkModalContentProps) {
+}: Readonly<CalendarLinkModalContentProps>) {
   const [state, setState] = useState({
     unmonitored: false,
     asAllDay: false,
@@ -128,6 +128,8 @@ function CalendarLinkModalContent({
                   to={iCalWebCalUrl}
                   target="_blank"
                   noRouter={true}
+                  title={translate('SubscribeToICalFeed')}
+                  aria-label={translate('SubscribeToICalFeed')}
                 >
                   <Icon name={icons.CALENDAR_O} />
                 </FormInputButton>,

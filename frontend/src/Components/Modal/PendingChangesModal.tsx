@@ -12,15 +12,17 @@ import translate from 'Utilities/String/translate';
 interface PendingChangesModalProps {
   className?: string;
   isOpen: boolean;
+  isClosing?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 function PendingChangesModal({
   isOpen,
+  isClosing = false,
   onConfirm,
   onCancel,
-}: PendingChangesModalProps) {
+}: Readonly<PendingChangesModalProps>) {
   const { bindShortcut, unbindShortcut } = useKeyboardShortcuts();
 
   useEffect(() => {
@@ -36,7 +38,11 @@ function PendingChangesModal({
       <ModalContent onModalClose={onCancel}>
         <ModalHeader>{translate('UnsavedChanges')}</ModalHeader>
 
-        <ModalBody>{translate('PendingChangesMessage')}</ModalBody>
+        <ModalBody>
+          {translate(
+            isClosing ? 'PendingChangesCloseMessage' : 'PendingChangesMessage'
+          )}
+        </ModalBody>
 
         <ModalFooter>
           <Button kind={kinds.DEFAULT} onPress={onCancel}>
@@ -44,7 +50,11 @@ function PendingChangesModal({
           </Button>
 
           <Button autoFocus={true} kind={kinds.DANGER} onPress={onConfirm}>
-            {translate('PendingChangesDiscardChanges')}
+            {translate(
+              isClosing
+                ? 'PendingChangesDiscardChangesAndClose'
+                : 'PendingChangesDiscardChanges'
+            )}
           </Button>
         </ModalFooter>
       </ModalContent>

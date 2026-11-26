@@ -146,7 +146,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
                     RelativePath = movie.Path.GetRelativePath(file),
                     Name = Path.GetFileNameWithoutExtension(file),
                     Movie = movie,
-                    ReleaseGroup = string.Empty,
+                    ReleaseGroup = null,
                     Quality = new QualityModel(Quality.Unknown),
                     Languages = new List<Language> { Language.Unknown },
                     Size = _diskProvider.GetFileSize(file),
@@ -269,9 +269,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Manual
             }
 
             var downloadClientItem = GetTrackedDownload(downloadId)?.DownloadItem;
-            var finalReleaseGroup = releaseGroup.IsNullOrWhiteSpace()
-                ? ReleaseGroupParser.ParseReleaseGroup(path)
-                : releaseGroup;
+
+            // Null asks for the group to be parsed from the path; an empty string is a group the user cleared.
+            var finalReleaseGroup = releaseGroup ?? ReleaseGroupParser.ParseReleaseGroup(path);
             var finalQuality = (quality?.Quality ?? Quality.Unknown) == Quality.Unknown ? QualityParser.ParseQuality(path) : quality;
             var finalLanguages =
                 languages?.Count <= 1 && (languages?.SingleOrDefault() ?? Language.Unknown) == Language.Unknown
