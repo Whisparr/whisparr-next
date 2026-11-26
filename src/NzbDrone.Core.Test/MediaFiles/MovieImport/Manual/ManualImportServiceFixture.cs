@@ -327,6 +327,27 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport.Manual
         }
 
         [Test]
+        public void should_keep_a_cleared_release_group_when_reprocessing()
+        {
+            var (movie, path) = GivenReprocessableConflict();
+
+            var item = Subject.ReprocessItem(path, null, movie.Id, string.Empty, new QualityModel(Quality.Unknown), new List<Language> { Language.English }, 0, movie.Id);
+
+            item.ReleaseGroup.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_parse_the_release_group_when_reprocessing_without_one()
+        {
+            var (movie, _) = GivenReprocessableConflict();
+            var path = System.IO.Path.Combine(Folder, "Studio.24.01.15.Performer.Name.1080p.WEB-DL-GRP.mp4");
+
+            var item = Subject.ReprocessItem(path, null, movie.Id, null, new QualityModel(Quality.Unknown), new List<Language> { Language.English }, 0, movie.Id);
+
+            item.ReleaseGroup.Should().Be("GRP");
+        }
+
+        [Test]
         public void should_keep_the_fingerprint_conflict_when_reprocessing_the_same_scene()
         {
             var (movie, path) = GivenReprocessableConflict();
