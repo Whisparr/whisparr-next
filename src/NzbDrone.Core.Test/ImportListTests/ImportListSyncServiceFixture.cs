@@ -477,6 +477,32 @@ namespace NzbDrone.Core.Test.ImportList
             }
 
             [Test]
+            public void should_not_add_movie_with_duplicate_exclusions()
+            {
+                  _list2Movies.ForEach(m => m.ListId = 2);
+                  _importListFetch.Movies.ForEach(m => m.ListId = 1);
+                  _importListFetch.Movies.AddRange(_list2Movies);
+
+                  GivenList(1, true);
+                  GivenList(2, true);
+
+                  GivenCleanLevel("disabled");
+
+                  Mocker.GetMock<IImportListExclusionService>()
+                        .Setup(v => v.GetAllExclusions())
+                        .Returns(new List<ImportListExclusion>
+                        {
+                              new ImportListExclusion { ForeignId = _existingMovies[0].ForeignId },
+                              new ImportListExclusion { ForeignId = _existingMovies[0].ForeignId }
+                        });
+
+                  Subject.Execute(_commandAll);
+
+                  Mocker.GetMock<IAddMovieService>()
+                        .Verify(v => v.AddMovies(It.Is<List<Movie>>(s => s.Count == 7 && s.All(m => m.ForeignId != _existingMovies[0].ForeignId)), true), Times.Once());
+            }
+
+            [Test]
             public void should_not_add_movie_that_exists_in_library()
             {
                   _list2Movies.ForEach(m => m.ListId = 2);
