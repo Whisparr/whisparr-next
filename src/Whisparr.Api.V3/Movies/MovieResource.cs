@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
-using NzbDrone.Common.Extensions;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.DecisionEngine.Specifications;
 using NzbDrone.Core.Languages;
@@ -120,7 +119,7 @@ namespace Whisparr.Api.V3.Movies
                 Status = model.MovieMetadata.Value.Status,
                 Overview = model.MovieMetadata.Value.Overview,
 
-                Images = model.MovieMetadata.Value.Images.JsonClone(),
+                Images = model.MovieMetadata.Value.Images?.Select(i => new MediaCover(i.CoverType, i.RemoteUrl) { Url = i.Url }).ToList(),
 
                 Year = model.Year,
 
