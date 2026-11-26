@@ -1,15 +1,15 @@
-import React, { ReactElement, useCallback, useEffect } from 'react';
-import { useBlocker } from 'react-router-dom';
+import React, { ReactElement, useEffect } from 'react';
+import PendingChangesModal from 'Components/Modal/PendingChangesModal';
 import PageToolbar from 'Components/Page/Toolbar/PageToolbar';
 import PageToolbarButton, {
   PageToolbarButtonProps,
 } from 'Components/Page/Toolbar/PageToolbarButton';
 import PageToolbarSection from 'Components/Page/Toolbar/PageToolbarSection';
 import useKeyboardShortcuts from 'Helpers/Hooks/useKeyboardShortcuts';
+import useUnsavedChanges from 'Helpers/Hooks/useUnsavedChanges';
 import { icons } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
 import AdvancedSettingsButton from './AdvancedSettingsButton';
-import PendingChangesModal from './PendingChangesModal';
 
 interface SettingsToolbarProps {
   showSave?: boolean;
@@ -29,15 +29,9 @@ function SettingsToolbar({
   onSavePress,
 }: Readonly<SettingsToolbarProps>) {
   const { bindShortcut, unbindShortcut } = useKeyboardShortcuts();
-  const blocker = useBlocker(!!hasPendingChanges);
-
-  const handleConfirmNavigation = useCallback(() => {
-    blocker.proceed?.();
-  }, [blocker]);
-
-  const handleCancelNavigation = useCallback(() => {
-    blocker.reset?.();
-  }, [blocker]);
+  const { pendingChangesModalProps } = useUnsavedChanges({
+    hasUnsavedChanges: !!hasPendingChanges,
+  });
 
   useEffect(() => {
     bindShortcut(
@@ -81,11 +75,7 @@ function SettingsToolbar({
         {additionalButtons as ReactElement<PageToolbarButtonProps> | null}
       </PageToolbarSection>
 
-      <PendingChangesModal
-        isOpen={blocker.state === 'blocked'}
-        onConfirm={handleConfirmNavigation}
-        onCancel={handleCancelNavigation}
-      />
+      <PendingChangesModal {...pendingChangesModalProps} />
     </PageToolbar>
   );
 }

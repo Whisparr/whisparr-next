@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
 } from 'react';
 import ReactDOM from 'react-dom';
@@ -72,6 +73,18 @@ function Modal({
   const isBackdropPressed = useRef(false);
   const modalId = useId();
 
+  const closeGuardRef = useRef<(() => void) | null>(null);
+
+  const setCloseGuard = useCallback((closeGuard: (() => void) | null) => {
+    closeGuardRef.current = closeGuard;
+  }, []);
+
+  // A content component with unsaved changes can take over closing (Escape,
+  // backdrop click) to confirm first.
+  const handleModalClose = useCallback(() => {
+    (closeGuardRef.current ?? onModalClose)();
+  }, [onModalClose]);
+
   const isTargetBackdrop = useCallback((event: TouchEvent | MouseEvent) => {
     const targetElement = findEventTarget(event);
 
@@ -96,12 +109,17 @@ function Modal({
         isTargetBackdrop(event) &&
         closeOnBackgroundClick
       ) {
-        onModalClose();
+        handleModalClose();
       }
 
       isBackdropPressed.current = false;
     },
-    [closeOnBackgroundClick, isTargetBackdrop, onModalClose]
+    [closeOnBackgroundClick, isTargetBackdrop, handleModalClose]
+  );
+
+  const modalContextValue = useMemo(
+    () => ({ headerId: `${modalId}-header`, setCloseGuard }),
+    [modalId, setCloseGuard]
   );
 
   const handleKeyDown = useCallback(
@@ -111,11 +129,11 @@ function Modal({
           event.preventDefault();
           event.stopPropagation();
 
-          onModalClose();
+          handleModalClose();
         }
       }
     },
-    [modalId, onModalClose]
+    [modalId, handleModalClose]
   );
 
   useEffect(() => {
@@ -160,10 +178,10 @@ function Modal({
     return null;
   }
 
-  const headerId = `${modalId}-header`;
+  const { headerId } = modalContextValue;
 
   return ReactDOM.createPortal(
-    <ModalContext.Provider value={{ headerId }}>
+    <ModalContext.Provider value={modalContextValue}>
       <FocusLock disabled={false}>
         <div className={styles.modalContainer}>
           <div

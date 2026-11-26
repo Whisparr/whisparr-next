@@ -14,6 +14,9 @@ import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
+import PendingChangesModal from 'Components/Modal/PendingChangesModal';
+import useModalCloseGuard from 'Helpers/Hooks/useModalCloseGuard';
+import useUnsavedChanges from 'Helpers/Hooks/useUnsavedChanges';
 import { icons, inputTypes, kinds, sizes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
 import MoveMovieModal from 'Movie/MoveMovie/MoveMovieModal';
@@ -70,6 +73,13 @@ function EditMovieModalContent({
       changes.tags = tags;
     return changes;
   }, [monitored, qualityProfileId, path, tags, movie]);
+
+  const { onClose, pendingChangesModalProps } = useUnsavedChanges({
+    hasUnsavedChanges: Object.keys(pendingChanges).length > 0,
+    onDiscard: onModalClose,
+  });
+
+  useModalCloseGuard(onClose);
 
   const isPathChanging = path !== originalPath;
 
@@ -216,7 +226,7 @@ function EditMovieModalContent({
   }, [saveMovie.isSuccess, saveMovieAndMoveFiles.isSuccess, onModalClose]);
 
   return (
-    <ModalContent onModalClose={onModalClose}>
+    <ModalContent onModalClose={onClose}>
       <ModalHeader>{translate('EditMovieModalHeader', { title })}</ModalHeader>
 
       <ModalBody>
@@ -324,6 +334,8 @@ function EditMovieModalContent({
         onSavePress={handleSavePress}
         onMoveMoviePress={handleMoveMoviePress}
       />
+
+      <PendingChangesModal {...pendingChangesModalProps} />
     </ModalContent>
   );
 }
