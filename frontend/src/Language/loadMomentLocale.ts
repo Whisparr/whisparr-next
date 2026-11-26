@@ -9,7 +9,8 @@ async function loadMomentLocale(identifier: string | undefined) {
     // All locales are bundled in one chunk that is only fetched when needed
     await import('./momentLocales');
 
-    moment.locale(identifier);
+    // Fall back to English when moment has no locale for the identifier.
+    moment.locale([identifier, 'en']);
   } catch (e) {
     console.error(`Failed to load moment locale '${identifier}'`, e);
   }

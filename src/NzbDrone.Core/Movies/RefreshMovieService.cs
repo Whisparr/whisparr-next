@@ -6,7 +6,6 @@ using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
-using NzbDrone.Core.AutoTagging;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.LegacyMigration;
@@ -64,7 +63,6 @@ namespace NzbDrone.Core.Movies
         private readonly ICheckIfMovieShouldBeRefreshed _checkIfMovieShouldBeRefreshed;
         private readonly IConfigService _configService;
         private readonly IJavAvailability _javAvailability;
-        private readonly IAutoTaggingService _autoTaggingService;
         private readonly IRenameMovieFileService _renameMovieFileService;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly ICommandResultReporter _commandResultReporter;
@@ -90,7 +88,6 @@ namespace NzbDrone.Core.Movies
                                     ICheckIfMovieShouldBeRefreshed checkIfMovieShouldBeRefreshed,
                                     IConfigService configService,
                                     IJavAvailability javAvailability,
-                                    IAutoTaggingService autoTaggingService,
                                     IRenameMovieFileService renameMovieFileService,
                                     IManageCommandQueue commandQueueManager,
                                     ICommandResultReporter commandResultReporter,
@@ -116,7 +113,6 @@ namespace NzbDrone.Core.Movies
             _checkIfMovieShouldBeRefreshed = checkIfMovieShouldBeRefreshed;
             _configService = configService;
             _javAvailability = javAvailability;
-            _autoTaggingService = autoTaggingService;
             _renameMovieFileService = renameMovieFileService;
             _commandQueueManager = commandQueueManager;
             _commandResultReporter = commandResultReporter;
@@ -627,7 +623,7 @@ namespace NzbDrone.Core.Movies
                                 _logger.Error(e, "Couldn't refresh info for {0}", movieLocal);
                             }
 
-                            UpdateTags(movie, false);
+                            UpdateTags(movieLocal, false);
 
                             if (_rescanAfterRefreshFilter.ShouldRescan(movieLocal, false, trigger))
                             {

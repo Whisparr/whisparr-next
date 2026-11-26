@@ -184,7 +184,7 @@ namespace NzbDrone.Core.Test.ImportList
                         .Returns(new List<Movie> { movie });
             }
 
-            private Mock<IImportList> CreateListResult(int id, bool enabledAuto)
+            private void CreateListResult(int id, bool enabledAuto)
             {
                   var importListDefinition = new ImportListDefinition { Id = id, EnableAuto = enabledAuto };
 
@@ -194,8 +194,6 @@ namespace NzbDrone.Core.Test.ImportList
                   mockImportList.SetupGet(s => s.EnableAuto).Returns(enabledAuto);
 
                   _importLists.Add(mockImportList.Object);
-
-                  return mockImportList;
             }
 
             [Test]
@@ -469,6 +467,32 @@ namespace NzbDrone.Core.Test.ImportList
                   Mocker.GetMock<IImportListExclusionService>()
                         .Setup(v => v.GetAllExclusions())
                         .Returns(new List<ImportListExclusion> { new ImportListExclusion { ForeignId = _existingMovies[0].ForeignId } });
+
+                  Subject.Execute(_commandAll);
+
+                  Mocker.GetMock<IAddMovieService>()
+                        .Verify(v => v.AddMovies(It.Is<List<Movie>>(s => s.Count == 7 && s.All(m => m.ForeignId != _existingMovies[0].ForeignId)), true), Times.Once());
+            }
+
+            [Test]
+            public void should_not_add_movie_with_duplicate_exclusions()
+            {
+                  _list2Movies.ForEach(m => m.ListId = 2);
+                  _importListFetch.Movies.ForEach(m => m.ListId = 1);
+                  _importListFetch.Movies.AddRange(_list2Movies);
+
+                  GivenList(1, true);
+                  GivenList(2, true);
+
+                  GivenCleanLevel("disabled");
+
+                  Mocker.GetMock<IImportListExclusionService>()
+                        .Setup(v => v.GetAllExclusions())
+                        .Returns(new List<ImportListExclusion>
+                        {
+                              new ImportListExclusion { ForeignId = _existingMovies[0].ForeignId },
+                              new ImportListExclusion { ForeignId = _existingMovies[0].ForeignId }
+                        });
 
                   Subject.Execute(_commandAll);
 

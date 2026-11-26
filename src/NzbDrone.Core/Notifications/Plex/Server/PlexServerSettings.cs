@@ -43,7 +43,7 @@ namespace NzbDrone.Core.Notifications.Plex.Server
         [FieldToken(TokenField.HelpText, "UseSsl", "serviceName", "Plex")]
         public bool UseSsl { get; set; }
 
-        [FieldDefinition(4, Label = "UrlBase", Type = FieldType.Textbox, Advanced = true, HelpText = "ConnectionSettingsUrlBaseHelpText")]
+        [FieldDefinition(4, Label = "UrlBase", Type = FieldType.Textbox, HelpText = "ConnectionSettingsUrlBaseHelpText")]
         [FieldToken(TokenField.HelpText, "UrlBase", "connectionName", "Plex")]
 
 #pragma warning disable S5332 // Help-text placeholder shown to the user, never requested; UseSsl picks the real scheme
@@ -61,11 +61,11 @@ namespace NzbDrone.Core.Notifications.Plex.Server
         [FieldDefinition(7, Label = "NotificationsSettingsUpdateLibrary", Type = FieldType.Checkbox)]
         public bool UpdateLibrary { get; set; }
 
-        [FieldDefinition(8, Label = "NotificationsSettingsUpdateMapPathsFrom", Type = FieldType.Textbox, Advanced = true, HelpText = "NotificationsSettingsUpdateMapPathsFromHelpText")]
+        [FieldDefinition(8, Label = "NotificationsSettingsUpdateMapPathsFrom", Type = FieldType.Textbox, HelpText = "NotificationsSettingsUpdateMapPathsFromHelpText")]
         [FieldToken(TokenField.HelpText, "NotificationsSettingsUpdateMapPathsFrom", "serviceName", "Plex")]
         public string MapFrom { get; set; }
 
-        [FieldDefinition(9, Label = "NotificationsSettingsUpdateMapPathsTo", Type = FieldType.Textbox, Advanced = true, HelpText = "NotificationsSettingsUpdateMapPathsToHelpText")]
+        [FieldDefinition(9, Label = "NotificationsSettingsUpdateMapPathsTo", Type = FieldType.Textbox, HelpText = "NotificationsSettingsUpdateMapPathsToHelpText")]
         [FieldToken(TokenField.HelpText, "NotificationsSettingsUpdateMapPathsTo", "serviceName", "Plex")]
         public string MapTo { get; set; }
 

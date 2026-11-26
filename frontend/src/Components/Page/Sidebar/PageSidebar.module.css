@@ -47,7 +47,11 @@
   color: var(--white);
 }
 
-@media (--breakpointSmall) {
+.isCollapsed {
+  display: none;
+}
+
+@media (--sidebarOverlay) {
   .sidebarContainer {
     position: fixed;
     top: 0;

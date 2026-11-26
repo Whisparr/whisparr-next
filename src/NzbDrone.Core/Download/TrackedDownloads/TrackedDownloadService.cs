@@ -341,8 +341,9 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                 return;
             }
 
+            var matchesAny = MatchesAnyMovie(message.Movies);
             var cachedItems = _cache.Values
-                .Where(t => message.Movies.Any(m => MovieMatches(t.RemoteMovie?.Movie, m)))
+                .Where(t => matchesAny(t.RemoteMovie?.Movie))
                 .ToList();
 
             if (cachedItems.Any())
@@ -360,8 +361,9 @@ namespace NzbDrone.Core.Download.TrackedDownloads
                 return;
             }
 
+            var matchesAny = MatchesAnyMovie(message.Movies);
             var cachedItems = _cache.Values
-                .Where(t => message.Movies.Any(m => MovieMatches(t.RemoteMovie?.Movie, m)))
+                .Where(t => matchesAny(t.RemoteMovie?.Movie))
                 .ToList();
 
             if (cachedItems.Any())
@@ -370,6 +372,18 @@ namespace NzbDrone.Core.Download.TrackedDownloads
 
                 _eventAggregator.PublishEvent(new TrackedDownloadRefreshedEvent(GetTrackedDownloads()));
             }
+        }
+
+        // The set-based form of MovieMatches, for events that carry many movies: one pass over the
+        // cache instead of one per movie.
+        private static Func<Movie, bool> MatchesAnyMovie(IEnumerable<Movie> movies)
+        {
+            var messageMovies = movies.Where(m => m != null).ToList();
+            var ids = messageMovies.Select(m => m.Id).ToHashSet();
+            var tmdbIds = messageMovies.Where(m => m.TmdbId != 0).Select(m => m.TmdbId).ToHashSet();
+
+            return cachedMovie => cachedMovie != null &&
+                                  (ids.Contains(cachedMovie.Id) || tmdbIds.Contains(cachedMovie.TmdbId));
         }
 
         private static bool MovieMatches(Movie cachedMovie, Movie messageMovie)

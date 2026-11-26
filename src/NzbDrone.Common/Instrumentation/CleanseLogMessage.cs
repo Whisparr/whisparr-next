@@ -1,34 +1,39 @@
+using System;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
+using NLog;
 using NzbDrone.Common.Extensions;
 
 namespace NzbDrone.Common.Instrumentation
 {
     public static class CleanseLogMessage
     {
+        private const string TimedOutMessage = "(removed, cleansing the log message timed out)";
+        private const int TruncatedMessageLength = 4096;
+
         private static readonly Regex[] CleansingRules =
         {
             // Url
             Rule(@"(?<=\?|&|: )(apikey|(?:access[-_]?)?token|passkey|auth|authkey|user|uid|api|[a-z_]*apikey|account|passwd)=(?<secret>[^&=]+?)(?=[ ""&=]|$)"),
-            Rule(@"(?<=\?|&)[^=]*?(username|password)=(?<secret>[^&=]+?)(?= |&|$)"),
+            Rule(@"(?<=\?|&)[^=&?]*?(username|password)=(?<secret>[^&=]+?)(?= |&|$)"),
             Rule(@"rss(24h)?\.torrentleech\.org/(?!rss)(?<secret>[0-9a-z]+)"),
             Rule(@"torrentleech\.org/rss/download/[0-9]+/(?<secret>[0-9a-z]+)"),
             Rule(@"iptorrents\.com/[/a-z0-9?&;]*?(?:[?&;](u|tp)=(?<secret>[^&=;]+?))+(?= |;|&|$)"),
             Rule(@"/fetch/[a-z0-9]{32}/(?<secret>[a-z0-9]{32})", RegexOptions.None),
-            Rule(@"(getnzb|rss).*?(?<=\?|&)(r)=(?<secret>[^&=]+?)(?= |&|$)"),
+            Rule(@"(getnzb|rss)(?:(?!getnzb|rss).)*?(?<=\?|&)(r)=(?<secret>[^&=]+?)(?= |&|$)"),
             Rule(@"\b(\w*)?(_?(?<!use|get_)token|username|passwo?rd)=(?<secret>[^&=]+?)(?= |&|$|;)"),
             Rule(@"-hd.me/torrent/[a-z0-9-]\.[0-9]+\.(?<secret>[0-9a-z]+)"),
 
             // Trackers Announce Keys; Designed for Qbit Json; should work for all in theory
-            Rule(@"announce(\.php)?(/|%2f|%3fpasskey%3d)(?<secret>[a-z0-9]{16,})|(?<secret>[a-z0-9]{16,})(/|%2f)announce"),
+            Rule(@"announce(\.php)?(/|%2f|%3fpasskey%3d)(?<secret>[a-z0-9]{16,})|(?:(?<![a-z0-9])|(?<=%2f))(?<secret>[a-z0-9]{16,})(/|%2f)announce"),
 
             // Path
             Rule(@"C:\\Users\\(?<secret>[^\""]+?)(\\|$)"),
             Rule(@"/(home|Users)/(?<secret>[^/""]+?)(/|$)"),
 
             // Email
-            Rule(@"\b(?<secret>[a-z0-9._%+-]+)@[a-z0-9.-]+\.[a-z]{2,}\b"),
+            Rule(@"(?<![a-z0-9._%+-])(?<secret>[a-z0-9._%+-]+)@[a-z0-9.-]+\.[a-z]{2,}\b"),
 
             // NzbGet
             Rule(@"""Name""\s*:\s*""[^""]*(username|password)""\s*,\s*""Value""\s*:\s*""(?<secret>[^""]+?)"""),
@@ -66,28 +71,69 @@ namespace NzbDrone.Common.Instrumentation
 
         public static string Cleanse(string message)
         {
+            return TryCleanse(message, out var cleansed) ? cleansed : TimedOutMessage;
+        }
+
+        // A rule that times out leaves the line uncleansed, so it is never written as-is: the
+        // event is re-rendered with its message truncated and the timeout noted.
+        public static string Cleanse(LogEventInfo logEvent, Func<LogEventInfo, string> render)
+        {
+            if (TryCleanse(render(logEvent), out var cleansed))
+            {
+                return cleansed;
+            }
+
+            var message = logEvent.FormattedMessage ?? string.Empty;
+
+            if (message.Length > TruncatedMessageLength)
+            {
+                message = message[..TruncatedMessageLength];
+            }
+
+            var truncatedEvent = new LogEventInfo(logEvent.Level, logEvent.LoggerName, $"{message}... {TimedOutMessage}")
+            {
+                TimeStamp = logEvent.TimeStamp
+            };
+
+            return Cleanse(render(truncatedEvent));
+        }
+
+        private static bool TryCleanse(string message, out string cleansed)
+        {
+            cleansed = message;
+
             if (message.IsNullOrWhiteSpace())
             {
-                return message;
+                return true;
             }
 
-            foreach (var regex in CleansingRules)
+            try
             {
-                message = regex.Replace(message, m =>
+                foreach (var regex in CleansingRules)
                 {
-                    var value = m.Value;
-                    foreach (var capture in m.Groups["secret"].Captures.OfType<Capture>().Reverse())
+                    cleansed = regex.Replace(cleansed, m =>
                     {
-                        value = value.Replace(capture.Index - m.Index, capture.Length, "(removed)");
-                    }
+                        var value = m.Value;
 
-                    return value;
-                });
+                        foreach (var capture in m.Groups["secret"].Captures.OfType<Capture>().Reverse())
+                        {
+                            value = value.Replace(capture.Index - m.Index, capture.Length, "(removed)");
+                        }
+
+                        return value;
+                    });
+                }
+
+                cleansed = CleanseRemoteIPRegex.Replace(cleansed, CleanseRemoteIP);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                cleansed = null;
+
+                return false;
             }
 
-            message = CleanseRemoteIPRegex.Replace(message, CleanseRemoteIP);
-
-            return message;
+            return true;
         }
 
         private static string CleanseRemoteIP(Match match)

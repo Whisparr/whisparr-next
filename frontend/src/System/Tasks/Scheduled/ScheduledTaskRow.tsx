@@ -10,6 +10,7 @@ import { isCommandExecuting } from 'Utilities/Command';
 import formatDate from 'Utilities/Date/formatDate';
 import formatDateTime from 'Utilities/Date/formatDateTime';
 import formatTimeSpan from 'Utilities/Date/formatTimeSpan';
+import translate from 'Utilities/String/translate';
 import styles from './ScheduledTaskRow.module.css';
 
 interface ScheduledTaskRowProps {
@@ -100,6 +101,8 @@ function ScheduledTaskRow(props: Readonly<ScheduledTaskRowProps>) {
     };
   }, [setTime]);
 
+  const runLabel = translate('RunTaskWithName', { name });
+
   return (
     <TableRow>
       <TableRowCell>{name}</TableRowCell>
@@ -152,6 +155,8 @@ function ScheduledTaskRow(props: Readonly<ScheduledTaskRowProps>) {
         <SpinnerIconButton
           name={icons.REFRESH}
           spinningName={icons.REFRESH}
+          title={runLabel}
+          aria-label={runLabel}
           isSpinning={isExecuting}
           onPress={handleExecutePress}
         />

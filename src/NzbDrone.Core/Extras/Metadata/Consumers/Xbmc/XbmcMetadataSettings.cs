@@ -27,7 +27,7 @@ namespace NzbDrone.Core.Extras.Metadata.Consumers.Xbmc
         [FieldDefinition(0, Label = "Movie Metadata", Type = FieldType.Checkbox)]
         public bool MovieMetadata { get; set; }
 
-        [FieldDefinition(1, Label = "Movie Metadata URL", Type = FieldType.Checkbox, HelpText = "Whisparr will write the tmdb/imdb url in the .nfo file", Advanced = true)]
+        [FieldDefinition(1, Label = "Movie Metadata URL", Type = FieldType.Checkbox, HelpText = "Whisparr will write the tmdb/imdb url in the .nfo file")]
         public bool MovieMetadataURL { get; set; }
 
         [FieldDefinition(2, Label = "Metadata Language", Type = FieldType.Select, SelectOptions = typeof(RealLanguageFieldConverter), HelpText = "Whisparr will write metadata in the selected language if available")]

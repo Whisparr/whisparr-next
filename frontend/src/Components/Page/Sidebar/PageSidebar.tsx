@@ -1,3 +1,4 @@
+import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router';
 import QueueStatus from 'Activity/Queue/Status/QueueStatus';
@@ -289,13 +290,15 @@ function hasActiveChildLink(link: SidebarItem, pathname: string) {
 }
 
 interface PageSidebarProps {
-  isSmallScreen: boolean;
+  isSidebarOverlay: boolean;
+  isSidebarCollapsible: boolean;
   isSidebarVisible: boolean;
 }
 
 function PageSidebar({
   isSidebarVisible,
-  isSmallScreen,
+  isSidebarOverlay,
+  isSidebarCollapsible,
 }: Readonly<PageSidebarProps>) {
   const location = useLocation();
   const theme = useTheme();
@@ -423,43 +426,52 @@ function PageSidebar({
   );
 
   const handleItemPress = useCallback(() => {
-    setIsSidebarVisible({ isSidebarVisible: false });
-  }, []);
+    // A collapsible sidebar beside the page stays open while navigating.
+    if (isSidebarOverlay) {
+      setIsSidebarVisible({ isSidebarVisible: false });
+    }
+  }, [isSidebarOverlay]);
 
   const handleSidebarClosePress = useCallback(() => {
     setIsSidebarVisible({ isSidebarVisible: false });
   }, []);
 
   useEffect(() => {
-    if (isSmallScreen) {
+    if (isSidebarOverlay) {
       window.addEventListener('click', handleWindowClick, { capture: true });
     }
 
     return () => {
       window.removeEventListener('click', handleWindowClick, { capture: true });
     };
-  }, [isSmallScreen, handleWindowClick]);
+  }, [isSidebarOverlay, handleWindowClick]);
 
   const containerStyle = useMemo(() => {
-    if (!isSmallScreen) {
+    if (!isSidebarOverlay) {
       return undefined;
     }
 
     return {
       transform: `translateX(${isSidebarVisible ? 0 : SIDEBAR_WIDTH * -1}px)`,
     };
-  }, [isSmallScreen, isSidebarVisible]);
+  }, [isSidebarOverlay, isSidebarVisible]);
 
-  const ScrollerComponent = isSmallScreen ? Scroller : OverlayScroller;
+  const ScrollerComponent = isSidebarOverlay ? Scroller : OverlayScroller;
 
   return (
     <nav
       ref={sidebarRef}
-      className={styles.sidebarContainer}
+      className={classNames(
+        styles.sidebarContainer,
+        isSidebarCollapsible &&
+          !isSidebarOverlay &&
+          !isSidebarVisible &&
+          styles.isCollapsed
+      )}
       style={containerStyle}
       aria-label={translate('MainNavigation')}
     >
-      {isSmallScreen ? (
+      {isSidebarOverlay ? (
         <div className={styles.sidebarHeader}>
           <div className={styles.logoContainer}>
             <Link className={styles.logoLink} to="/">

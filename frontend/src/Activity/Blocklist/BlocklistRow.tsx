@@ -24,7 +24,7 @@ interface BlocklistRowProps extends Blocklist {
   onSelectedChange: (options: SelectStateInputProps) => void;
 }
 
-function BlocklistRow(props: BlocklistRowProps) {
+function BlocklistRow(props: Readonly<BlocklistRowProps>) {
   const {
     id,
     movieId,
@@ -60,6 +60,11 @@ function BlocklistRow(props: BlocklistRowProps) {
   if (!movie) {
     return null;
   }
+
+  const detailsLabel = translate('DetailsForTitle', { title: sourceTitle });
+  const removeLabel = translate('RemoveFromBlocklistWithTitle', {
+    title: sourceTitle,
+  });
 
   return (
     <TableRow>
@@ -131,12 +136,14 @@ function BlocklistRow(props: BlocklistRowProps) {
             <TableRowCell key={name} className={styles.actions}>
               <IconButton
                 name={icons.INFO}
-                aria-label={translate('Details')}
+                title={detailsLabel}
+                aria-label={detailsLabel}
                 onPress={handleDetailsPress}
               />
 
               <IconButton
-                title={translate('RemoveFromBlocklist')}
+                title={removeLabel}
+                aria-label={removeLabel}
                 name={icons.REMOVE}
                 kind={kinds.DANGER}
                 isSpinning={isRemoving}

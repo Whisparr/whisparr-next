@@ -46,7 +46,7 @@ function MovieHistoryRow({
   data,
   downloadId,
   onMarkAsFailedPress,
-}: MovieHistoryRowProps) {
+}: Readonly<MovieHistoryRowProps>) {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isMarkAsFailedModalOpen, setIsMarkAsFailedModalOpen] = useState(false);
 
@@ -70,6 +70,11 @@ function MovieHistoryRow({
   const handleMarkAsFailedModalClose = useCallback(() => {
     setIsMarkAsFailedModalOpen(false);
   }, []);
+
+  const detailsLabel = translate('DetailsForTitle', { title: sourceTitle });
+  const markAsFailedLabel = translate('MarkAsFailedWithTitle', {
+    title: sourceTitle,
+  });
 
   return (
     <TableRow>
@@ -98,13 +103,15 @@ function MovieHistoryRow({
       <TableRowCell className={styles.actions}>
         <IconButton
           name={icons.INFO}
-          aria-label={translate('Details')}
+          title={detailsLabel}
+          aria-label={detailsLabel}
           onPress={handleDetailsPress}
         />
 
         {eventType === 'grabbed' ? (
           <IconButton
-            title={translate('MarkAsFailed')}
+            title={markAsFailedLabel}
+            aria-label={markAsFailedLabel}
             name={icons.REMOVE}
             size={14}
             onPress={handleMarkAsFailedPress}

@@ -40,7 +40,7 @@ import useCalendar, {
 } from './useCalendar';
 import styles from './CalendarPage.module.css';
 
-const MINIMUM_DAY_WIDTH = 120;
+const MINIMUM_DAY_WIDTH = 225;
 
 function useMissingMovieIds() {
   const { start, end } = useCalendarRange();

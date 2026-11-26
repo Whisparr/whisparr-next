@@ -16,10 +16,6 @@ function BackupSettings({
 
   const { backupFolder, backupInterval, backupRetention } = settings;
 
-  if (!advancedSettings) {
-    return null;
-  }
-
   return (
     <FieldSet legend={translate('Backups')}>
       <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
@@ -35,7 +31,7 @@ function BackupSettings({
         />
       </FormGroup>
 
-      <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+      <FormGroup>
         <FormLabel>{translate('Interval')}</FormLabel>
 
         <FormInputGroup
@@ -48,7 +44,7 @@ function BackupSettings({
         />
       </FormGroup>
 
-      <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+      <FormGroup>
         <FormLabel>{translate('Retention')}</FormLabel>
 
         <FormInputGroup

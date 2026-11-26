@@ -29,6 +29,8 @@ function Page({ children }: Readonly<PageProps>) {
 
   const { enableColorImpairedMode } = useUiSettingsValues();
   const isSmallScreen = useAppDimension('isSmallScreen');
+  const isSidebarOverlay = useAppDimension('isSidebarOverlay');
+  const isSidebarCollapsible = useAppDimension('isSidebarCollapsible');
   const { authentication } = useSystemStatusData();
   const authenticationEnabled = authentication !== 'none';
   // Undefined until fetched; the picker waits for a definite `locked: false`.
@@ -91,7 +93,8 @@ function Page({ children }: Readonly<PageProps>) {
 
         <div className={styles.main}>
           <PageSidebar
-            isSmallScreen={isSmallScreen}
+            isSidebarOverlay={isSidebarOverlay}
+            isSidebarCollapsible={isSidebarCollapsible}
             isSidebarVisible={!!isSidebarVisible}
           />
 

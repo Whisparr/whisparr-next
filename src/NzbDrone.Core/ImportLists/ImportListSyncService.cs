@@ -90,7 +90,7 @@ namespace NzbDrone.Core.ImportLists
             ProcessListItems(listItemsResult);
         }
 
-        private void ProcessMovieReport(ImportListDefinition importList, ImportListMovie report, List<ImportListExclusion> listExclusions, HashSet<string> dbMovies, List<Movie> moviesToAdd, Dictionary<string, HashSet<int>> moviesToTag)
+        private void ProcessMovieReport(ImportListDefinition importList, ImportListMovie report, HashSet<string> excludedForeignIds, HashSet<string> dbMovies, OrderedDictionary<string, Movie> moviesToAdd, Dictionary<string, HashSet<int>> moviesToTag)
         {
             if (report.ForeignId.IsNullOrWhiteSpace() || !importList.EnableAuto)
             {
@@ -110,20 +110,16 @@ namespace NzbDrone.Core.ImportLists
             }
 
             // Check to see if movie excluded
-            var excludedMovie = listExclusions.SingleOrDefault(s => s.ForeignId == report.ForeignId);
-
-            if (excludedMovie != null)
+            if (excludedForeignIds.Contains(report.ForeignId))
             {
                 _logger.Debug("{0} [{1}] Rejected due to list exclusion", report.ForeignId, report.Title);
                 return;
             }
 
-            var pendingMovie = moviesToAdd.FirstOrDefault(s => s.ForeignId == report.ForeignId);
-
             // A movie on more than one list is added once, so the lists after the
             // first would otherwise lose their tags. Not gated on TagExisting: the
             // movie is being added now, and every list that asked for it contributed.
-            if (pendingMovie != null)
+            if (moviesToAdd.TryGetValue(report.ForeignId, out var pendingMovie))
             {
                 pendingMovie.Tags.UnionWith(importList.Tags);
                 return;
@@ -131,7 +127,7 @@ namespace NzbDrone.Core.ImportLists
 
             var monitorType = importList.Monitor;
 
-            moviesToAdd.Add(new Movie
+            moviesToAdd.Add(report.ForeignId, new Movie
             {
                 Monitored = monitorType != MonitorTypes.None,
                 RootFolderPath = importList.RootFolderPath,
@@ -155,9 +151,11 @@ namespace NzbDrone.Core.ImportLists
         {
             _logger.Info("Processing {0} movies from {1} lists", listFetchResult.Movies.Count, listFetchResult.SyncedLists);
 
-            var importExclusions = _listExclusionService.GetAllExclusions();
+            var excludedForeignIds = _listExclusionService.GetAllExclusions().Select(e => e.ForeignId).ToHashSet();
             var dbMovies = new HashSet<string>(_movieService.AllMovieForeignIds());
-            var moviesToAdd = new List<Movie>();
+
+            // Keyed on the foreign id, kept in the order the lists produced them.
+            var moviesToAdd = new OrderedDictionary<string, Movie>();
             var moviesToTag = new Dictionary<string, HashSet<int>>();
 
             // Deduplicated within each list rather than across all of them. A movie on two
@@ -173,7 +171,7 @@ namespace NzbDrone.Core.ImportLists
                 {
                     if (movie.ForeignId.IsNotNullOrWhiteSpace())
                     {
-                        ProcessMovieReport(importList, movie, importExclusions, dbMovies, moviesToAdd, moviesToTag);
+                        ProcessMovieReport(importList, movie, excludedForeignIds, dbMovies, moviesToAdd, moviesToTag);
                     }
                 }
             }
@@ -181,7 +179,7 @@ namespace NzbDrone.Core.ImportLists
             if (moviesToAdd.Any())
             {
                 _logger.ProgressInfo("Adding {0} movies from your auto enabled lists to library", moviesToAdd.Count);
-                _addMovieService.AddMovies(moviesToAdd, true);
+                _addMovieService.AddMovies(moviesToAdd.Values.ToList(), true);
             }
 
             TagExistingMovies(moviesToTag);
@@ -340,6 +338,8 @@ namespace NzbDrone.Core.ImportLists
             var listMovies = _listMovieService.GetAllListMovies();
             _logger.Debug("Found {0} movies in lists", listMovies.Count);
 
+            var listForeignIds = listMovies.Select(m => m.ForeignId).ToHashSet();
+
             // TODO use AllMovieTmdbIds here?
             var moviesInLibrary = _movieService.GetAllMovies();
             _logger.Debug("Found {0} movies in library", moviesInLibrary.Count);
@@ -348,7 +348,7 @@ namespace NzbDrone.Core.ImportLists
 
             foreach (var movie in moviesInLibrary)
             {
-                var movieExists = listMovies.Any(c => c.ForeignId == movie.ForeignId);
+                var movieExists = listForeignIds.Contains(movie.ForeignId);
 
                 if (!movieExists)
                 {
