@@ -52,7 +52,7 @@ namespace Whisparr.Http.Authentication
         public static AuthenticationBuilder AddOidc(this AuthenticationBuilder authenticationBuilder, string name)
         {
             authenticationBuilder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
-                .Configure<IConfigFileProvider>((options, configFileProvider) =>
+                .Configure<IConfigFileProvider, IOidcBackchannelLogoutService>((options, configFileProvider, backchannelLogoutService) =>
                 {
                     var instanceName = GetCleanInstanceName(configFileProvider.InstanceName);
 
@@ -60,10 +60,10 @@ namespace Whisparr.Http.Authentication
                     options.AccessDeniedPath = "/login?loginFailed=true";
                     options.LoginPath = "/login";
                     options.ReturnUrlParameter = "returnUrl";
-                    options.ExpireTimeSpan = TimeSpan.FromDays(7);
+                    options.ExpireTimeSpan = AuthenticationConfigurationExtensions.OidcSessionLifetime;
                     options.SlidingExpiration = true;
                     options.Cookie.IsEssential = true;
-                    options.Events.OnValidatePrincipal = context => ValidateOidcPrincipal(context, configFileProvider);
+                    options.Events.OnValidatePrincipal = context => ValidateOidcPrincipal(context, configFileProvider, backchannelLogoutService);
 
                     options.Events.OnRedirectToLogin = context => EventOnRedirectCookiesLogin(context, 401);
                     options.Events.OnRedirectToAccessDenied = context => EventOnRedirectCookiesLogin(context, 403);
@@ -222,13 +222,14 @@ namespace Whisparr.Http.Authentication
             }
         }
 
-        internal static Task ValidateOidcPrincipal(CookieValidatePrincipalContext context, IConfigFileProvider configFileProvider)
+        internal static Task ValidateOidcPrincipal(CookieValidatePrincipalContext context, IConfigFileProvider configFileProvider, IOidcBackchannelLogoutService backchannelLogoutService = null)
         {
             var configuredUser = configFileProvider.OidcUserIdentifier;
 
             if (configFileProvider.EffectiveAuthenticationMethod() == AuthenticationType.Oidc &&
                 configuredUser.IsNotNullOrWhiteSpace() &&
-                string.Equals(context.Principal?.FindFirst("user")?.Value, configuredUser, StringComparison.OrdinalIgnoreCase))
+                string.Equals(context.Principal?.FindFirst("user")?.Value, configuredUser, StringComparison.OrdinalIgnoreCase) &&
+                (backchannelLogoutService == null || !backchannelLogoutService.IsLoggedOut(context.Principal, context.Properties.IssuedUtc)))
             {
                 return Task.CompletedTask;
             }

@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
@@ -246,6 +247,28 @@ namespace NzbDrone.Api.Test.Authentication
             await AuthenticationBuilderExtensions.ValidateOidcPrincipal(context, _config.Object);
 
             context.Principal.Should().BeNull();
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task should_reject_cookie_only_when_logged_out_by_the_provider(bool loggedOut)
+        {
+            var (context, _) = GivenCookie(ConfiguredUser);
+
+            var backchannel = new Mock<IOidcBackchannelLogoutService>();
+            backchannel.Setup(s => s.IsLoggedOut(It.IsAny<ClaimsPrincipal>(), It.IsAny<DateTimeOffset?>()))
+                       .Returns(loggedOut);
+
+            await AuthenticationBuilderExtensions.ValidateOidcPrincipal(context, _config.Object, backchannel.Object);
+
+            if (loggedOut)
+            {
+                context.Principal.Should().BeNull();
+            }
+            else
+            {
+                context.Principal.Should().NotBeNull();
+            }
         }
     }
 }

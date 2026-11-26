@@ -165,5 +165,20 @@ namespace NzbDrone.Api.Test.Authentication
             _auth.Verify(a => a.SignOutAsync(It.IsAny<HttpContext>(), "Forms", It.IsAny<AuthenticationProperties>()), Times.Once());
             _auth.Verify(a => a.SignOutAsync(It.IsAny<HttpContext>(), "Cookies", It.IsAny<AuthenticationProperties>()), Times.Once());
         }
+
+        // BackchannelLogout
+
+        [TestCase(true, typeof(OkResult))]
+        [TestCase(false, typeof(BadRequestResult))]
+        public async Task backchannel_logout_should_report_whether_the_token_was_accepted(bool accepted, Type expected)
+        {
+            Mocker.GetMock<IOidcBackchannelLogoutService>()
+                  .Setup(s => s.LogoutAsync("token", It.IsAny<System.Threading.CancellationToken>()))
+                  .ReturnsAsync(accepted);
+
+            var result = await Subject.BackchannelLogout("token");
+
+            result.Should().BeOfType(expected);
+        }
     }
 }
