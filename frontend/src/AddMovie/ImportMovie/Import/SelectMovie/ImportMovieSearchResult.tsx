@@ -7,6 +7,7 @@ import {
   sceneSourceLink,
   translateSourceLabel,
 } from 'Utilities/MetadataSource/sourceLinks';
+import translate from 'Utilities/String/translate';
 import { MovieLookupResult } from '../../ImportMovieTypes';
 import ImportMovieTitle from './ImportMovieTitle';
 import styles from './ImportMovieSearchResult.module.css';
@@ -73,6 +74,14 @@ function ImportMovieSearchResult({
         <Link
           className={styles.tmdbLink}
           to={`https://www.themoviedb.org/movie/${tmdbId}`}
+          title={translate('ViewTitleOnSource', {
+            title,
+            source: translate('TMDb'),
+          })}
+          aria-label={translate('ViewTitleOnSource', {
+            title,
+            source: translate('TMDb'),
+          })}
         >
           <Icon
             className={styles.tmdbLinkIcon}
@@ -86,6 +95,14 @@ function ImportMovieSearchResult({
         <Link
           className={styles.tpdbLink}
           to={`https://theporndb.net/movies/${tpdbId}`}
+          title={translate('ViewTitleOnSource', {
+            title,
+            source: translate('TPDb'),
+          })}
+          aria-label={translate('ViewTitleOnSource', {
+            title,
+            source: translate('TPDb'),
+          })}
         >
           <Icon
             className={styles.tpdbLinkIcon}
@@ -99,7 +116,14 @@ function ImportMovieSearchResult({
         <Link
           className={styles.stashdbLink}
           to={sceneLink.url}
-          title={translateSourceLabel(sceneLink.label)}
+          title={translate('ViewTitleOnSource', {
+            title,
+            source: translateSourceLabel(sceneLink.label),
+          })}
+          aria-label={translate('ViewTitleOnSource', {
+            title,
+            source: translateSourceLabel(sceneLink.label),
+          })}
         >
           <Icon
             className={styles.stashdbLinkIcon}

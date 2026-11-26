@@ -60,6 +60,8 @@ function AddNewMovie() {
 
           <Button
             className={styles.clearLookupButton}
+            title={translate('ClearSearch')}
+            aria-label={translate('ClearSearch')}
             onPress={onClearMovieLookupPress}
           >
             <Icon name={icons.REMOVE} size={20} />

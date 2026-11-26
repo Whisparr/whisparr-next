@@ -57,6 +57,8 @@ function AddNewJav() {
 
           <Button
             className={styles.clearLookupButton}
+            title={translate('ClearSearch')}
+            aria-label={translate('ClearSearch')}
             onPress={onClearLookupPress}
           >
             <Icon name={icons.REMOVE} size={20} />
