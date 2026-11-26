@@ -33,7 +33,7 @@ interface SortableHandleButtonProps extends ButtonHTMLAttributes<HTMLButtonEleme
 function SortableHandleButton({
   onPress,
   ...props
-}: SortableHandleButtonProps) {
+}: Readonly<SortableHandleButtonProps>) {
   const handleClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -50,7 +50,7 @@ function SortableHandle({
   handleRef,
   label,
   options,
-}: SortableHandleProps) {
+}: Readonly<SortableHandleProps>) {
   return (
     <div className={classNames(styles.controls, className)}>
       <span
