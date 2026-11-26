@@ -184,7 +184,7 @@ function QueueRow(props: QueueRowProps) {
 
         if (name === 'movies.sortTitle') {
           return (
-            <TableRowCell key={name}>
+            <TableRowCell key={name} className={styles.movie}>
               {movie ? (
                 <MovieTitleLink
                   titleSlug={movie.titleSlug}
