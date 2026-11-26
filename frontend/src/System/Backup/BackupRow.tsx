@@ -23,7 +23,14 @@ interface BackupRowProps {
   time: string;
 }
 
-function BackupRow({ id, type, name, path, size, time }: BackupRowProps) {
+function BackupRow({
+  id,
+  type,
+  name,
+  path,
+  size,
+  time,
+}: Readonly<BackupRowProps>) {
   const { deleteBackup } = useDeleteBackup(id);
 
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
@@ -75,6 +82,9 @@ function BackupRow({ id, type, name, path, size, time }: BackupRowProps) {
     });
   }, [deleteBackup]);
 
+  const restoreLabel = translate('RestoreBackupWithName', { name });
+  const deleteLabel = translate('DeleteBackupWithName', { name });
+
   return (
     <TableRow key={id}>
       <TableRowCell className={styles.type}>
@@ -93,13 +103,15 @@ function BackupRow({ id, type, name, path, size, time }: BackupRowProps) {
 
       <TableRowCell className={styles.actions}>
         <IconButton
-          title={translate('RestoreBackup')}
+          title={restoreLabel}
+          aria-label={restoreLabel}
           name={icons.RESTORE}
           onPress={handleRestorePress}
         />
 
         <IconButton
-          title={translate('DeleteBackup')}
+          title={deleteLabel}
+          aria-label={deleteLabel}
           name={icons.DELETE}
           onPress={handleDeletePress}
         />
@@ -115,7 +127,7 @@ function BackupRow({ id, type, name, path, size, time }: BackupRowProps) {
       <ConfirmModal
         isOpen={isConfirmDeleteModalOpen}
         kind={kinds.DANGER}
-        title={translate('DeleteBackup')}
+        title={deleteLabel}
         message={translate('DeleteBackupMessageText', {
           name,
         })}
