@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -20,11 +19,6 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
     [TestFixture]
     public class TrackedDownloadServiceFixture : CoreTest<TrackedDownloadService>
     {
-        [SetUp]
-        public void Setup()
-        {
-        }
-
         private void GivenDownloadHistory()
         {
             Mocker.GetMock<IHistoryService>()
@@ -140,7 +134,7 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
 
             var trackedDownloads = Subject.GetTrackedDownloads();
             trackedDownloads.Should().HaveCount(1);
-            trackedDownloads.First().RemoteMovie.Should().BeNull();
+            trackedDownloads[0].RemoteMovie.Should().BeNull();
         }
 
         [Test]
@@ -198,7 +192,7 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
                 new Movie() { Id = 11, TmdbId = 77 }
             }));
 
-            Subject.GetTrackedDownloads().First().RemoteMovie.Should().BeNull();
+            Subject.GetTrackedDownloads()[0].RemoteMovie.Should().BeNull();
 
             Mocker.GetMock<IEventAggregator>()
                   .Verify(v => v.PublishEvent(It.IsAny<TrackedDownloadRefreshedEvent>()), Times.Once());
@@ -252,7 +246,7 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
             // A TMDb id of 0 means "none" and must not match the cached movie's 0.
             Subject.HandleAsync(new MoviesBulkEditedEvent(new List<Movie> { new Movie() { Id = 10 } }));
 
-            Subject.GetTrackedDownloads().First().RemoteMovie.Should().NotBeNull();
+            Subject.GetTrackedDownloads()[0].RemoteMovie.Should().NotBeNull();
 
             Mocker.GetMock<IEventAggregator>()
                   .Verify(v => v.PublishEvent(It.IsAny<TrackedDownloadRefreshedEvent>()), Times.Never());
@@ -312,7 +306,7 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
 
             var trackedDownloads = Subject.GetTrackedDownloads();
             trackedDownloads.Should().HaveCount(1);
-            trackedDownloads.First().RemoteMovie.Should().BeNull();
+            trackedDownloads[0].RemoteMovie.Should().BeNull();
         }
 
         [Test]

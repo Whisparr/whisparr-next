@@ -106,7 +106,7 @@ namespace NzbDrone.Core.Localization
             return language;
         }
 
-        private string ReplaceTokens(string input, Dictionary<string, object> tokens)
+        private static string ReplaceTokens(string input, Dictionary<string, object> tokens)
         {
             tokens.TryAdd("appName", "Whisparr");
 
@@ -135,7 +135,6 @@ namespace NzbDrone.Core.Localization
             var startupFolder = _appFolderInfo.StartUpFolder;
 
             var prefix = Path.Combine(startupFolder, "Localization", "Core");
-            var key = prefix + language;
 
             // Read fresh in a debug build, so an en.json edit shows up without a restart.
             if (BuildInfo.IsDebug)

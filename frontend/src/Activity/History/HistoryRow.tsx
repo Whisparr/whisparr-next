@@ -41,7 +41,7 @@ export interface HistoryRowProps {
   onMarkAsFailedPress?: () => void;
 }
 
-function HistoryRow(props: HistoryRowProps) {
+function HistoryRow(props: Readonly<HistoryRowProps>) {
   const {
     id,
     movieId,

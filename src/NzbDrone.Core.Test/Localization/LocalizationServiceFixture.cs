@@ -79,6 +79,8 @@ namespace NzbDrone.Core.Test.Localization
         [Test]
         public void should_return_argument_if_string_doesnt_exists_default_lang()
         {
+            Mocker.GetMock<IConfigService>().Setup(m => m.UILanguage).Returns((int)Language.English);
+
             var localizedString = Subject.GetLocalizedString("badString");
 
             localizedString.Should().Be("badString");

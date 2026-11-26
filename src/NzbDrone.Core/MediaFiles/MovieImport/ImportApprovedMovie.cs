@@ -27,6 +27,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
     public class ImportApprovedMovie : IImportApprovedMovie
     {
+        private const string ImportFailedLogMessage = "Couldn't import movie {0}";
+
         private readonly IUpgradeMediaFiles _movieFileUpgrader;
         private readonly IMediaFileService _mediaFileService;
         private readonly IExtraService _extraService;
@@ -210,14 +212,14 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 }
                 catch (RootFolderNotFoundException e)
                 {
-                    _logger.Warn(e, "Couldn't import movie " + localMovie);
+                    _logger.Warn(e, ImportFailedLogMessage, localMovie);
                     _eventAggregator.PublishEvent(new MovieImportFailedEvent(e, localMovie, newDownload, downloadClientItem));
 
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie, Root folder missing."));
                 }
                 catch (DestinationAlreadyExistsException e)
                 {
-                    _logger.Warn(e, "Couldn't import movie " + localMovie);
+                    _logger.Warn(e, ImportFailedLogMessage, localMovie);
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie, Destination already exists."));
 
                     // A rescan can link an untracked file at the destination, never one a scene already tracks. The download is
@@ -239,21 +241,21 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 }
                 catch (RecycleBinException e)
                 {
-                    _logger.Warn(e, "Couldn't import movie " + localMovie);
+                    _logger.Warn(e, ImportFailedLogMessage, localMovie);
                     _eventAggregator.PublishEvent(new MovieImportFailedEvent(e, localMovie, newDownload, downloadClientItem));
 
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie, unable to move existing file to the Recycle Bin."));
                 }
                 catch (UnauthorizedAccessException e)
                 {
-                    _logger.Warn(e, "Couldn't import movie " + localMovie);
+                    _logger.Warn(e, ImportFailedLogMessage, localMovie);
                     _eventAggregator.PublishEvent(new MovieImportFailedEvent(e, localMovie, newDownload, downloadClientItem));
 
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie due to permission issues.", e.Message));
                 }
                 catch (Exception e)
                 {
-                    _logger.Warn(e, "Couldn't import movie " + localMovie);
+                    _logger.Warn(e, ImportFailedLogMessage, localMovie);
                     importResults.Add(new ImportResult(importDecision, "Failed to import movie", e.Message));
                 }
             }

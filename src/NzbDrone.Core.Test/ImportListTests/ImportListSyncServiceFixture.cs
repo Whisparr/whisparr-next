@@ -184,7 +184,7 @@ namespace NzbDrone.Core.Test.ImportList
                         .Returns(new List<Movie> { movie });
             }
 
-            private Mock<IImportList> CreateListResult(int id, bool enabledAuto)
+            private void CreateListResult(int id, bool enabledAuto)
             {
                   var importListDefinition = new ImportListDefinition { Id = id, EnableAuto = enabledAuto };
 
@@ -194,8 +194,6 @@ namespace NzbDrone.Core.Test.ImportList
                   mockImportList.SetupGet(s => s.EnableAuto).Returns(enabledAuto);
 
                   _importLists.Add(mockImportList.Object);
-
-                  return mockImportList;
             }
 
             [Test]

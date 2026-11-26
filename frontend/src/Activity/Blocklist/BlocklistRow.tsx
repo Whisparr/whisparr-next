@@ -24,7 +24,7 @@ interface BlocklistRowProps extends Blocklist {
   onSelectedChange: (options: SelectStateInputProps) => void;
 }
 
-function BlocklistRow(props: BlocklistRowProps) {
+function BlocklistRow(props: Readonly<BlocklistRowProps>) {
   const {
     id,
     movieId,
