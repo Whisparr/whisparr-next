@@ -8,6 +8,7 @@ using NzbDrone.Core.Download.History;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.History;
 using NzbDrone.Core.Indexers;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Parser;
@@ -140,6 +141,121 @@ namespace NzbDrone.Core.Test.Download.TrackedDownloads
             var trackedDownloads = Subject.GetTrackedDownloads();
             trackedDownloads.Should().HaveCount(1);
             trackedDownloads.First().RemoteMovie.Should().BeNull();
+        }
+
+        [Test]
+        public void should_remap_tracked_download_when_any_bulk_edited_movie_matches_by_tmdb_id()
+        {
+            GivenDownloadHistory();
+
+            var remoteMovie = new RemoteMovie
+            {
+                Movie = new Movie() { Id = 3, TmdbId = 77 },
+
+                ParsedMovieInfo = new ParsedMovieInfo()
+                {
+                    MovieTitles = { "A Movie" },
+                    Year = 1998
+                }
+            };
+
+            Mocker.GetMock<IParsingService>()
+                  .Setup(s => s.Map(It.IsAny<ParsedMovieInfo>(), It.IsAny<string>(), It.IsAny<int>(), null))
+                  .Returns(remoteMovie);
+
+            Mocker.GetMock<IHistoryService>()
+                  .Setup(s => s.FindByDownloadId(It.IsAny<string>()))
+                  .Returns(new List<MovieHistory>());
+
+            var client = new DownloadClientDefinition()
+            {
+                Id = 1,
+                Protocol = DownloadProtocol.Torrent
+            };
+
+            var item = new DownloadClientItem()
+            {
+                Title = "A Movie 1998",
+                DownloadId = "12345",
+                DownloadClientInfo = new DownloadClientItemClientInfo
+                {
+                    Id = 1,
+                    Type = "Blackhole",
+                    Name = "Blackhole Client",
+                    Protocol = DownloadProtocol.Torrent
+                }
+            };
+
+            Subject.TrackDownload(client, item);
+
+            Mocker.GetMock<IParsingService>()
+                  .Setup(s => s.Map(It.IsAny<ParsedMovieInfo>(), It.IsAny<string>(), It.IsAny<int>(), null))
+                  .Returns(default(RemoteMovie));
+
+            Subject.HandleAsync(new MoviesBulkEditedEvent(new List<Movie>
+            {
+                new Movie() { Id = 10 },
+                new Movie() { Id = 11, TmdbId = 77 }
+            }));
+
+            Subject.GetTrackedDownloads().First().RemoteMovie.Should().BeNull();
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<TrackedDownloadRefreshedEvent>()), Times.Once());
+        }
+
+        [Test]
+        public void should_not_remap_tracked_download_when_no_bulk_edited_movie_matches()
+        {
+            GivenDownloadHistory();
+
+            var remoteMovie = new RemoteMovie
+            {
+                Movie = new Movie() { Id = 3 },
+
+                ParsedMovieInfo = new ParsedMovieInfo()
+                {
+                    MovieTitles = { "A Movie" },
+                    Year = 1998
+                }
+            };
+
+            Mocker.GetMock<IParsingService>()
+                  .Setup(s => s.Map(It.IsAny<ParsedMovieInfo>(), It.IsAny<string>(), It.IsAny<int>(), null))
+                  .Returns(remoteMovie);
+
+            Mocker.GetMock<IHistoryService>()
+                  .Setup(s => s.FindByDownloadId(It.IsAny<string>()))
+                  .Returns(new List<MovieHistory>());
+
+            var client = new DownloadClientDefinition()
+            {
+                Id = 1,
+                Protocol = DownloadProtocol.Torrent
+            };
+
+            var item = new DownloadClientItem()
+            {
+                Title = "A Movie 1998",
+                DownloadId = "12345",
+                DownloadClientInfo = new DownloadClientItemClientInfo
+                {
+                    Id = 1,
+                    Type = "Blackhole",
+                    Name = "Blackhole Client",
+                    Protocol = DownloadProtocol.Torrent
+                }
+            };
+
+            Subject.TrackDownload(client, item);
+
+            // A TMDb id of 0 means "none" and must not match the cached movie's 0.
+            Subject.HandleAsync(new MoviesBulkEditedEvent(new List<Movie> { new Movie() { Id = 10 } }));
+
+            Subject.GetTrackedDownloads().First().RemoteMovie.Should().NotBeNull();
+
+            Mocker.GetMock<IEventAggregator>()
+                  .Verify(v => v.PublishEvent(It.IsAny<TrackedDownloadRefreshedEvent>()), Times.Never());
         }
 
         [Test]
