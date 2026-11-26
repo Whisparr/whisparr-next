@@ -3,14 +3,23 @@ import { useShallow } from 'zustand/react/shallow';
 import fetchJson from 'Utilities/Fetch/fetchJson';
 import getQueryPath from 'Utilities/Fetch/getQueryPath';
 
+// Keep in sync with --sidebarOverlay in breakpoints.css.
+const SIDEBAR_OVERLAY_MAX_HEIGHT = 500;
+
 function getDimensions(width: number, height: number) {
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+  const isSmallScreen = width <= 768;
+
   return {
     width,
     height,
     isExtraSmallScreen: width <= 480,
-    isSmallScreen: width <= 768,
+    isSmallScreen,
     isMediumScreen: width <= 992,
     isLargeScreen: width <= 1200,
+    isSidebarCollapsible: isSmallScreen || isTouch,
+    isSidebarOverlay:
+      isSmallScreen || (isTouch && height <= SIDEBAR_OVERLAY_MAX_HEIGHT),
   };
 }
 
@@ -21,6 +30,8 @@ export interface Dimensions {
   isSmallScreen: boolean;
   isMediumScreen: boolean;
   isLargeScreen: boolean;
+  isSidebarCollapsible: boolean;
+  isSidebarOverlay: boolean;
 }
 
 interface AppStoreState {
@@ -49,7 +60,7 @@ const useAppStore = create<AppStoreState>()(() => {
     isReconnecting: false,
     isDisconnected: false,
     isRestarting: false,
-    isSidebarVisible: !dimensions.isSmallScreen,
+    isSidebarVisible: !dimensions.isSidebarOverlay,
   };
 });
 
@@ -92,7 +103,16 @@ export const saveDimensions = ({
   width: number;
   height: number;
 }) => {
-  useAppStore.setState({ dimensions: getDimensions(width, height) });
+  const dimensions = getDimensions(width, height);
+
+  // Crossing into or out of overlay mode resets the sidebar to that mode's default.
+  useAppStore.setState((state) => {
+    if (state.dimensions.isSidebarOverlay === dimensions.isSidebarOverlay) {
+      return { dimensions };
+    }
+
+    return { dimensions, isSidebarVisible: !dimensions.isSidebarOverlay };
+  });
 };
 
 export const setVersion = ({ version }: { version: string }) => {
