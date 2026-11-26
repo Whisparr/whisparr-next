@@ -71,12 +71,13 @@ namespace NzbDrone.Core.DecisionEngine
             foreach (var report in reports)
             {
                 DownloadDecision decision = null;
+                ParsedMovieInfo parsedMovieInfo = null;
                 _logger.ProgressTrace("Processing release {0}/{1}", reportNumber, reports.Count);
                 _logger.Debug("Processing release '{0}' from '{1}'", report.Title, report.Indexer);
 
                 try
                 {
-                    var parsedMovieInfo = Parser.Parser.ParseMovieTitle(report.Title);
+                    parsedMovieInfo = Parser.Parser.ParseMovieTitle(report.Title);
 
                     if (parsedMovieInfo != null && ((!parsedMovieInfo.PrimaryMovieTitle.IsNullOrWhiteSpace() && !parsedMovieInfo.IsScene) || (!parsedMovieInfo.StudioTitle.IsNullOrWhiteSpace() && parsedMovieInfo.IsScene) || (!parsedMovieInfo.Code.IsNullOrWhiteSpace() && parsedMovieInfo.IsScene)))
                     {
@@ -130,7 +131,21 @@ namespace NzbDrone.Core.DecisionEngine
                 {
                     _logger.Error(e, "Couldn't process release.");
 
-                    var remoteMovie = new RemoteMovie { Release = report };
+                    // The release resource reads quality and languages from the parsed info, and one
+                    // release without it would fail the whole search.
+                    parsedMovieInfo ??= new ParsedMovieInfo
+                    {
+                        Languages = LanguageParser.ParseLanguages(report.Title),
+                        Quality = QualityParser.ParseQuality(report.Title)
+                    };
+
+                    var remoteMovie = new RemoteMovie
+                    {
+                        Release = report,
+                        ParsedMovieInfo = parsedMovieInfo,
+                        Languages = parsedMovieInfo.Languages
+                    };
+
                     decision = new DownloadDecision(remoteMovie, new DownloadRejection(DownloadRejectionReason.Error, "Unexpected error processing release"));
                 }
 

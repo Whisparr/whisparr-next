@@ -9,6 +9,7 @@ using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -238,6 +239,31 @@ namespace NzbDrone.Core.Test.DecisionEngineTests
                 };
 
             Subject.GetRssDecision(_reports).Should().HaveCount(1);
+
+            ExceptionVerification.ExpectedErrors(1);
+        }
+
+        // The release resource reads quality and titles from the parsed info, so a decision without it
+        // failed the whole interactive search instead of listing one rejected release.
+        [Test]
+        public void should_include_parsed_movie_info_when_exception_is_caught()
+        {
+            GivenSpecifications(_pass1);
+
+            Mocker.GetMock<IParsingService>().Setup(c => c.Map(It.IsAny<ParsedMovieInfo>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<SearchCriteriaBase>()))
+                     .Throws<TestException>();
+
+            _reports = new List<ReleaseInfo>
+                {
+                    new ReleaseInfo { Title = "Trolls.2016.720p.WEB-DL.DD5.1.H264-FGT" },
+                };
+
+            var result = Subject.GetRssDecision(_reports);
+
+            result.Should().HaveCount(1);
+            result[0].RemoteMovie.ParsedMovieInfo.Should().NotBeNull();
+            result[0].RemoteMovie.ParsedMovieInfo.Quality.Quality.Should().Be(Quality.WEBDL720p);
+            result[0].RemoteMovie.Languages.Should().BeSameAs(result[0].RemoteMovie.ParsedMovieInfo.Languages);
 
             ExceptionVerification.ExpectedErrors(1);
         }

@@ -195,6 +195,35 @@ namespace NzbDrone.Api.Test.v3.Indexers
             Mocker.GetMock<IHistoryService>().Verify(s => s.FindByMovieId(It.IsAny<int>()), Times.Never());
         }
 
+        [Test]
+        public async Task should_list_a_release_that_failed_processing()
+        {
+            var release = new ReleaseInfo
+            {
+                Guid = "guid-1",
+                Title = "Studio.26.09.13.Performer.Scene.1080p.WEB-DL",
+                Indexer = "Indexer",
+                PublishDate = new DateTime(2026, 9, 13, 12, 0, 0, DateTimeKind.Utc),
+                DownloadProtocol = DownloadProtocol.Usenet
+            };
+
+            // The shape DownloadDecisionMaker gives a release that threw while being processed.
+            var parsedMovieInfo = new ParsedMovieInfo
+            {
+                Languages = new List<Language> { Language.English },
+                Quality = new QualityModel(Quality.WEBDL1080p)
+            };
+
+            _decisions.Add(new DownloadDecision(
+                new RemoteMovie { Release = release, ParsedMovieInfo = parsedMovieInfo, Languages = parsedMovieInfo.Languages },
+                new DownloadRejection(DownloadRejectionReason.Error, "Unexpected error processing release")));
+
+            var resource = await GetOnlyRelease();
+
+            resource.Quality.Quality.Should().Be(Quality.WEBDL1080p);
+            resource.Rejections.Should().Equal("Unexpected error processing release");
+        }
+
         private void GivenUsenetRelease(string guid, string infoUrl = null)
         {
             var release = new ReleaseInfo
