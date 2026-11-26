@@ -16,13 +16,11 @@ public class CleansingConsoleLogLayout : Layout
     protected override string GetFormattedMessage(LogEventInfo logEvent)
     {
         var simpleLayout = new SimpleLayout(_format);
-        var result = simpleLayout.Render(logEvent);
-
-        if (RuntimeInfo.IsProduction)
+        if (!RuntimeInfo.IsProduction)
         {
-            result = CleanseLogMessage.Cleanse(result);
+            return simpleLayout.Render(logEvent);
         }
 
-        return result;
+        return CleanseLogMessage.Cleanse(logEvent, simpleLayout.Render);
     }
 }
