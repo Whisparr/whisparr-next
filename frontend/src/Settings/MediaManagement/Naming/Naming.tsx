@@ -333,11 +333,7 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
             </FormGroup>
           ) : null}
 
-          <FormGroup
-            advancedSettings={advancedSettings}
-            isAdvanced={true}
-            size={sizes.LARGE}
-          >
+          <FormGroup size={sizes.LARGE}>
             <FormLabel>{translate('MovieFolderFormat')}</FormLabel>
 
             <FormInputGroup
@@ -407,11 +403,7 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
           ) : null}
 
           {javAvailable ? (
-            <FormGroup
-              advancedSettings={advancedSettings}
-              isAdvanced={true}
-              size={sizes.LARGE}
-            >
+            <FormGroup size={sizes.LARGE}>
               <FormLabel>{translate('JavFolderFormat')}</FormLabel>
               <FormInputGroup
                 inputClassName={styles.namingInput}
@@ -428,11 +420,7 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
             </FormGroup>
           ) : null}
 
-          <FormGroup
-            advancedSettings={advancedSettings}
-            isAdvanced={true}
-            size={sizes.LARGE}
-          >
+          <FormGroup size={sizes.LARGE}>
             <FormLabel>{translate('SceneFolderFormat')}</FormLabel>
             <FormInputGroup
               inputClassName={styles.namingInput}
@@ -456,11 +444,7 @@ function Naming({ setChildSave, onChildStateChange }: Readonly<NamingProps>) {
             />
           </FormGroup>
 
-          <FormGroup
-            advancedSettings={advancedSettings}
-            isAdvanced={true}
-            size={sizes.MEDIUM}
-          >
+          <FormGroup size={sizes.MEDIUM}>
             <FormLabel>{translate('SceneImportFolderFormat')}</FormLabel>
             <FormInputGroup
               inputClassName={styles.namingInput}

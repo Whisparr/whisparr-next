@@ -163,212 +163,185 @@ function MediaManagement() {
             validationErrors={validationErrors}
             validationWarnings={validationWarnings}
           >
-            {showAdvancedSettings ? (
-              <FieldSet legend={translate('Folders')}>
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>{translate('CreateEmptyMovieFolders')}</FormLabel>
+            <FieldSet legend={translate('Folders')}>
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('CreateEmptyMovieFolders')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    isDisabled={
-                      settings.deleteEmptyFolders.value &&
-                      !settings.createEmptyMovieFolders.value
-                    }
-                    name="createEmptyMovieFolders"
-                    helpText={translate('CreateEmptyMovieFoldersHelpText')}
-                    onChange={handleInputChange}
-                    {...settings.createEmptyMovieFolders}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  isDisabled={
+                    settings.deleteEmptyFolders.value &&
+                    !settings.createEmptyMovieFolders.value
+                  }
+                  name="createEmptyMovieFolders"
+                  helpText={translate('CreateEmptyMovieFoldersHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.createEmptyMovieFolders}
+                />
+              </FormGroup>
 
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>{translate('DeleteEmptyFolders')}</FormLabel>
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('DeleteEmptyFolders')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    isDisabled={
-                      settings.createEmptyMovieFolders.value &&
-                      !settings.deleteEmptyFolders.value
-                    }
-                    name="deleteEmptyFolders"
-                    helpText={translate('DeleteEmptyMovieFoldersHelpText')}
-                    onChange={handleInputChange}
-                    {...settings.deleteEmptyFolders}
-                  />
-                </FormGroup>
-              </FieldSet>
-            ) : null}
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  isDisabled={
+                    settings.createEmptyMovieFolders.value &&
+                    !settings.deleteEmptyFolders.value
+                  }
+                  name="deleteEmptyFolders"
+                  helpText={translate('DeleteEmptyMovieFoldersHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.deleteEmptyFolders}
+                />
+              </FormGroup>
+            </FieldSet>
 
-            {showAdvancedSettings ? (
-              <FieldSet legend={translate('Importing')}>
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>
-                    {translate('SkipFreeSpaceCheckWhenGrabbing')}
-                  </FormLabel>
+            <FieldSet legend={translate('Importing')}>
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>
+                  {translate('SkipFreeSpaceCheckWhenGrabbing')}
+                </FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    name="skipFreeSpaceCheckWhenGrabbing"
-                    helpText={translate(
-                      'SkipFreeSpaceCheckWhenGrabbingHelpText'
-                    )}
-                    onChange={handleInputChange}
-                    {...settings.skipFreeSpaceCheckWhenGrabbing}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="skipFreeSpaceCheckWhenGrabbing"
+                  helpText={translate('SkipFreeSpaceCheckWhenGrabbingHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.skipFreeSpaceCheckWhenGrabbing}
+                />
+              </FormGroup>
 
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>
-                    {translate('SkipFreeSpaceCheckWhenImporting')}
-                  </FormLabel>
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>
+                  {translate('SkipFreeSpaceCheckWhenImporting')}
+                </FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    name="skipFreeSpaceCheckWhenImporting"
-                    helpText={translate(
-                      'SkipFreeSpaceCheckWhenImportingHelpText'
-                    )}
-                    onChange={handleInputChange}
-                    {...settings.skipFreeSpaceCheckWhenImporting}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="skipFreeSpaceCheckWhenImporting"
+                  helpText={translate(
+                    'SkipFreeSpaceCheckWhenImportingHelpText'
+                  )}
+                  onChange={handleInputChange}
+                  {...settings.skipFreeSpaceCheckWhenImporting}
+                />
+              </FormGroup>
 
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>{translate('MinimumFreeSpace')}</FormLabel>
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('MinimumFreeSpace')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.NUMBER}
-                    unit="MB"
-                    name="minimumFreeSpaceWhenImporting"
-                    helpText={translate('MinimumFreeSpaceHelpText')}
-                    onChange={handleInputChange}
-                    {...settings.minimumFreeSpaceWhenImporting}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.NUMBER}
+                  unit="MB"
+                  name="minimumFreeSpaceWhenImporting"
+                  helpText={translate('MinimumFreeSpaceHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.minimumFreeSpaceWhenImporting}
+                />
+              </FormGroup>
 
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>
-                    {translate('UseHardlinksInsteadOfCopy')}
-                  </FormLabel>
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('UseHardlinksInsteadOfCopy')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    name="copyUsingHardlinks"
-                    helpText={translate('CopyUsingHardlinksMovieHelpText')}
-                    helpTextWarning={translate(
-                      'CopyUsingHardlinksHelpTextWarning'
-                    )}
-                    onChange={handleInputChange}
-                    {...settings.copyUsingHardlinks}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="copyUsingHardlinks"
+                  helpText={translate('CopyUsingHardlinksMovieHelpText')}
+                  helpTextWarning={translate(
+                    'CopyUsingHardlinksHelpTextWarning'
+                  )}
+                  onChange={handleInputChange}
+                  {...settings.copyUsingHardlinks}
+                />
+              </FormGroup>
 
-                <FormGroup
-                  advancedSettings={showAdvancedSettings}
-                  isAdvanced={true}
-                  size={sizes.MEDIUM}
-                >
-                  <FormLabel>{translate('ImportUsingScript')}</FormLabel>
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('ImportUsingScript')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.CHECK}
-                    name="useScriptImport"
-                    helpText={translate('ImportUsingScriptHelpText')}
-                    onChange={handleInputChange}
-                    {...settings.useScriptImport}
-                  />
-                </FormGroup>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="useScriptImport"
+                  helpText={translate('ImportUsingScriptHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.useScriptImport}
+                />
+              </FormGroup>
 
-                {settings.useScriptImport.value ? (
-                  <FormGroup
-                    advancedSettings={showAdvancedSettings}
-                    isAdvanced={true}
-                  >
-                    <FormLabel>{translate('ImportScriptPath')}</FormLabel>
-
-                    <FormInputGroup
-                      type={inputTypes.PATH}
-                      includeFiles={true}
-                      name="scriptImportPath"
-                      helpText={translate('ImportScriptPathHelpText')}
-                      onChange={handleInputChange}
-                      {...settings.scriptImportPath}
-                    />
-                  </FormGroup>
-                ) : null}
-
+              {settings.useScriptImport.value ? (
                 <FormGroup
                   advancedSettings={showAdvancedSettings}
                   isAdvanced={true}
                 >
-                  <FormLabel>{translate('WhisparrFolderLimit')}</FormLabel>
+                  <FormLabel>{translate('ImportScriptPath')}</FormLabel>
 
                   <FormInputGroup
-                    type={inputTypes.NUMBER}
-                    name="whisparrFolderLimit"
-                    helpText={translate('WhisparrFolderLimitHelpText')}
+                    type={inputTypes.PATH}
+                    includeFiles={true}
+                    name="scriptImportPath"
+                    helpText={translate('ImportScriptPathHelpText')}
                     onChange={handleInputChange}
-                    {...settings.whisparrFolderLimit}
+                    {...settings.scriptImportPath}
                   />
                 </FormGroup>
+              ) : null}
 
-                <FormGroup size={sizes.MEDIUM}>
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+              >
+                <FormLabel>{translate('WhisparrFolderLimit')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.NUMBER}
+                  name="whisparrFolderLimit"
+                  helpText={translate('WhisparrFolderLimitHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.whisparrFolderLimit}
+                />
+              </FormGroup>
+
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('ImportExtraFiles')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="importExtraFiles"
+                  helpText={translate('ImportExtraFilesMovieHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.importExtraFiles}
+                />
+              </FormGroup>
+
+              {settings.importExtraFiles.value ? (
+                <FormGroup>
                   <FormLabel>{translate('ImportExtraFiles')}</FormLabel>
 
                   <FormInputGroup
-                    type={inputTypes.CHECK}
-                    name="importExtraFiles"
-                    helpText={translate('ImportExtraFilesMovieHelpText')}
+                    type={inputTypes.TEXT}
+                    name="extraFileExtensions"
+                    helpTexts={[
+                      translate('ExtraFileExtensionsHelpText'),
+                      translate('ExtraFileExtensionsHelpTextsExamples'),
+                    ]}
                     onChange={handleInputChange}
-                    {...settings.importExtraFiles}
+                    {...settings.extraFileExtensions}
                   />
                 </FormGroup>
-
-                {settings.importExtraFiles.value ? (
-                  <FormGroup
-                    advancedSettings={showAdvancedSettings}
-                    isAdvanced={true}
-                  >
-                    <FormLabel>{translate('ImportExtraFiles')}</FormLabel>
-
-                    <FormInputGroup
-                      type={inputTypes.TEXT}
-                      name="extraFileExtensions"
-                      helpTexts={[
-                        translate('ExtraFileExtensionsHelpText'),
-                        translate('ExtraFileExtensionsHelpTextsExamples'),
-                      ]}
-                      onChange={handleInputChange}
-                      {...settings.extraFileExtensions}
-                    />
-                  </FormGroup>
-                ) : null}
-              </FieldSet>
-            ) : null}
+              ) : null}
+            </FieldSet>
 
             <FieldSet legend={translate('FileManagement')}>
               <FormGroup size={sizes.MEDIUM}>
@@ -383,11 +356,7 @@ function MediaManagement() {
                 />
               </FormGroup>
 
-              <FormGroup
-                advancedSettings={showAdvancedSettings}
-                isAdvanced={true}
-                size={sizes.MEDIUM}
-              >
+              <FormGroup size={sizes.MEDIUM}>
                 <FormLabel>{translate('DownloadPropersAndRepacks')}</FormLabel>
 
                 <FormInputGroup
@@ -480,10 +449,7 @@ function MediaManagement() {
                 />
               </FormGroup>
 
-              <FormGroup
-                advancedSettings={showAdvancedSettings}
-                isAdvanced={true}
-              >
+              <FormGroup>
                 <FormLabel>{translate('ChangeFileDate')}</FormLabel>
 
                 <FormInputGroup
@@ -496,10 +462,7 @@ function MediaManagement() {
                 />
               </FormGroup>
 
-              <FormGroup
-                advancedSettings={showAdvancedSettings}
-                isAdvanced={true}
-              >
+              <FormGroup>
                 <FormLabel>{translate('RecyclingBin')}</FormLabel>
 
                 <FormInputGroup
@@ -512,10 +475,7 @@ function MediaManagement() {
                 />
               </FormGroup>
 
-              <FormGroup
-                advancedSettings={showAdvancedSettings}
-                isAdvanced={true}
-              >
+              <FormGroup>
                 <FormLabel>{translate('RecyclingBinCleanup')}</FormLabel>
 
                 <FormInputGroup

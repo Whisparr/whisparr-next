@@ -87,7 +87,7 @@ function HostSettings({
         />
       </FormGroup>
 
-      <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+      <FormGroup>
         <FormLabel>{translate('InstanceName')}</FormLabel>
 
         <FormInputGroup

@@ -228,10 +228,7 @@ function EditIndexerModalContent({
               );
             })}
 
-            <FormGroup
-              advancedSettings={showAdvancedSettings}
-              isAdvanced={true}
-            >
+            <FormGroup>
               <FormLabel>{translate('IndexerPriority')}</FormLabel>
 
               <FormInputGroup
@@ -245,10 +242,7 @@ function EditIndexerModalContent({
               />
             </FormGroup>
 
-            <FormGroup
-              advancedSettings={showAdvancedSettings}
-              isAdvanced={true}
-            >
+            <FormGroup>
               <FormLabel>{translate('DownloadClient')}</FormLabel>
 
               <FormInputGroup

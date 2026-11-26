@@ -86,10 +86,10 @@ namespace NzbDrone.Core.Notifications.Stash
         [FieldDefinition(16, Label = "Identify: Set Organized", HelpText = "Use Set Organized during Identify task", Type = FieldType.Checkbox)]
         public bool SetOrganized { get; set; }
 
-        [FieldDefinition(17, Label = "Map Paths From", Type = FieldType.Textbox, Advanced = true, HelpText = "Whisparr Path, Used to modify site paths when Stash sees library path location differently from Whisparr")]
+        [FieldDefinition(17, Label = "Map Paths From", Type = FieldType.Textbox, HelpText = "Whisparr Path, Used to modify site paths when Stash sees library path location differently from Whisparr")]
         public string MapFrom { get; set; }
 
-        [FieldDefinition(18, Label = "Map Paths To", Type = FieldType.Textbox, Advanced = true, HelpText = "Stash Path, Used to modify site paths when Stash sees library path location differently from Whisparr")]
+        [FieldDefinition(18, Label = "Map Paths To", Type = FieldType.Textbox, HelpText = "Stash Path, Used to modify site paths when Stash sees library path location differently from Whisparr")]
         public string MapTo { get; set; }
 
         [JsonIgnore]

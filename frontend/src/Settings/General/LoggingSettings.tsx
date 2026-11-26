@@ -4,7 +4,6 @@ import FormGroup from 'Components/Form/FormGroup';
 import FormInputGroup from 'Components/Form/FormInputGroup';
 import FormLabel from 'Components/Form/FormLabel';
 import { EnhancedSelectInputValue } from 'Components/Form/Select/EnhancedSelectInput';
-import useShowAdvancedSettings from 'Helpers/Hooks/useShowAdvancedSettings';
 import { inputTypes } from 'Helpers/Props';
 import translate from 'Utilities/String/translate';
 import { GeneralSettingsSectionProps } from './GeneralSettingsProps';
@@ -40,8 +39,6 @@ function LoggingSettings({
   settings,
   onInputChange,
 }: Readonly<GeneralSettingsSectionProps>) {
-  const advancedSettings = useShowAdvancedSettings();
-
   const { logLevel, logSizeLimit } = settings;
 
   return (
@@ -63,7 +60,7 @@ function LoggingSettings({
         />
       </FormGroup>
 
-      <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+      <FormGroup>
         <FormLabel>{translate('LogSizeLimit')}</FormLabel>
 
         <FormInputGroup
