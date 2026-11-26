@@ -10,9 +10,11 @@ import useAppPage from 'Helpers/Hooks/useAppPage';
 import useMetadataSources from 'Settings/MetadataSource/useMetadataSources';
 import { useUiSettingsValues } from 'Settings/UI/useUiSettings';
 import { useSystemStatusData } from 'System/Status/useSystemStatus';
+import translate from 'Utilities/String/translate';
 import ErrorPage from './ErrorPage';
 import PageHeader from './Header/PageHeader';
 import LoadingPage from './LoadingPage';
+import { MAIN_CONTENT_ID } from './PageContent';
 import PageSidebar from './Sidebar/PageSidebar';
 import styles from './Page.module.css';
 
@@ -88,6 +90,10 @@ function Page({ children }: Readonly<PageProps>) {
     <ColorImpairedContext.Provider value={enableColorImpairedMode}>
       <div className={styles.page}>
         <SignalRListener />
+
+        <a className={styles.skipLink} href={`#${MAIN_CONTENT_ID}`}>
+          {translate('SkipToMainContent')}
+        </a>
 
         <PageHeader isSmallScreen={isSmallScreen} />
 
