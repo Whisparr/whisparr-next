@@ -627,7 +627,7 @@ namespace NzbDrone.Core.Movies
                                 _logger.Error(e, "Couldn't refresh info for {0}", movieLocal);
                             }
 
-                            UpdateTags(movie, false);
+                            UpdateTags(movieLocal, false);
 
                             if (_rescanAfterRefreshFilter.ShouldRescan(movieLocal, false, trigger))
                             {

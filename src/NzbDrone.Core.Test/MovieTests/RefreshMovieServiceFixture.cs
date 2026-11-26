@@ -664,6 +664,36 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_update_tags_on_the_refreshed_movie_when_refreshing_all()
+        {
+            var scenes = GivenNewScenes(1);
+            var refreshed = scenes[0];
+            refreshed.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            // GetMovies hands the loop its own copy; RefreshMovieInfo re-reads the movie.
+            var stale = refreshed.JsonClone();
+            stale.MovieMetadata = refreshed.MovieMetadata;
+
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<int>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedTpdbMovies(It.IsAny<System.DateTime>())).Returns(new HashSet<string>());
+            Mocker.GetMock<IProvideMovieInfo>().Setup(s => s.GetChangedScenes(It.IsAny<System.DateTime>())).Returns(new HashSet<string> { refreshed.ForeignId });
+            Mocker.GetMock<IMovieService>().Setup(s => s.AllMovieIdsOrderByLastInfoSync()).Returns(new List<int> { refreshed.Id });
+            Mocker.GetMock<IMovieService>().Setup(s => s.GetMovies(It.IsAny<IEnumerable<int>>())).Returns(new List<Movie> { stale });
+            Mocker.GetMock<IMovieService>().Setup(s => s.UpdateTags(It.IsAny<Movie>())).Returns(true);
+
+            Subject.Execute(new RefreshMovieCommand { LastStartTime = System.DateTime.UtcNow.AddDays(-1) });
+
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateTags(It.Is<Movie>(m => ReferenceEquals(m, refreshed))), Times.Once());
+
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateTags(It.Is<Movie>(m => ReferenceEquals(m, stale))), Times.Never());
+
+            Mocker.GetMock<IMovieService>()
+                  .Verify(v => v.UpdateMovie(It.Is<Movie>(m => ReferenceEquals(m, stale))), Times.Never());
+        }
+
+        [Test]
         public void jav_changes_do_not_remove_scene_schedule_fallback()
         {
             var scenes = GivenNewScenes(1);
