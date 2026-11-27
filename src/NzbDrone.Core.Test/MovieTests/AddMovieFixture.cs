@@ -6,6 +6,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.ImportLists.ImportExclusions;
 using NzbDrone.Core.Localization;
@@ -69,6 +70,41 @@ namespace NzbDrone.Core.Test.MovieTests
             var series = Subject.AddMovie(newMovie);
 
             series.Title.Should().Be(_fakeMovie.Title);
+        }
+
+        [Test]
+        public void should_apply_default_download_covers_when_adding_a_movie()
+        {
+            var newMovie = new Movie
+            {
+                ForeignId = "1",
+                TmdbId = 1,
+                RootFolderPath = @"C:\Test\Movies"
+            };
+
+            Mocker.GetMock<IConfigService>().SetupGet(c => c.DefaultDownloadMovieCovers).Returns(false);
+            GivenValidMovie(newMovie.TmdbId);
+            GivenValidPath();
+
+            var movie = Subject.AddMovie(newMovie);
+
+            movie.DownloadCovers.Should().BeFalse();
+        }
+
+        [Test]
+        public void should_apply_default_download_covers_when_adding_a_scene()
+        {
+            const string sceneUuid = "0b5e7c2a-1f4d-4e6a-9c3b-2d8f7a6e5c41";
+
+            _fakeMovie.ItemType = ItemType.Scene;
+
+            Mocker.GetMock<IConfigService>().SetupGet(c => c.DefaultDownloadSceneCovers).Returns(false);
+            GivenValidScene(sceneUuid);
+            GivenValidPath();
+
+            var movie = Subject.AddMovie(TpdbSceneRequest(sceneUuid));
+
+            movie.DownloadCovers.Should().BeFalse();
         }
 
         [Test]

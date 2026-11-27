@@ -1,12 +1,14 @@
 import { queryClient } from 'App/queryClient';
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
-import Studio from 'Studio/Studio';
+import Studio, { StudioVisibility } from 'Studio/Studio';
 
 interface StudioEditorPayload {
   studioIds: number[];
   monitored?: boolean;
+  visibility?: StudioVisibility;
   moviesMonitored?: boolean;
   javMonitored?: boolean;
+  downloadCovers?: boolean;
   whisparrMonitorNewItems?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;

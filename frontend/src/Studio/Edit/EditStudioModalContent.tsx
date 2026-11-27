@@ -17,7 +17,7 @@ import {
 import { inputTypes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
 import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
-import Studio from 'Studio/Studio';
+import Studio, { StudioVisibility } from 'Studio/Studio';
 import StudioLogo from 'Studio/StudioLogo';
 import { useSaveStudio } from 'Studio/useStudio';
 import { InputChanged } from 'typings/inputs';
@@ -37,6 +37,12 @@ function EditStudioModalContent({
   const javAvailable = useJavAvailable();
 
   const [monitored, setMonitored] = useState(studio.monitored);
+  const [visible, setVisible] = useState(
+    (studio.visibility ?? 'visible') !== 'hidden'
+  );
+  const [downloadCovers, setDownloadCovers] = useState(
+    studio.downloadCovers ?? true
+  );
   const [moviesMonitored, setMoviesMonitored] = useState(
     studio.moviesMonitored
   );
@@ -58,10 +64,18 @@ function EditStudioModalContent({
   // The fields the user has actually touched. Sent as a patch over the studio
   // on save, and handed to selectSettings so it can mark them pending.
   const pendingChanges = useMemo(() => {
-    const changes: Partial<Studio> = {};
+    const changes: Partial<Studio> & { visible?: boolean } = {};
 
     if (monitored !== studio.monitored) {
       changes.monitored = monitored;
+    }
+
+    if (visible !== ((studio.visibility ?? 'visible') !== 'hidden')) {
+      changes.visible = visible;
+    }
+
+    if (downloadCovers !== (studio.downloadCovers ?? true)) {
+      changes.downloadCovers = downloadCovers;
     }
 
     if (moviesMonitored !== studio.moviesMonitored) {
@@ -103,6 +117,8 @@ function EditStudioModalContent({
     return changes;
   }, [
     monitored,
+    visible,
+    downloadCovers,
     moviesMonitored,
     javMonitored,
     whisparrMonitorNewItems,
@@ -119,6 +135,8 @@ function EditStudioModalContent({
     return selectSettings(
       {
         monitored: studio.monitored,
+        visible: (studio.visibility ?? 'visible') !== 'hidden',
+        downloadCovers: studio.downloadCovers ?? true,
         moviesMonitored: studio.moviesMonitored,
         javMonitored: studio.javMonitored,
         whisparrMonitorNewItems: studio.whisparrMonitorNewItems,
@@ -155,6 +173,23 @@ function EditStudioModalContent({
     switch (name) {
       case 'monitored':
         setMonitored(value as boolean);
+
+        if (value) {
+          setVisible(true);
+        }
+
+        break;
+      case 'visible':
+        setVisible(value as boolean);
+
+        if (!value) {
+          setMonitored(false);
+          setMoviesMonitored(false);
+        }
+
+        break;
+      case 'downloadCovers':
+        setDownloadCovers(value as boolean);
         break;
       case 'moviesMonitored':
         setMoviesMonitored(value as boolean);
@@ -189,7 +224,19 @@ function EditStudioModalContent({
   }, []);
 
   const handleSavePress = useCallback(() => {
-    saveStudio.mutate({ ...studio, ...pendingChanges });
+    const { visible: pendingVisible, ...changes } = pendingChanges;
+
+    saveStudio.mutate({
+      ...studio,
+      ...changes,
+      ...(pendingVisible === undefined
+        ? {}
+        : {
+            visibility: (pendingVisible
+              ? 'visible'
+              : 'hidden') as StudioVisibility,
+          }),
+    });
   }, [saveStudio, studio, pendingChanges]);
 
   useEffect(() => {
@@ -229,6 +276,33 @@ function EditStudioModalContent({
                   name="monitored"
                   helpText={translate('MonitoredStudioHelpText')}
                   {...settings.monitored}
+                  onChange={handleInputChange}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>{translate('Visible')}</FormLabel>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="visible"
+                  helpText={translate('VisibleStudioHelpText')}
+                  helpTextWarning={
+                    visible
+                      ? undefined
+                      : translate('HiddenStudioHelpTextWarning')
+                  }
+                  {...settings.visible}
+                  onChange={handleInputChange}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>{translate('DownloadCovers')}</FormLabel>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="downloadCovers"
+                  helpText={translate('DownloadCoversHelpText')}
+                  {...settings.downloadCovers}
                   onChange={handleInputChange}
                 />
               </FormGroup>

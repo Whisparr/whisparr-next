@@ -39,6 +39,9 @@ function EditPerformerModalContent({
   const safeForWorkMode = useSafeForWorkMode();
 
   const [visible, setVisible] = useState(performer.visibility !== 'hidden');
+  const [downloadCovers, setDownloadCovers] = useState(
+    performer.downloadCovers ?? true
+  );
   const [monitored, setMonitored] = useState(performer.monitored);
   const [moviesMonitored, setMoviesMonitored] = useState(
     performer.moviesMonitored
@@ -67,6 +70,10 @@ function EditPerformerModalContent({
 
     if (visible !== (performer.visibility !== 'hidden')) {
       changes.visible = visible;
+    }
+
+    if (downloadCovers !== (performer.downloadCovers ?? true)) {
+      changes.downloadCovers = downloadCovers;
     }
 
     if (monitored !== performer.monitored) {
@@ -108,6 +115,7 @@ function EditPerformerModalContent({
     return changes;
   }, [
     visible,
+    downloadCovers,
     monitored,
     moviesMonitored,
     javMonitored,
@@ -124,6 +132,7 @@ function EditPerformerModalContent({
     return selectSettings(
       {
         visible: performer.visibility !== 'hidden',
+        downloadCovers: performer.downloadCovers ?? true,
         monitored: performer.monitored,
         moviesMonitored: performer.moviesMonitored,
         javMonitored: performer.javMonitored,
@@ -172,6 +181,9 @@ function EditPerformerModalContent({
           setMoviesMonitored(false);
         }
 
+        break;
+      case 'downloadCovers':
+        setDownloadCovers(value as boolean);
         break;
       case 'monitored':
         setMonitored(value as boolean);
@@ -275,6 +287,17 @@ function EditPerformerModalContent({
                       : translate('HiddenPerformerHelpTextWarning')
                   }
                   {...settings.visible}
+                  onChange={handleInputChange}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>{translate('DownloadCovers')}</FormLabel>
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="downloadCovers"
+                  helpText={translate('DownloadCoversHelpText')}
+                  {...settings.downloadCovers}
                   onChange={handleInputChange}
                 />
               </FormGroup>

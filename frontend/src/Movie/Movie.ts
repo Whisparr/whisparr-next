@@ -53,6 +53,8 @@ export interface AlternativeTitle extends ModelBase {
   title: string;
 }
 
+export type MovieVisibility = 'visible' | 'hidden';
+
 // What the add flows actually send. The declared shape was `monitor:
 // MovieMonitor`, which no caller has ever produced and whose values do not
 // match the server's `MonitorTypes` either; `getNewMovie`, `getNewPerformer`,
@@ -60,6 +62,7 @@ export interface AlternativeTitle extends ModelBase {
 // `AddMovieOptions` has neither -- it reads `SearchForMovie` and defaults
 // `Monitor` -- so the key is inert on the wire. Typed as sent; sending
 // `monitor` instead would be a behaviour change, not a typing fix.
+
 export interface MovieAddOptions {
   monitored: boolean;
   searchForMovie: boolean;
@@ -87,6 +90,8 @@ interface Movie extends ModelBase {
   isSaving?: boolean;
   lastSearchTime?: string;
   monitored: boolean;
+  downloadCovers: boolean;
+  visibility: MovieVisibility;
   movieFile?: MovieFile;
   movieFileId: number;
   originalLanguage: Language;

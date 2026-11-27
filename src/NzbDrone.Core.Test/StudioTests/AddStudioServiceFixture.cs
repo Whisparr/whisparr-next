@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using FluentAssertions;
 using Moq;
 using NUnit.Framework;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies.Studios;
 using NzbDrone.Core.Test.Framework;
@@ -28,6 +30,16 @@ namespace NzbDrone.Core.Test.StudioTests
             Subject.AddStudio(new Studio { ForeignId = "studio-1" });
 
             Mocker.GetMock<IMetadataSourceService>().Verify(v => v.EnsureLocked(), Times.Once());
+        }
+
+        [Test]
+        public void should_apply_default_download_covers_when_adding_a_studio()
+        {
+            Mocker.GetMock<IConfigService>().SetupGet(c => c.DefaultDownloadStudioCovers).Returns(false);
+
+            var studio = Subject.AddStudio(new Studio { ForeignId = "studio-1" });
+
+            studio.DownloadCovers.Should().BeFalse();
         }
 
         [Test]

@@ -487,6 +487,41 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("CleanupMetadataImages", value); }
         }
 
+        public bool DefaultDownloadMovieCovers
+        {
+            get { return GetValueBoolean("DefaultDownloadMovieCovers", true); }
+
+            set { SetValue("DefaultDownloadMovieCovers", value); }
+        }
+
+        public bool DefaultDownloadSceneCovers
+        {
+            get { return GetValueBoolean("DefaultDownloadSceneCovers", true); }
+
+            set { SetValue("DefaultDownloadSceneCovers", value); }
+        }
+
+        public bool DefaultDownloadJavCovers
+        {
+            get { return GetValueBoolean("DefaultDownloadJavCovers", true); }
+
+            set { SetValue("DefaultDownloadJavCovers", value); }
+        }
+
+        public bool DefaultDownloadStudioCovers
+        {
+            get { return GetValueBoolean("DefaultDownloadStudioCovers", true); }
+
+            set { SetValue("DefaultDownloadStudioCovers", value); }
+        }
+
+        public bool DefaultDownloadPerformerCovers
+        {
+            get { return GetValueBoolean("DefaultDownloadPerformerCovers", true); }
+
+            set { SetValue("DefaultDownloadPerformerCovers", value); }
+        }
+
         public string PlexClientIdentifier => GetValue("PlexClientIdentifier", Guid.NewGuid().ToString(), true);
 
         public string RijndaelPassphrase => GetValue("RijndaelPassphrase", Guid.NewGuid().ToString(), true);

@@ -33,6 +33,11 @@ namespace Whisparr.Api.V5.Config
         public bool EnableMediaInfo { get; set; }
         public bool EnablePerceptualHashing { get; set; }
         public int WhisparrFolderLimit { get; set; }
+        public bool DefaultDownloadMovieCovers { get; set; }
+        public bool DefaultDownloadSceneCovers { get; set; }
+        public bool DefaultDownloadJavCovers { get; set; }
+        public bool DefaultDownloadStudioCovers { get; set; }
+        public bool DefaultDownloadPerformerCovers { get; set; }
     }
 
     public static class MediaManagementConfigResourceMapper
@@ -66,7 +71,12 @@ namespace Whisparr.Api.V5.Config
                 ExtraFileExtensions = model.ExtraFileExtensions,
                 EnableMediaInfo = model.EnableMediaInfo,
                 EnablePerceptualHashing = model.EnablePerceptualHashing,
-                WhisparrFolderLimit = model.WhisparrFolderLimit
+                WhisparrFolderLimit = model.WhisparrFolderLimit,
+                DefaultDownloadMovieCovers = model.DefaultDownloadMovieCovers,
+                DefaultDownloadSceneCovers = model.DefaultDownloadSceneCovers,
+                DefaultDownloadJavCovers = model.DefaultDownloadJavCovers,
+                DefaultDownloadStudioCovers = model.DefaultDownloadStudioCovers,
+                DefaultDownloadPerformerCovers = model.DefaultDownloadPerformerCovers
             };
         }
     }

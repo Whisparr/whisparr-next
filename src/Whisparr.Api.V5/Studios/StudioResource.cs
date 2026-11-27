@@ -22,8 +22,10 @@ namespace Whisparr.Api.V5.Studios
         public string Network { get; set; }
         public List<MediaCover> Images { get; set; }
         public bool Monitored { get; set; }
+        public StudioVisibility? Visibility { get; set; }
         public bool MoviesMonitored { get; set; }
         public bool JavMonitored { get; set; }
+        public bool DownloadCovers { get; set; } = true;
         public bool WhisparrMonitorNewItems { get; set; } = true;
         public StudioStatus Status { get; set; }
 
@@ -75,12 +77,16 @@ namespace Whisparr.Api.V5.Studios
                 Website = model.Website,
                 Network = model.Network,
                 Monitored = model.Monitored,
+                Visibility = model.Visibility,
                 MoviesMonitored = model.MoviesMonitored,
                 JavMonitored = model.JavMonitored,
+                DownloadCovers = model.DownloadCovers,
                 WhisparrMonitorNewItems = model.WhisparrMonitorNewItems,
                 Status = model.Status,
                 AfterDate = model.AfterDate?.ToString("yyyy-MM-dd"),
-                Images = model.Images,
+
+                // Disabled or hidden studios keep no artwork on disk, so there's nothing local to point at
+                Images = !model.DownloadCovers || model.Visibility == StudioVisibility.Hidden ? new List<MediaCover>() : model.Images,
                 QualityProfileId = model.QualityProfileId,
                 RootFolderPath = model.RootFolderPath,
                 SearchOnAdd = model.SearchOnAdd,
@@ -140,8 +146,10 @@ namespace Whisparr.Api.V5.Studios
                 Website = resource.Website,
                 Network = resource.Network,
                 Monitored = resource.Monitored,
+                Visibility = resource.Visibility ?? StudioVisibility.Visible,
                 MoviesMonitored = resource.MoviesMonitored,
                 JavMonitored = resource.JavMonitored,
+                DownloadCovers = resource.DownloadCovers,
                 WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems,
                 Status = resource.Status,
                 AfterDate = ParseAfterDate(resource.AfterDate),
@@ -156,6 +164,7 @@ namespace Whisparr.Api.V5.Studios
         public static Studio ToModel(this StudioResource resource, Studio studio)
         {
             var updatedStudio = resource.ToModel();
+            updatedStudio.Visibility = resource.Visibility ?? studio.Visibility;
 
             studio.ApplyChanges(updatedStudio);
 

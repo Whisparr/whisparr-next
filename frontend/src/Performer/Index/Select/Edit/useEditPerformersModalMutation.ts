@@ -9,6 +9,7 @@ interface PerformerEditorPayload {
   javMonitored?: boolean;
   whisparrMonitorNewItems?: boolean;
   visibility?: PerformerVisibility;
+  downloadCovers?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
   searchOnAdd?: boolean;

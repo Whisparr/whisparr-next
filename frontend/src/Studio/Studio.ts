@@ -7,6 +7,8 @@ export interface Image {
   url: string;
   remoteUrl: string;
 }
+export type StudioVisibility = 'visible' | 'hidden';
+
 interface Studio extends ModelBase {
   id: number;
   foreignId: string;
@@ -23,6 +25,8 @@ interface Studio extends ModelBase {
   totalJavCount: number;
   images: Image[];
   monitored: boolean;
+  visibility: StudioVisibility;
+  downloadCovers: boolean;
   whisparrMonitorNewItems: boolean;
   movieCount: number;
   moviesMonitored: boolean;

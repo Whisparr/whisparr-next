@@ -87,6 +87,11 @@ namespace NzbDrone.Core.Configuration
 
         // Internal
         bool CleanupMetadataImages { get; set; }
+        bool DefaultDownloadMovieCovers { get; set; }
+        bool DefaultDownloadSceneCovers { get; set; }
+        bool DefaultDownloadJavCovers { get; set; }
+        bool DefaultDownloadStudioCovers { get; set; }
+        bool DefaultDownloadPerformerCovers { get; set; }
         string PlexClientIdentifier { get; }
 
         // Forms Auth

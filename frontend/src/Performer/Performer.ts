@@ -27,6 +27,7 @@ interface Performer extends ModelBase {
   totalJavCount: number;
   images: Image[];
   monitored: boolean;
+  downloadCovers: boolean;
   whisparrMonitorNewItems: boolean;
   movieCount: number;
   moviesMonitored: boolean;

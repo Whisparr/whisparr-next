@@ -60,6 +60,13 @@ namespace Whisparr.Api.V5.Movies
                     movie.Monitored = resource.Monitored.Value;
                 }
 
+                movie.ApplyVisibility(resource.Visibility ?? movie.Visibility);
+
+                if (resource.DownloadCovers.HasValue)
+                {
+                    movie.DownloadCovers = resource.DownloadCovers.Value;
+                }
+
                 if (resource.QualityProfileId.HasValue)
                 {
                     movie.QualityProfileId = resource.QualityProfileId.Value;

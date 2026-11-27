@@ -112,6 +112,9 @@ namespace Whisparr.Api.V5.Performers
         /// <remarks>Omit to leave unchanged. Hiding a performer unmonitors them, and monitoring a hidden performer makes them visible.</remarks>
         public PerformerVisibility? Visibility { get; set; }
 
+        /// <summary>Whether artwork is downloaded for this performer. Independent of visibility.</summary>
+        public bool DownloadCovers { get; set; } = true;
+
         /// <summary>Only add this performer's items released on or after this date, as yyyy-MM-dd</summary>
         /// <remarks>
         /// Serialized even when null. The global WhenWritingNull default would drop the key
@@ -235,8 +238,9 @@ namespace Whisparr.Api.V5.Performers
                 Visibility = model.Visibility,
                 AfterDate = model.AfterDate?.ToString("yyyy-MM-dd"),
 
-                // Hidden performers keep no artwork on disk, so there's nothing local to point at
-                Images = model.Visibility == PerformerVisibility.Hidden ? new List<MediaCover>() : model.Images,
+                // Hidden performers keep no artwork on disk, so there's nothing local to point at.
+                // The same holds when artwork downloads are turned off for a visible performer.
+                Images = model.Visibility == PerformerVisibility.Hidden || !model.DownloadCovers ? new List<MediaCover>() : model.Images,
                 QualityProfileId = model.QualityProfileId,
                 RootFolderPath = model.RootFolderPath,
                 SearchOnAdd = model.SearchOnAdd,
@@ -295,6 +299,7 @@ namespace Whisparr.Api.V5.Performers
                 JavMonitored = resource.JavMonitored,
                 WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems,
                 Visibility = resource.Visibility ?? PerformerVisibility.Visible,
+                DownloadCovers = resource.DownloadCovers,
                 AfterDate = ParseAfterDate(resource.AfterDate),
                 QualityProfileId = resource.QualityProfileId,
                 RootFolderPath = resource.RootFolderPath,

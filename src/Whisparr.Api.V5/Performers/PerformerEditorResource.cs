@@ -24,6 +24,9 @@ namespace Whisparr.Api.V5.Performers
         /// <summary>Show or hide the selected performers. Hiding unmonitors them and deletes their downloaded artwork.</summary>
         public PerformerVisibility? Visibility { get; set; }
 
+        /// <summary>Whether artwork is downloaded for the performers.</summary>
+        public bool? DownloadCovers { get; set; }
+
         /// <summary>The quality profile ID to set for the performers' movies.</summary>
         public int? QualityProfileId { get; set; }
 

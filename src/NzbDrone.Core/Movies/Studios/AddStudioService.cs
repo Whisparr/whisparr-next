@@ -5,6 +5,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.EnsureThat;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Parser;
@@ -22,16 +23,19 @@ namespace NzbDrone.Core.Movies.Studios
         private readonly IStudioService _studioService;
         private readonly IProvideMovieInfo _studioInfo;
         private readonly IMetadataSourceService _metadataSourceService;
+        private readonly IConfigService _configService;
         private readonly Logger _logger;
 
         public AddStudioService(IStudioService studioService,
                                    IProvideMovieInfo studioInfo,
                                    IMetadataSourceService metadataSourceService,
+                                   IConfigService configService,
                                    Logger logger)
         {
             _metadataSourceService = metadataSourceService;
             _studioService = studioService;
             _studioInfo = studioInfo;
+            _configService = configService;
             _logger = logger;
         }
 
@@ -145,6 +149,7 @@ namespace NzbDrone.Core.Movies.Studios
             }
 
             studio.ApplyChanges(newStudio);
+            studio.DownloadCovers = _configService.DefaultDownloadStudioCovers;
 
             return studio;
         }

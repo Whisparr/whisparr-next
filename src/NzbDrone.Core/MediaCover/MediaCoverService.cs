@@ -49,6 +49,8 @@ namespace NzbDrone.Core.MediaCover
         IHandleAsync<MoviesDeletedEvent>,
         IHandleAsync<PerformersDeletedEvent>,
         IHandleAsync<StudiosDeletedEvent>,
+        IHandle<MovieEditedEvent>,
+        IHandle<MoviesBulkEditedEvent>,
         IMapCoversToLocal,
         IQueueNewMovieCovers
     {
@@ -566,8 +568,41 @@ namespace NzbDrone.Core.MediaCover
 
         public void HandleAsync(MovieUpdatedEvent message)
         {
+            if (!message.Movie.DownloadCovers || message.Movie.Visibility == MovieVisibility.Hidden)
+            {
+                DeleteMovieCovers(message.Movie.Id, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
+            }
+
             var updated = EnsureCovers(message.Movie);
             _eventAggregator.PublishEvent(new MediaCoversUpdatedEvent(message.Movie, updated));
+        }
+
+        // Single and bulk edits don't publish MovieUpdatedEvent, so converge covers here:
+        // a disabled movie keeps no artwork, an enabled one is queued for a check.
+        public void Handle(MovieEditedEvent message)
+        {
+            if (!message.Movie.DownloadCovers || message.Movie.Visibility == MovieVisibility.Hidden)
+            {
+                DeleteMovieCovers(message.Movie.Id, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
+                return;
+            }
+
+            _eventAggregator.PublishEvent(new MovieUpdatedEvent(message.Movie));
+        }
+
+        public void Handle(MoviesBulkEditedEvent message)
+        {
+            foreach (var movie in message.Movies)
+            {
+                if (!movie.DownloadCovers || movie.Visibility == MovieVisibility.Hidden)
+                {
+                    DeleteMovieCovers(movie.Id, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
+                }
+                else
+                {
+                    _eventAggregator.PublishEvent(new MovieUpdatedEvent(movie));
+                }
+            }
         }
 
         public void HandleAsync(PerformerUpdatedEvent message)
@@ -580,11 +615,25 @@ namespace NzbDrone.Core.MediaCover
                 return;
             }
 
+            if (!message.Performer.DownloadCovers)
+            {
+                DeletePerformerCovers(message.Performer);
+
+                return;
+            }
+
             _ = EnsureCovers(message.Performer);
         }
 
         public void HandleAsync(StudioUpdatedEvent message)
         {
+            if (!message.Studio.DownloadCovers || message.Studio.Visibility == StudioVisibility.Hidden)
+            {
+                DeleteStudioCovers(message.Studio);
+
+                return;
+            }
+
             _ = EnsureCovers(message.Studio);
         }
 
@@ -700,6 +749,11 @@ namespace NzbDrone.Core.MediaCover
 
         private bool EnsureCovers(Movie movie, bool coversKnownMissing = false)
         {
+            if (!movie.DownloadCovers || movie.Visibility == MovieVisibility.Hidden)
+            {
+                return false;
+            }
+
             var updated = false;
             var toResize = new List<Tuple<MediaCover, bool>>();
 
@@ -766,6 +820,11 @@ namespace NzbDrone.Core.MediaCover
 
         private bool EnsureCovers(Studio studio)
         {
+            if (!studio.DownloadCovers || studio.Visibility == StudioVisibility.Hidden)
+            {
+                return false;
+            }
+
             var updated = false;
             var toResize = new List<Tuple<MediaCover, bool>>();
 
@@ -824,6 +883,11 @@ namespace NzbDrone.Core.MediaCover
 
         private bool EnsureCovers(Performer performer)
         {
+            if (!performer.DownloadCovers)
+            {
+                return false;
+            }
+
             var updated = false;
             var toResize = new List<Tuple<MediaCover, bool>>();
 
@@ -1244,6 +1308,17 @@ namespace NzbDrone.Core.MediaCover
             RemoveCoverExistsCache(performer.Images, coverType => GetPerformerCoverPath(performer.Id, coverType));
 
             var path = GetPerformerCoverPath(performer.Id);
+            if (_diskProvider.FolderExists(path))
+            {
+                _diskProvider.DeleteFolder(path, true);
+            }
+        }
+
+        private void DeleteStudioCovers(Studio studio)
+        {
+            RemoveCoverExistsCache(studio.Images, coverType => GetStudioCoverPath(studio.Id, coverType));
+
+            var path = GetStudioCoverPath(studio.Id);
             if (_diskProvider.FolderExists(path))
             {
                 _diskProvider.DeleteFolder(path, true);

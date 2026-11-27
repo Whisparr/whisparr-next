@@ -241,6 +241,14 @@ namespace NzbDrone.Core.Movies
 
             movie.ApplyChanges(newMovie);
 
+            // New items inherit the global artwork default for their type; it can be changed per item afterwards.
+            movie.DownloadCovers = movie.MovieMetadata.Value.ItemType switch
+            {
+                ItemType.Scene => _configService.DefaultDownloadSceneCovers,
+                ItemType.Jav => _configService.DefaultDownloadJavCovers,
+                _ => _configService.DefaultDownloadMovieCovers
+            };
+
             return movie;
         }
 
