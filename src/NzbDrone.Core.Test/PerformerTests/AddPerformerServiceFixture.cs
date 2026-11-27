@@ -3,6 +3,7 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Cache;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
@@ -102,6 +103,18 @@ namespace NzbDrone.Core.Test.PerformerTests
                                                                      p.Visibility == PerformerVisibility.Visible)),
                           Times.Once());
             Mocker.GetMock<IPerformerService>().Verify(v => v.Update(It.IsAny<Performer>()), Times.Never());
+        }
+
+        [Test]
+        public void should_apply_default_download_covers_when_adding_a_performer()
+        {
+            Mocker.GetMock<IConfigService>().SetupGet(c => c.DefaultDownloadPerformerCovers).Returns(false);
+
+            Subject.AddPerformer(GivenNewPerformer(true));
+
+            Mocker.GetMock<IPerformerService>()
+                  .Verify(v => v.AddPerformer(It.Is<Performer>(p => p.DownloadCovers == false)),
+                          Times.Once());
         }
 
         [Test]

@@ -236,6 +236,7 @@ namespace Whisparr.Api.V5.Performers
                 TotalJavCount = model.TotalJavCount,
                 WhisparrMonitorNewItems = model.WhisparrMonitorNewItems,
                 Visibility = model.Visibility,
+                DownloadCovers = model.DownloadCovers,
                 AfterDate = model.AfterDate?.ToString("yyyy-MM-dd"),
 
                 // Hidden performers keep no artwork on disk, so there's nothing local to point at.
