@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NzbDrone.Core.Movies.Studios;
 
 namespace Whisparr.Api.V5.Studios
 {
@@ -16,6 +17,12 @@ namespace Whisparr.Api.V5.Studios
 
         /// <summary>Whether the studios' JAV is monitored</summary>
         public bool? JavMonitored { get; set; }
+
+        /// <summary>Show or hide the selected studios. Hiding unmonitors them and deletes their downloaded artwork.</summary>
+        public StudioVisibility? Visibility { get; set; }
+
+        /// <summary>Whether artwork is downloaded for the studios</summary>
+        public bool? DownloadCovers { get; set; }
 
         /// <summary>Whether newly discovered works added by refreshing the studios are monitored</summary>
         public bool? WhisparrMonitorNewItems { get; set; }

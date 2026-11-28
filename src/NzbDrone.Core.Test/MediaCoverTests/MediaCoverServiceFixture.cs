@@ -24,6 +24,8 @@ using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Movies.Performers;
 using NzbDrone.Core.Movies.Performers.Events;
+using NzbDrone.Core.Movies.Studios;
+using NzbDrone.Core.Movies.Studios.Events;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -1427,6 +1429,115 @@ namespace NzbDrone.Core.Test.MediaCoverTests
 
             Mocker.GetMock<ICoverExistsSpecification>()
                   .Verify(v => v.RecordSource(RemoteUrl, path), Times.Once());
+        }
+
+        [Test]
+        public void should_not_download_movie_covers_when_disabled()
+        {
+            var movie = GivenMovie(7);
+            movie.DownloadCovers = false;
+
+            Subject.HandleAsync(new MovieUpdatedEvent(movie));
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_download_scene_covers_when_disabled()
+        {
+            var movie = GivenMovie(7);
+            movie.MovieMetadata.Value.ItemType = ItemType.Scene;
+            movie.DownloadCovers = false;
+
+            Subject.HandleAsync(new MovieUpdatedEvent(movie));
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_download_jav_covers_when_disabled()
+        {
+            var movie = GivenMovie(7);
+            movie.MovieMetadata.Value.ItemType = ItemType.Jav;
+            movie.DownloadCovers = false;
+
+            Subject.HandleAsync(new MovieUpdatedEvent(movie));
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_download_studio_covers_when_disabled()
+        {
+            var studio = Builder<Studio>.CreateNew()
+                .With(s => s.Id = 9)
+                .With(s => s.DownloadCovers = false)
+                .With(s => s.Images = new List<MediaCover.MediaCover> { new (MediaCoverTypes.Poster, RemoteUrl) })
+                .Build();
+
+            Subject.HandleAsync(new StudioUpdatedEvent(studio));
+
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.Execute(It.IsAny<HttpRequest>()), Times.Never());
+        }
+
+        [Test]
+        public void should_delete_movie_covers_when_disabled_via_edit()
+        {
+            var oldMovie = GivenMovie(7);
+            var movie = GivenMovie(7);
+            movie.DownloadCovers = false;
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(v => v.FileExists(It.IsAny<string>()))
+                  .Returns(true);
+
+            Subject.Handle(new MovieEditedEvent(movie, oldMovie));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.AtLeastOnce());
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_ignore_an_edit_that_does_not_change_cover_settings()
+        {
+            var movie = GivenMovie(7);
+            movie.DownloadCovers = false;
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(v => v.FileExists(It.IsAny<string>()))
+                  .Returns(true);
+
+            Subject.Handle(new MovieEditedEvent(movie, movie));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_queue_a_movie_cover_check_when_re_enabled_via_edit()
+        {
+            var completed = GivenCompletionSignal(3);
+            var path = Subject.GetMovieCoverPath(3, MediaCoverTypes.Poster);
+            GivenNewMovie(3);
+
+            var oldMovie = GivenMovie(3);
+            oldMovie.DownloadCovers = false;
+            var movie = GivenMovie(3);
+
+            Subject.Handle(new ApplicationStartedEvent());
+            Subject.Handle(new MovieEditedEvent(movie, oldMovie));
+
+            completed.Wait(5000).Should().BeTrue();
+
+            Mocker.GetMock<IHttpClient>().Verify(v => v.DownloadFile(RemoteUrl, path), Times.Once());
         }
 
         [Test]

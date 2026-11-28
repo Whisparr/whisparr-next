@@ -10,14 +10,17 @@ import ModalHeader from 'Components/Modal/ModalHeader';
 import { useMovieMonitorHelpText } from 'Helpers/Hooks/useMovieMonitorAvailability';
 import { inputTypes } from 'Helpers/Props';
 import { useJavAvailable } from 'Settings/MetadataSource/useMetadataSources';
+import { StudioVisibility } from 'Studio/Studio';
 import { EnhancedSelectInputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import styles from './EditStudiosModalContent.module.css';
 
 interface SavePayload {
   monitored?: boolean;
+  visibility?: StudioVisibility;
   moviesMonitored?: boolean;
   javMonitored?: boolean;
+  downloadCovers?: boolean;
   whisparrMonitorNewItems?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
@@ -53,6 +56,28 @@ const monitoredOptions = [
     key: 'unmonitored',
     get value() {
       return translate('Unmonitored');
+    },
+  },
+];
+
+const visibilityOptions = [
+  {
+    key: NO_CHANGE,
+    get value() {
+      return translate('NoChange');
+    },
+    disabled: true,
+  },
+  {
+    key: 'visible',
+    get value() {
+      return translate('Visible');
+    },
+  },
+  {
+    key: 'hidden',
+    get value() {
+      return translate('Hidden');
     },
   },
 ];
@@ -113,11 +138,17 @@ function EditStudiosModalContent(
 
   const [monitored, setMonitored] = useState<string | number>(NO_CHANGE);
 
+  const [visibility, setVisibility] = useState<string | number>(NO_CHANGE);
+
   const [moviesMonitored, setMoviesMonitored] = useState<string | number>(
     NO_CHANGE
   );
 
   const [javMonitored, setJavMonitored] = useState<string | number>(NO_CHANGE);
+
+  const [downloadCovers, setDownloadCovers] = useState<string | number>(
+    NO_CHANGE
+  );
 
   const [whisparrMonitorNewItems, setWhisparrMonitorNewItems] = useState<
     string | number
@@ -146,6 +177,11 @@ function EditStudiosModalContent(
       payload.monitored = monitored === 'monitored';
     }
 
+    if (visibility !== NO_CHANGE) {
+      hasChanges = true;
+      payload.visibility = visibility as StudioVisibility;
+    }
+
     if (moviesMonitored !== NO_CHANGE) {
       hasChanges = true;
       payload.moviesMonitored = moviesMonitored === 'monitored';
@@ -154,6 +190,11 @@ function EditStudiosModalContent(
     if (javMonitored !== NO_CHANGE) {
       hasChanges = true;
       payload.javMonitored = javMonitored === 'monitored';
+    }
+
+    if (downloadCovers !== NO_CHANGE) {
+      hasChanges = true;
+      payload.downloadCovers = downloadCovers === 'true';
     }
 
     if (whisparrMonitorNewItems !== NO_CHANGE) {
@@ -191,8 +232,10 @@ function EditStudiosModalContent(
     onModalClose();
   }, [
     monitored,
+    visibility,
     moviesMonitored,
     javMonitored,
+    downloadCovers,
     whisparrMonitorNewItems,
     qualityProfileId,
     rootFolderPath,
@@ -209,11 +252,17 @@ function EditStudiosModalContent(
         case 'monitored':
           setMonitored(value);
           break;
+        case 'visibility':
+          setVisibility(value);
+          break;
         case 'moviesMonitored':
           setMoviesMonitored(value);
           break;
         case 'javMonitored':
           setJavMonitored(value);
+          break;
+        case 'downloadCovers':
+          setDownloadCovers(value);
           break;
         case 'whisparrMonitorNewItems':
           setWhisparrMonitorNewItems(value);
@@ -290,6 +339,37 @@ function EditStudiosModalContent(
             />
           </FormGroup>
         ) : null}
+
+        <FormGroup>
+          <FormLabel>{translate('Visible')}</FormLabel>
+
+          <FormInputGroup
+            type={inputTypes.SELECT}
+            name="visibility"
+            helpText={translate('VisibleStudioHelpText')}
+            helpTextWarning={
+              visibility === 'hidden'
+                ? translate('HiddenStudioHelpTextWarning')
+                : undefined
+            }
+            value={visibility}
+            values={visibilityOptions}
+            onChange={onInputChange}
+          />
+        </FormGroup>
+
+        <FormGroup>
+          <FormLabel>{translate('DownloadCovers')}</FormLabel>
+
+          <FormInputGroup
+            type={inputTypes.SELECT}
+            name="downloadCovers"
+            helpText={translate('DownloadCoversHelpText')}
+            value={downloadCovers}
+            values={yesNoOptions}
+            onChange={onInputChange}
+          />
+        </FormGroup>
 
         <FormGroup>
           <FormLabel>{translate('WhisparrMonitorNewItems')}</FormLabel>

@@ -20,7 +20,7 @@ import useUnsavedChanges from 'Helpers/Hooks/useUnsavedChanges';
 import { icons, inputTypes, kinds, sizes } from 'Helpers/Props';
 import selectSettings from 'Helpers/selectSettings';
 import MoveMovieModal from 'Movie/MoveMovie/MoveMovieModal';
-import Movie from 'Movie/Movie';
+import Movie, { MovieVisibility } from 'Movie/Movie';
 import { useSaveMovie } from 'Movie/useMovie';
 import { InputChanged } from 'typings/inputs';
 import { ValidationError, ValidationWarning } from 'typings/pending';
@@ -43,6 +43,12 @@ function EditMovieModalContent({
   const { title, path: originalPath } = movie;
 
   const [monitored, setMonitored] = useState(movie.monitored);
+  const [visible, setVisible] = useState(
+    (movie.visibility ?? 'visible') !== 'hidden'
+  );
+  const [downloadCovers, setDownloadCovers] = useState(
+    movie.downloadCovers ?? true
+  );
   const [qualityProfileId, setQualityProfileId] = useState(
     movie.qualityProfileId
   );
@@ -62,17 +68,25 @@ function EditMovieModalContent({
   const saveError = saveMovie.error ?? saveMovieAndMoveFiles.error;
 
   // Compute which fields have pending (unsaved) changes so selectSettings
-  // can mark them accordingly.
+  // can mark them accordingly. `visible` tracks the visibility toggle and is
+  // mapped to `visibility` on save, like the performer modal does.
   const pendingChanges = useMemo(() => {
-    const changes: Partial<Movie> = {};
+    const changes: Partial<Movie> & { visible?: boolean } = {};
     if (monitored !== movie.monitored) changes.monitored = monitored;
+
+    if (visible !== ((movie.visibility ?? 'visible') !== 'hidden')) {
+      changes.visible = visible;
+    }
+
+    if (downloadCovers !== (movie.downloadCovers ?? true))
+      changes.downloadCovers = downloadCovers;
     if (qualityProfileId !== movie.qualityProfileId)
       changes.qualityProfileId = qualityProfileId;
     if (path !== movie.path) changes.path = path;
     if (JSON.stringify(tags) !== JSON.stringify(movie.tags ?? []))
       changes.tags = tags;
     return changes;
-  }, [monitored, qualityProfileId, path, tags, movie]);
+  }, [monitored, visible, downloadCovers, qualityProfileId, path, tags, movie]);
 
   const { onClose, pendingChangesModalProps } = useUnsavedChanges({
     hasUnsavedChanges: Object.keys(pendingChanges).length > 0,
@@ -116,12 +130,14 @@ function EditMovieModalContent({
   // TODO: Move to a hook
   const memoResult = useMemo(() => {
     return selectSettings(
-      { monitored, qualityProfileId, path, tags },
+      { monitored, visible, downloadCovers, qualityProfileId, path, tags },
       pendingChanges,
       saveError
     );
   }, [
     monitored,
+    visible,
+    downloadCovers,
     qualityProfileId,
     path,
     tags,
@@ -149,6 +165,22 @@ function EditMovieModalContent({
     switch (name) {
       case 'monitored':
         setMonitored(value as boolean);
+
+        if (value) {
+          setVisible(true);
+        }
+
+        break;
+      case 'visible':
+        setVisible(value as boolean);
+
+        if (!value) {
+          setMonitored(false);
+        }
+
+        break;
+      case 'downloadCovers':
+        setDownloadCovers(value as boolean);
         break;
       case 'qualityProfileId':
         setQualityProfileId(value as number);
@@ -192,13 +224,23 @@ function EditMovieModalContent({
     (moveFiles: boolean) => {
       const mutation = moveFiles ? saveMovieAndMoveFiles : saveMovie;
 
-      mutation.mutate({ ...movie, monitored, qualityProfileId, path, tags });
+      mutation.mutate({
+        ...movie,
+        monitored,
+        visibility: (visible ? 'visible' : 'hidden') as MovieVisibility,
+        downloadCovers,
+        qualityProfileId,
+        path,
+        tags,
+      });
     },
     [
       saveMovie,
       saveMovieAndMoveFiles,
       movie,
       monitored,
+      visible,
+      downloadCovers,
       qualityProfileId,
       path,
       tags,
@@ -239,6 +281,39 @@ function EditMovieModalContent({
               name="monitored"
               helpText={translate('MonitoredMovieHelpText')}
               {...(settings.monitored as unknown as Omit<
+                CheckInputProps,
+                'className' | 'name'
+              >)}
+              onChange={handleInputChange}
+            />
+          </FormGroup>
+
+          <FormGroup size={sizes.MEDIUM}>
+            <FormLabel>{translate('Visible')}</FormLabel>
+
+            <FormInputGroup
+              type={inputTypes.CHECK}
+              name="visible"
+              helpText={translate('VisibleMovieHelpText')}
+              helpTextWarning={
+                visible ? undefined : translate('HiddenMovieHelpTextWarning')
+              }
+              {...(settings.visible as unknown as Omit<
+                CheckInputProps,
+                'className' | 'name'
+              >)}
+              onChange={handleInputChange}
+            />
+          </FormGroup>
+
+          <FormGroup size={sizes.MEDIUM}>
+            <FormLabel>{translate('DownloadCovers')}</FormLabel>
+
+            <FormInputGroup
+              type={inputTypes.CHECK}
+              name="downloadCovers"
+              helpText={translate('DownloadCoversHelpText')}
+              {...(settings.downloadCovers as unknown as Omit<
                 CheckInputProps,
                 'className' | 'name'
               >)}

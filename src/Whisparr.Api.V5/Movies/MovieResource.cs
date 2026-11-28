@@ -57,8 +57,10 @@ namespace Whisparr.Api.V5.Movies
                 QualityProfileId = resource.QualityProfileId,
 
                 Monitored = resource.Monitored,
+                Visibility = resource.Visibility ?? MovieVisibility.Visible,
 
                 RootFolderPath = resource.RootFolderPath,
+                DownloadCovers = resource.DownloadCovers,
 
                 Tags = resource.Tags ?? new HashSet<int>(),
                 Added = resource.Added,
@@ -69,6 +71,7 @@ namespace Whisparr.Api.V5.Movies
         public static Movie ToModel(this MovieResource resource, Movie movie)
         {
             var updatedMovie = resource.ToModel();
+            updatedMovie.Visibility = resource.Visibility ?? movie.Visibility;
 
             movie.ApplyChanges(updatedMovie);
 
@@ -119,7 +122,9 @@ namespace Whisparr.Api.V5.Movies
                 Status = model.MovieMetadata.Value.Status,
                 Overview = model.MovieMetadata.Value.Overview,
 
-                Images = model.MovieMetadata.Value.Images?.Select(i => new MediaCover(i.CoverType, i.RemoteUrl) { Url = i.Url }).ToList(),
+                // Disabled or hidden items keep no artwork on disk, so there's nothing local to point at.
+                // (Without this the UI falls back to the remote URL and the image shows anyway.)
+                Images = !model.DownloadCovers || model.Visibility == MovieVisibility.Hidden ? new List<MediaCover>() : model.MovieMetadata.Value.Images?.Select(i => new MediaCover(i.CoverType, i.RemoteUrl) { Url = i.Url }).ToList(),
 
                 Year = model.Year,
 
@@ -129,6 +134,8 @@ namespace Whisparr.Api.V5.Movies
                 QualityProfileId = model.QualityProfileId,
 
                 Monitored = model.Monitored,
+                Visibility = model.Visibility,
+                DownloadCovers = model.DownloadCovers,
 
                 IsAvailable = model.IsAvailable(availDelay),
                 FolderName = model.FolderName(),
@@ -165,6 +172,7 @@ namespace Whisparr.Api.V5.Movies
             PerformerNames = new List<string>();
             Genres = new List<string>();
             Monitored = true;
+            DownloadCovers = true;
         }
 
         // View Only
@@ -196,6 +204,8 @@ namespace Whisparr.Api.V5.Movies
 
         // Editing Only
         public bool Monitored { get; set; }
+        public MovieVisibility? Visibility { get; set; }
+        public bool DownloadCovers { get; set; }
         public bool IsAvailable { get; set; }
         public string FolderName { get; set; }
 

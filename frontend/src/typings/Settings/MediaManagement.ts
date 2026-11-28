@@ -22,4 +22,9 @@ export default interface MediaManagement {
   enablePerceptualHashing: boolean;
   whisparrFolderLimit: number;
   autoRenameFolders: boolean;
+  defaultDownloadMovieCovers: boolean;
+  defaultDownloadSceneCovers: boolean;
+  defaultDownloadJavCovers: boolean;
+  defaultDownloadStudioCovers: boolean;
+  defaultDownloadPerformerCovers: boolean;
 }

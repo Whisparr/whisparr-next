@@ -62,6 +62,9 @@ namespace NzbDrone.Core.Movies.Performers
         /// <summary>Hidden performers were added only because they share credits with a monitored one; they keep no artwork on disk.</summary>
         public PerformerVisibility Visibility { get; set; } = PerformerVisibility.Visible;
 
+        /// <summary>Whether artwork is downloaded for this performer. Independent of visibility.</summary>
+        public bool DownloadCovers { get; set; } = true;
+
         /// <summary> Number of scenes in Whisparr with this performer</summary>
         public int TotalSceneCount { get; set; }
 
@@ -94,6 +97,7 @@ namespace NzbDrone.Core.Movies.Performers
             AfterDate = otherPerformer.AfterDate;
             RootFolderPath = otherPerformer.RootFolderPath;
             Tags = otherPerformer.Tags;
+            DownloadCovers = otherPerformer.DownloadCovers;
             ApplyVisibility(otherPerformer.Visibility);
         }
 

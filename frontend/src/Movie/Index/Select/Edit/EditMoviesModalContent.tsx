@@ -9,12 +9,15 @@ import ModalFooter from 'Components/Modal/ModalFooter';
 import ModalHeader from 'Components/Modal/ModalHeader';
 import { inputTypes } from 'Helpers/Props';
 import MoveMovieModal from 'Movie/MoveMovie/MoveMovieModal';
+import { MovieVisibility } from 'Movie/Movie';
 import { InputChanged } from 'typings/inputs';
 import translate from 'Utilities/String/translate';
 import styles from './EditMoviesModalContent.module.css';
 
 interface SavePayload {
   monitored?: boolean;
+  visibility?: MovieVisibility;
+  downloadCovers?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
   moveFiles?: boolean;
@@ -50,10 +53,56 @@ const monitoredOptions = [
   },
 ];
 
+const visibilityOptions = [
+  {
+    key: NO_CHANGE,
+    get value() {
+      return translate('NoChange');
+    },
+    isDisabled: true,
+  },
+  {
+    key: 'visible',
+    get value() {
+      return translate('Visible');
+    },
+  },
+  {
+    key: 'hidden',
+    get value() {
+      return translate('Hidden');
+    },
+  },
+];
+
+const downloadCoversOptions = [
+  {
+    key: NO_CHANGE,
+    get value() {
+      return translate('NoChange');
+    },
+    isDisabled: true,
+  },
+  {
+    key: 'true',
+    get value() {
+      return translate('Yes');
+    },
+  },
+  {
+    key: 'false',
+    get value() {
+      return translate('No');
+    },
+  },
+];
+
 function EditMoviesModalContent(props: EditMoviesModalContentProps) {
   const { movieIds, onSavePress, onModalClose } = props;
 
   const [monitored, setMonitored] = useState(NO_CHANGE);
+  const [visibility, setVisibility] = useState(NO_CHANGE);
+  const [downloadCovers, setDownloadCovers] = useState(NO_CHANGE);
   const [qualityProfileId, setQualityProfileId] = useState<string | number>(
     NO_CHANGE
   );
@@ -68,6 +117,16 @@ function EditMoviesModalContent(props: EditMoviesModalContentProps) {
       if (monitored !== NO_CHANGE) {
         hasChanges = true;
         payload.monitored = monitored === 'monitored';
+      }
+
+      if (visibility !== NO_CHANGE) {
+        hasChanges = true;
+        payload.visibility = visibility as MovieVisibility;
+      }
+
+      if (downloadCovers !== NO_CHANGE) {
+        hasChanges = true;
+        payload.downloadCovers = downloadCovers === 'true';
       }
 
       if (qualityProfileId !== NO_CHANGE) {
@@ -87,7 +146,15 @@ function EditMoviesModalContent(props: EditMoviesModalContentProps) {
 
       onModalClose();
     },
-    [monitored, qualityProfileId, rootFolderPath, onSavePress, onModalClose]
+    [
+      monitored,
+      visibility,
+      downloadCovers,
+      qualityProfileId,
+      rootFolderPath,
+      onSavePress,
+      onModalClose,
+    ]
   );
 
   const onInputChange = useCallback(
@@ -95,6 +162,12 @@ function EditMoviesModalContent(props: EditMoviesModalContentProps) {
       switch (name) {
         case 'monitored':
           setMonitored(value as string);
+          break;
+        case 'visibility':
+          setVisibility(value as string);
+          break;
+        case 'downloadCovers':
+          setDownloadCovers(value as string);
           break;
         case 'qualityProfileId':
           setQualityProfileId(value as string);
@@ -146,6 +219,37 @@ function EditMoviesModalContent(props: EditMoviesModalContentProps) {
             name="monitored"
             value={monitored}
             values={monitoredOptions}
+            onChange={onInputChange}
+          />
+        </FormGroup>
+
+        <FormGroup>
+          <FormLabel>{translate('Visible')}</FormLabel>
+
+          <FormInputGroup
+            type={inputTypes.SELECT}
+            name="visibility"
+            helpText={translate('VisibleMovieHelpText')}
+            helpTextWarning={
+              visibility === 'hidden'
+                ? translate('HiddenMovieHelpTextWarning')
+                : undefined
+            }
+            value={visibility}
+            values={visibilityOptions}
+            onChange={onInputChange}
+          />
+        </FormGroup>
+
+        <FormGroup>
+          <FormLabel>{translate('DownloadCovers')}</FormLabel>
+
+          <FormInputGroup
+            type={inputTypes.SELECT}
+            name="downloadCovers"
+            helpText={translate('DownloadCoversHelpText')}
+            value={downloadCovers}
+            values={downloadCoversOptions}
             onChange={onInputChange}
           />
         </FormGroup>

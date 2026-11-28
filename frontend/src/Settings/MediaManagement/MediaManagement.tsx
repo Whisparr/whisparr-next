@@ -492,6 +492,88 @@ function MediaManagement() {
               </FormGroup>
             </FieldSet>
 
+            <FieldSet legend={translate('MediaCovers')}>
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('DownloadMovieCovers')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="defaultDownloadMovieCovers"
+                  helpText={translate('DefaultDownloadCoversHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.defaultDownloadMovieCovers}
+                />
+              </FormGroup>
+
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('DownloadSceneCovers')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="defaultDownloadSceneCovers"
+                  helpText={translate('DefaultDownloadCoversHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.defaultDownloadSceneCovers}
+                />
+              </FormGroup>
+
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('DownloadJavCovers')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="defaultDownloadJavCovers"
+                  helpText={translate('DefaultDownloadCoversHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.defaultDownloadJavCovers}
+                />
+              </FormGroup>
+
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('DownloadStudioCovers')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="defaultDownloadStudioCovers"
+                  helpText={translate('DefaultDownloadCoversHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.defaultDownloadStudioCovers}
+                />
+              </FormGroup>
+
+              <FormGroup
+                advancedSettings={showAdvancedSettings}
+                isAdvanced={true}
+                size={sizes.MEDIUM}
+              >
+                <FormLabel>{translate('DownloadPerformerCovers')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="defaultDownloadPerformerCovers"
+                  helpText={translate('DefaultDownloadCoversHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.defaultDownloadPerformerCovers}
+                />
+              </FormGroup>
+            </FieldSet>
+
             {showAdvancedSettings && !isWindows ? (
               <FieldSet legend={translate('Permissions')}>
                 <FormGroup

@@ -22,6 +22,12 @@ namespace NzbDrone.Core.Movies
         public bool Monitored { get; set; }
         public int QualityProfileId { get; set; }
 
+        /// <summary>Hidden items stay listed but keep no artwork and are not monitored.</summary>
+        public MovieVisibility Visibility { get; set; } = MovieVisibility.Visible;
+
+        /// <summary>Whether artwork is downloaded for this item. Off keeps the item listed but stores no covers.</summary>
+        public bool DownloadCovers { get; set; } = true;
+
         public string Path { get; set; }
 
         public LazyLoaded<MovieMetadata> MovieMetadata { get; set; }
@@ -192,10 +198,38 @@ namespace NzbDrone.Core.Movies
             QualityProfileId = otherMovie.QualityProfileId;
 
             Monitored = otherMovie.Monitored;
+            ApplyVisibility(otherMovie.Visibility);
 
             RootFolderPath = otherMovie.RootFolderPath;
             Tags = otherMovie.Tags;
             AddOptions = otherMovie.AddOptions;
+            DownloadCovers = otherMovie.DownloadCovers;
         }
+
+        /// <summary>Applies a visibility after the monitored flag has been set.</summary>
+        /// <remarks>Hiding a visible movie unmonitors it; a monitored movie is always visible.</remarks>
+        public void ApplyVisibility(MovieVisibility visibility)
+        {
+            if (visibility == MovieVisibility.Hidden && Visibility == MovieVisibility.Visible)
+            {
+                Visibility = MovieVisibility.Hidden;
+                Monitored = false;
+
+                return;
+            }
+
+            Visibility = visibility;
+
+            if (Monitored)
+            {
+                Visibility = MovieVisibility.Visible;
+            }
+        }
+    }
+
+    public enum MovieVisibility
+    {
+        Hidden = 0,
+        Visible = 1
     }
 }

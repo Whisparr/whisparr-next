@@ -6,6 +6,7 @@ using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.EnsureThat;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.MetadataSource;
@@ -29,6 +30,7 @@ namespace NzbDrone.Core.Movies.Performers
         private readonly IProvideMovieInfo _performerInfo;
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IMetadataSourceService _metadataSourceService;
+        private readonly IConfigService _configService;
         private readonly ICached<bool> _missingPerformers;
         private readonly Logger _logger;
 
@@ -36,10 +38,12 @@ namespace NzbDrone.Core.Movies.Performers
                                    IProvideMovieInfo performerInfo,
                                    IManageCommandQueue commandQueueManager,
                                    IMetadataSourceService metadataSourceService,
+                                   IConfigService configService,
                                    ICacheManager cacheManager,
                                    Logger logger)
         {
             _metadataSourceService = metadataSourceService;
+            _configService = configService;
             _missingPerformers = cacheManager.GetCache<bool>(GetType(), "missingPerformers");
             _performerService = performerService;
             _performerInfo = performerInfo;
@@ -190,6 +194,7 @@ namespace NzbDrone.Core.Movies.Performers
             }
 
             performer.ApplyChanges(newPerformer);
+            performer.DownloadCovers = _configService.DefaultDownloadPerformerCovers;
 
             return performer;
         }

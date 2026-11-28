@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NzbDrone.Core.Movies;
 
 namespace Whisparr.Api.V5.Movies
 {
@@ -6,6 +7,8 @@ namespace Whisparr.Api.V5.Movies
     {
         public List<int> MovieIds { get; set; }
         public bool? Monitored { get; set; }
+        public MovieVisibility? Visibility { get; set; }
+        public bool? DownloadCovers { get; set; }
         public int? QualityProfileId { get; set; }
         public string RootFolderPath { get; set; }
         public List<int> Tags { get; set; }

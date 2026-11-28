@@ -22,6 +22,7 @@ interface SavePayload {
   javMonitored?: boolean;
   whisparrMonitorNewItems?: boolean;
   visibility?: PerformerVisibility;
+  downloadCovers?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;
   searchOnAdd?: boolean;
@@ -101,6 +102,9 @@ function EditPerformersModalContent(
   >(NO_CHANGE);
 
   const [visibility, setVisibility] = useState<string | number>(NO_CHANGE);
+  const [downloadCovers, setDownloadCovers] = useState<string | number>(
+    NO_CHANGE
+  );
   const [isConfirmHideModalOpen, setIsConfirmHideModalOpen] = useState(false);
 
   const [qualityProfileId, setQualityProfileId] = useState<string | number>(
@@ -146,6 +150,11 @@ function EditPerformersModalContent(
       payload.visibility = visibility as PerformerVisibility;
     }
 
+    if (downloadCovers !== NO_CHANGE) {
+      hasChanges = true;
+      payload.downloadCovers = downloadCovers === 'true';
+    }
+
     if (qualityProfileId !== NO_CHANGE) {
       hasChanges = true;
       payload.qualityProfileId = qualityProfileId as number;
@@ -180,6 +189,7 @@ function EditPerformersModalContent(
     javMonitored,
     whisparrMonitorNewItems,
     visibility,
+    downloadCovers,
     qualityProfileId,
     rootFolderPath,
     searchOnAdd,
@@ -206,6 +216,9 @@ function EditPerformersModalContent(
           break;
         case 'visibility':
           setVisibility(value);
+          break;
+        case 'downloadCovers':
+          setDownloadCovers(value);
           break;
         case 'qualityProfileId':
           setQualityProfileId(value);
@@ -318,6 +331,19 @@ function EditPerformersModalContent(
             helpText={translate('VisiblePerformerHelpText')}
             value={visibility}
             values={visibilityOptions}
+            onChange={onInputChange}
+          />
+        </FormGroup>
+
+        <FormGroup>
+          <FormLabel>{translate('DownloadCovers')}</FormLabel>
+
+          <FormInputGroup
+            type={inputTypes.SELECT}
+            name="downloadCovers"
+            helpText={translate('DownloadCoversHelpText')}
+            value={downloadCovers}
+            values={yesNoOptions}
             onChange={onInputChange}
           />
         </FormGroup>

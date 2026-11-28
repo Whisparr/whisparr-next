@@ -76,6 +76,14 @@ namespace Whisparr.Api.V5.Studios
                     studios.JavMonitored = resource.JavMonitored.Value;
                 }
 
+                // After the monitored flags, so hiding can unmonitor and monitoring can unhide
+                studios.ApplyVisibility(resource.Visibility ?? studios.Visibility);
+
+                if (resource.DownloadCovers.HasValue)
+                {
+                    studios.DownloadCovers = resource.DownloadCovers.Value;
+                }
+
                 if (resource.WhisparrMonitorNewItems.HasValue)
                 {
                     studios.WhisparrMonitorNewItems = resource.WhisparrMonitorNewItems.Value;

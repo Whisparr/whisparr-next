@@ -1,10 +1,12 @@
 import { queryClient } from 'App/queryClient';
 import useApiMutation from 'Helpers/Hooks/useApiMutation';
-import Movie from 'Movie/Movie';
+import Movie, { MovieVisibility } from 'Movie/Movie';
 
 interface MovieEditorPayload {
   movieIds: number[];
   monitored?: boolean;
+  visibility?: MovieVisibility;
+  downloadCovers?: boolean;
   moviesMonitored?: boolean;
   qualityProfileId?: number;
   rootFolderPath?: string;

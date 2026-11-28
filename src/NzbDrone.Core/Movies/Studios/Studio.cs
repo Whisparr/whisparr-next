@@ -34,6 +34,9 @@ namespace NzbDrone.Core.Movies.Studios
         public bool JavMonitored { get; set; }
         public bool HasJav { get; set; }
 
+        /// <summary>Hidden studios stay listed but keep no artwork and are not monitored.</summary>
+        public StudioVisibility Visibility { get; set; } = StudioVisibility.Visible;
+
         /// <summary>What Skyhook reported for HasJav; null when its body predates the field. Not stored.</summary>
         public bool? HasJavReported { get; set; }
         public bool WhisparrMonitorNewItems { get; set; } = true;
@@ -43,6 +46,9 @@ namespace NzbDrone.Core.Movies.Studios
         public bool SearchOnAdd { get; set; }
         public DateTime? LastInfoSync { get; set; }
         public HashSet<int> Tags { get; set; }
+
+        /// <summary>Whether artwork is downloaded for this studio. Off keeps the studio listed but stores no covers.</summary>
+        public bool DownloadCovers { get; set; } = true;
         public int MovieCount { get; set; }
         public int SceneCount { get; set; }
         public int TotalMovieCount { get; set; }
@@ -60,17 +66,47 @@ namespace NzbDrone.Core.Movies.Studios
             Monitored = otherStudio.Monitored;
             MoviesMonitored = otherStudio.MoviesMonitored;
             JavMonitored = otherStudio.JavMonitored;
+            ApplyVisibility(otherStudio.Visibility);
             WhisparrMonitorNewItems = otherStudio.WhisparrMonitorNewItems;
             Status = otherStudio.Status;
             AfterDate = otherStudio.AfterDate;
             RootFolderPath = otherStudio.RootFolderPath;
             Tags = otherStudio.Tags;
+            DownloadCovers = otherStudio.DownloadCovers;
+        }
+
+        /// <summary>Applies a visibility after the monitored flags have been set.</summary>
+        /// <remarks>Hiding a visible studio unmonitors it; a monitored studio is always visible.</remarks>
+        public void ApplyVisibility(StudioVisibility visibility)
+        {
+            if (visibility == StudioVisibility.Hidden && Visibility == StudioVisibility.Visible)
+            {
+                Visibility = StudioVisibility.Hidden;
+                Monitored = false;
+                MoviesMonitored = false;
+                JavMonitored = false;
+
+                return;
+            }
+
+            Visibility = visibility;
+
+            if (Monitored || MoviesMonitored || JavMonitored)
+            {
+                Visibility = StudioVisibility.Visible;
+            }
         }
 
         public override string ToString()
         {
             return string.Format("[{0}]", Title.NullSafe());
         }
+    }
+
+    public enum StudioVisibility
+    {
+        Hidden = 0,
+        Visible = 1
     }
 
     public enum StudioStatus

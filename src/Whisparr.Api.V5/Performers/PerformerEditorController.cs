@@ -82,6 +82,11 @@ namespace Whisparr.Api.V5.Performers
                 // After the monitored flags, so hiding can unmonitor and monitoring can unhide
                 performer.ApplyVisibility(resource.Visibility ?? performer.Visibility);
 
+                if (resource.DownloadCovers.HasValue)
+                {
+                    performer.DownloadCovers = resource.DownloadCovers.Value;
+                }
+
                 if (resource.QualityProfileId.HasValue)
                 {
                     performer.QualityProfileId = resource.QualityProfileId.Value;
