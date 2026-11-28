@@ -50,7 +50,6 @@ namespace NzbDrone.Core.MediaCover
         IHandleAsync<PerformersDeletedEvent>,
         IHandleAsync<StudiosDeletedEvent>,
         IHandle<MovieEditedEvent>,
-        IHandle<MoviesBulkEditedEvent>,
         IMapCoversToLocal,
         IQueueNewMovieCovers
     {
@@ -577,32 +576,26 @@ namespace NzbDrone.Core.MediaCover
             _eventAggregator.PublishEvent(new MediaCoversUpdatedEvent(message.Movie, updated));
         }
 
-        // Single and bulk edits don't publish MovieUpdatedEvent, so converge covers here:
-        // a disabled movie keeps no artwork, an enabled one is queued for a check.
+        // Single edits don't publish MovieUpdatedEvent, so converge covers here, but only when
+        // the cover-relevant flags actually changed: re-publishing unconditionally would stall bulk-adjacent
+        // saves behind the bounded cover queue and re-fire downstream handlers per movie.
         public void Handle(MovieEditedEvent message)
         {
-            if (!message.Movie.DownloadCovers || message.Movie.Visibility == MovieVisibility.Hidden)
+            var wasCovered = message.OldMovie.DownloadCovers && message.OldMovie.Visibility != MovieVisibility.Hidden;
+            var isCovered = message.Movie.DownloadCovers && message.Movie.Visibility != MovieVisibility.Hidden;
+
+            if (wasCovered == isCovered)
+            {
+                return;
+            }
+
+            if (!isCovered)
             {
                 DeleteMovieCovers(message.Movie.Id, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
                 return;
             }
 
-            _eventAggregator.PublishEvent(new MovieUpdatedEvent(message.Movie));
-        }
-
-        public void Handle(MoviesBulkEditedEvent message)
-        {
-            foreach (var movie in message.Movies)
-            {
-                if (!movie.DownloadCovers || movie.Visibility == MovieVisibility.Hidden)
-                {
-                    DeleteMovieCovers(movie.Id, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
-                }
-                else
-                {
-                    _eventAggregator.PublishEvent(new MovieUpdatedEvent(movie));
-                }
-            }
+            QueueNewMovieCovers(new[] { message.Movie.Id });
         }
 
         public void HandleAsync(PerformerUpdatedEvent message)

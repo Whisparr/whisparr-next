@@ -1487,6 +1487,25 @@ namespace NzbDrone.Core.Test.MediaCoverTests
         [Test]
         public void should_delete_movie_covers_when_disabled_via_edit()
         {
+            var oldMovie = GivenMovie(7);
+            var movie = GivenMovie(7);
+            movie.DownloadCovers = false;
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(v => v.FileExists(It.IsAny<string>()))
+                  .Returns(true);
+
+            Subject.Handle(new MovieEditedEvent(movie, oldMovie));
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.AtLeastOnce());
+            Mocker.GetMock<IHttpClient>()
+                  .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+        }
+
+        [Test]
+        public void should_ignore_an_edit_that_does_not_change_cover_settings()
+        {
             var movie = GivenMovie(7);
             movie.DownloadCovers = false;
 
@@ -1497,43 +1516,28 @@ namespace NzbDrone.Core.Test.MediaCoverTests
             Subject.Handle(new MovieEditedEvent(movie, movie));
 
             Mocker.GetMock<IDiskProvider>()
-                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.AtLeastOnce());
+                  .Verify(v => v.DeleteFile(It.IsAny<string>()), Times.Never());
             Mocker.GetMock<IHttpClient>()
                   .Verify(v => v.DownloadFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
-            Mocker.GetMock<IEventAggregator>()
-                  .Verify(v => v.PublishEvent(It.IsAny<MovieUpdatedEvent>()), Times.Never());
         }
 
         [Test]
-        public void should_queue_a_movie_cover_check_on_edit_when_enabled()
+        public void should_queue_a_movie_cover_check_when_re_enabled_via_edit()
         {
-            var movie = GivenMovie(7);
+            var completed = GivenCompletionSignal(3);
+            var path = Subject.GetMovieCoverPath(3, MediaCoverTypes.Poster);
+            GivenNewMovie(3);
 
-            Subject.Handle(new MovieEditedEvent(movie, movie));
+            var oldMovie = GivenMovie(3);
+            oldMovie.DownloadCovers = false;
+            var movie = GivenMovie(3);
 
-            Mocker.GetMock<IEventAggregator>()
-                  .Verify(v => v.PublishEvent(It.Is<MovieUpdatedEvent>(e => e.Movie == movie)), Times.Once());
-        }
+            Subject.Handle(new ApplicationStartedEvent());
+            Subject.Handle(new MovieEditedEvent(movie, oldMovie));
 
-        [Test]
-        public void should_purge_only_disabled_movies_on_bulk_edit()
-        {
-            var disabled = GivenMovie(7);
-            disabled.DownloadCovers = false;
-            var enabled = GivenMovie(8);
+            completed.Wait(5000).Should().BeTrue();
 
-            Mocker.GetMock<IDiskProvider>()
-                  .Setup(v => v.FileExists(It.IsAny<string>()))
-                  .Returns(true);
-
-            Subject.Handle(new MoviesBulkEditedEvent(new List<Movie> { disabled, enabled }));
-
-            Mocker.GetMock<IDiskProvider>()
-                  .Verify(v => v.DeleteFile(It.Is<string>(p => p.Contains($"{Path.DirectorySeparatorChar}7{Path.DirectorySeparatorChar}"))), Times.AtLeastOnce());
-            Mocker.GetMock<IEventAggregator>()
-                  .Verify(v => v.PublishEvent(It.Is<MovieUpdatedEvent>(e => e.Movie == enabled)), Times.Once());
-            Mocker.GetMock<IEventAggregator>()
-                  .Verify(v => v.PublishEvent(It.Is<MovieUpdatedEvent>(e => e.Movie == disabled)), Times.Never());
+            Mocker.GetMock<IHttpClient>().Verify(v => v.DownloadFile(RemoteUrl, path), Times.Once());
         }
 
         [Test]

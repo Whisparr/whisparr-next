@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FluentValidation;
@@ -24,13 +25,15 @@ namespace Whisparr.Api.V5.Movies
         private readonly MovieEditorValidator _movieEditorValidator;
         private readonly IUpgradableSpecification _upgradableSpecification;
         private readonly IMapCoversToLocal _coverMapper;
+        private readonly IQueueNewMovieCovers _queuedMovieCovers;
 
         public MovieEditorController(IMovieService movieService,
             IMapCoversToLocal coverMapper,
             IConfigService configService,
             IManageCommandQueue commandQueueManager,
             MovieEditorValidator movieEditorValidator,
-            IUpgradableSpecification upgradableSpecification)
+            IUpgradableSpecification upgradableSpecification,
+            IQueueNewMovieCovers queuedMovieCovers)
         {
             _movieService = movieService;
             _coverMapper = coverMapper;
@@ -38,6 +41,7 @@ namespace Whisparr.Api.V5.Movies
             _commandQueueManager = commandQueueManager;
             _movieEditorValidator = movieEditorValidator;
             _upgradableSpecification = upgradableSpecification;
+            _queuedMovieCovers = queuedMovieCovers;
         }
 
         [HttpPut]
@@ -52,6 +56,9 @@ namespace Whisparr.Api.V5.Movies
 
             var moviesToUpdate = _movieService.GetMovies(resource.MovieIds);
             var moviesToMove = new List<BulkMoveMovie>();
+
+            // Cover convergence below needs the pre-edit state, which the update overwrites in place.
+            var coveredBefore = moviesToUpdate.ToDictionary(m => m.Id, IsCoveredForArtwork);
 
             foreach (var movie in moviesToUpdate)
             {
@@ -122,6 +129,8 @@ namespace Whisparr.Api.V5.Movies
 
             var updatedMovies = _movieService.UpdateMovie(moviesToUpdate, !resource.MoveFiles);
 
+            ConvergeArtwork(coveredBefore, updatedMovies);
+
             var moviesResources = new List<MovieResource>(updatedMovies.Count);
 
             foreach (var movie in updatedMovies)
@@ -150,6 +159,50 @@ namespace Whisparr.Api.V5.Movies
         private void MapCoversToLocal(MovieResource movie)
         {
             _coverMapper.ConvertToLocalUrls(movie.Id, movie.Images, movie.Added);
+        }
+
+        private static bool IsCoveredForArtwork(Movie movie)
+        {
+            return movie.DownloadCovers && movie.Visibility != MovieVisibility.Hidden;
+        }
+
+        // Bulk edits that don't touch artwork must not touch the cover queue at all:
+        // queuing every touched movie stalls bulk operations behind the bounded queue
+        // and re-fires downstream handlers per movie. Only changed movies converge.
+        private void ConvergeArtwork(Dictionary<int, bool> coveredBefore, List<Movie> updatedMovies)
+        {
+            var uncovered = new List<int>();
+            var covered = new List<int>();
+
+            foreach (var movie in updatedMovies)
+            {
+                var wasCovered = coveredBefore.TryGetValue(movie.Id, out var before) && before;
+                var isCovered = IsCoveredForArtwork(movie);
+
+                if (wasCovered == isCovered)
+                {
+                    continue;
+                }
+
+                if (isCovered)
+                {
+                    covered.Add(movie.Id);
+                }
+                else
+                {
+                    uncovered.Add(movie.Id);
+                }
+            }
+
+            foreach (var movieId in uncovered)
+            {
+                _coverMapper.DeleteMovieCovers(movieId, Enum.GetValues<MediaCoverTypes>().Where(t => t != MediaCoverTypes.Unknown));
+            }
+
+            if (covered.Count > 0)
+            {
+                _queuedMovieCovers.QueueNewMovieCovers(covered);
+            }
         }
     }
 }
